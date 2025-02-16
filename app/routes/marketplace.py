@@ -11,18 +11,26 @@ from app.routes.auth import get_db
 marketplace_router = APIRouter(prefix="/marketplace", tags=["Marketplace"])
 
 # 1️⃣ Super Admin: Aggiunta di un nuovo servizio
+from pydantic import BaseModel
+
+class ServiceCreate(BaseModel):
+    name: str
+    description: str
+    price: float
+
 @marketplace_router.post("/services")
-def add_service(name: str, description: str, price: float, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
     user_id = Authorize.get_jwt_subject()
     user = db.query(Users).filter(Users.id == user_id).first()
     if user.role != 'superadmin':
         raise HTTPException(status_code=403, detail="Accesso negato")
     
-    new_service = Services(name=name, description=description, price=price)
+    new_service = Services(name=service.name, description=service.description, price=service.price)
     db.add(new_service)
     db.commit()
     return {"message": "Servizio aggiunto con successo"}
+
 
 # 2️⃣ Super Admin: Lista servizi disponibili nel marketplace
 @marketplace_router.get("/services")
