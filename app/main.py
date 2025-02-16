@@ -27,6 +27,9 @@ from app.routes.users import router as users_router
 from app.routes.transactions import router as transactions_router
 from app import models  # Importiamo i modelli prima di avviare l'app
 
+
+
+
 # Aggiungiamo il percorso della cartella principale al sys.path per evitare errori di import
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
@@ -34,7 +37,9 @@ if BASE_DIR not in sys.path:
 
 # Creazione dell'istanza di FastAPI
 app = FastAPI(title="CORE API", version="1.0")
-
+# Marketplace
+from app.routes.marketplace import marketplace_router
+app.include_router(marketplace_router, prefix="/api")
 # Configurazione dello schema di autenticazione Bearer per Swagger UI
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
