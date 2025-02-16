@@ -41,3 +41,16 @@ class User(Base):
     def check_password(self, password: str):
         """Verifica la password"""
         return pwd_context.verify(password, self.hashed_password)
+class Services(Base):
+    __tablename__ = "services"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    description = Column(String)
+    price = Column(Float)
+
+class PurchasedServices(Base):
+    __tablename__ = "purchased_services"
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, ForeignKey("users.id"))
+    service_id = Column(Integer, ForeignKey("services.id"))
+    status = Column(String, default="attivo")
