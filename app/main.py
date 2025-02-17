@@ -36,23 +36,24 @@ app = FastAPI(title="CORE API", version="1.0")
 # Configurazione dello schema di autenticazione Bearer per Swagger UI
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-# 🔹 CONFIGURAZIONE JWT (passata direttamente come dizionario)
-def get_jwt_settings():
-    return {
-        "authjwt_secret_key": os.getenv("AUTHJWT_SECRET_KEY", "chiave-di-default")
-    }
+# 🔹 CONFIGURAZIONE JWT SENZA `load_config`
+class Settings(BaseModel):
+    authjwt_secret_key: str = os.getenv("AUTHJWT_SECRET_KEY", "chiave-di-default")
 
-@AuthJWT.load_config
-def get_config():
-    return get_jwt_settings()
+settings = Settings()
+
+def get_jwt_auth():
+    """Restituisce un'istanza di AuthJWT con la configurazione corretta"""
+    return AuthJWT(settings)
 
 @app.get("/debug/jwt-config")
-def get_jwt_config(Authorize: AuthJWT = Depends()):
+def get_jwt_config():
     """Verifica la configurazione JWT e genera un token di test"""
     try:
-        token_test = Authorize.create_access_token(subject="test-user")
+        auth = get_jwt_auth()
+        token_test = auth.create_access_token(subject="test-user")
         return {
-            "authjwt_secret_key": get_jwt_settings()["authjwt_secret_key"],
+            "authjwt_secret_key": settings.authjwt_secret_key,
             "token_test": token_test
         }
     except Exception as e:
@@ -109,8 +110,8 @@ def debug_test():
 @app.get("/debug/jwt-key")
 def get_jwt_key():
     """Endpoint per controllare il valore di AUTHJWT_SECRET_KEY"""
-    return {"AUTHJWT_SECRET_KEY": os.getenv("AUTHJWT_SECRET_KEY", "chiave-di-default")}
+    return {"AUTHJWT_SECRET_KEY": settings.authjwt_secret_key}
 
 # Avvio dell'applicazione solo se il file viene eseguito direttamente
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
