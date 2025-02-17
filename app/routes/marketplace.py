@@ -1,7 +1,7 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
-from database import SessionLocal  # Importiamo solo SessionLocal
+from app.database import SessionLocal  # Importiamo solo SessionLocal
 from models import Services, PurchasedServices, User
 from pydantic import BaseModel
 import logging
