@@ -36,21 +36,18 @@ app = FastAPI(title="CORE API", version="1.0")
 # Configurazione dello schema di autenticazione Bearer per Swagger UI
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-# Configurazione JWT senza `load_config`
+# 🔹 CONFIGURAZIONE JWT MANUALE (senza `load_config`)
 class Settings(BaseModel):
     authjwt_secret_key: str = os.getenv("AUTHJWT_SECRET_KEY", "chiave-di-default")
 
 settings = Settings()
-
-@AuthJWT.load_config
-def get_config():
-    return settings
+auth = AuthJWT(settings)
 
 @app.get("/debug/jwt-config")
-def get_jwt_config(Authorize: AuthJWT = Depends()):
+def get_jwt_config():
     """Verifica la configurazione JWT e genera un token di test"""
     try:
-        token_test = Authorize.create_access_token(subject="test-user")
+        token_test = auth.create_access_token(subject="test-user")
         return {
             "authjwt_secret_key": settings.authjwt_secret_key,
             "token_test": token_test
