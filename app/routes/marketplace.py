@@ -26,8 +26,9 @@ class ServiceCreate(BaseModel):
     price: float
 
 @marketplace_router.post("/services")
-def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    logger.info("🚀 [DEBUG] - Inizio richiesta su /services")
+def add_service():
+    return {"message": "La funzione /services è stata chiamata correttamente"}
+
     
     try:
         logger.info("🔐 [DEBUG] - Verifica autenticazione JWT")
