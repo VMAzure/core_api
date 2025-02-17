@@ -105,3 +105,9 @@ if __name__ == "__main__":
 @app.post("/debug/test")
 def debug_test():
     return {"message": "API sta ricevendo le richieste"}
+    
+
+@app.get("/debug/jwt-key")
+def get_jwt_key():
+    return {"AUTHJWT_SECRET_KEY": os.getenv("AUTHJWT_SECRET_KEY")}
+
