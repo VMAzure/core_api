@@ -27,23 +27,33 @@ class ServiceCreate(BaseModel):
 
 @marketplace_router.post("/services")
 def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    logger.info("🔍 [DEBUG] - API `/services` chiamata")
-    Authorize.jwt_required()
-    logger.info("✅ [DEBUG] - Token JWT verificato")
+    logger.info("🚀 [DEBUG] - Inizio richiesta su /services")
+    
+    try:
+        logger.info("🔐 [DEBUG] - Verifica autenticazione JWT")
+        Authorize.jwt_required()
+        logger.info("✅ [DEBUG] - Token JWT verificato con successo")
+    except Exception as e:
+        logger.error(f"❌ [ERRORE] - JWT non valido: {str(e)}")
+        raise HTTPException(status_code=401, detail="Token non valido")
 
     user_id = Authorize.get_jwt_subject()
     logger.info(f"✅ [DEBUG] - Utente autenticato con ID: {user_id}")
 
-    user = db.query(Users).filter(Users.id == user_id).first()
-    if not user:
-        logger.error("❌ [ERRORE] - Utente non trovato nel database")
-        raise HTTPException(status_code=404, detail="Utente non trovato")
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            logger.error("❌ [ERRORE] - Utente non trovato nel database")
+            raise HTTPException(status_code=404, detail="Utente non trovato")
+    except Exception as e:
+        logger.error(f"❌ [ERRORE] - Problema nella query dell'utente: {str(e)}")
+        raise HTTPException(status_code=500, detail="Errore nel recupero utente")
 
     if user.role != 'superadmin':
         logger.error(f"❌ [ERRORE] - Accesso negato per l'utente {user_id} con ruolo {user.role}")
         raise HTTPException(status_code=403, detail="Accesso negato")
 
-    logger.info("✅ [DEBUG] - Inizio creazione servizio")
+    logger.info("✅ [DEBUG] - Utente verificato come Super Admin, procediamo con la creazione del servizio")
 
     try:
         new_service = Services(name=service.name, description=service.description, price=service.price)
@@ -60,4 +70,5 @@ def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Sess
         db.rollback()
         logger.error(f"❌ [ERRORE] - Errore nel salvataggio: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Errore nel salvataggio: {str(e)}")
+
 
