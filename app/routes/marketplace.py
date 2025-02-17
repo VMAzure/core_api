@@ -1,9 +1,8 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
-from app.database import get_db  # Modifica: get_db importato direttamente
+from app.database import SessionLocal  # Importiamo solo SessionLocal
 from app.models import Services, PurchasedServices, Users
-
 from pydantic import BaseModel
 import logging
 
@@ -13,6 +12,14 @@ logger = logging.getLogger(__name__)
 
 marketplace_router = APIRouter(prefix="/marketplace", tags=["Marketplace"])
 
+# Funzione get_db come in auth.py
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 class ServiceCreate(BaseModel):
     name: str
     description: str
@@ -20,7 +27,7 @@ class ServiceCreate(BaseModel):
 
 @marketplace_router.post("/services")
 def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    logger.info("🔍 [DEBUG] - API `/services` chiamata")  # Primo log
+    logger.info("🔍 [DEBUG] - API `/services` chiamata")
     Authorize.jwt_required()
     logger.info("✅ [DEBUG] - Token JWT verificato")
 
