@@ -109,7 +109,4 @@ def get_jwt_key():
     """Endpoint per controllare il valore di AUTHJWT_SECRET_KEY"""
     return {"AUTHJWT_SECRET_KEY": os.getenv("AUTHJWT_SECRET_KEY")}
 
-# Avvio dell'applicazione solo se il file viene eseguito direttamente
-if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
 
