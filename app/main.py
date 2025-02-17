@@ -36,21 +36,23 @@ app = FastAPI(title="CORE API", version="1.0")
 # Configurazione dello schema di autenticazione Bearer per Swagger UI
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-# Forziamo la configurazione della chiave JWT
+# Configurazione JWT senza `load_config`
 class Settings(BaseModel):
     authjwt_secret_key: str = os.getenv("AUTHJWT_SECRET_KEY", "chiave-di-default")
 
+settings = Settings()
+
 @AuthJWT.load_config
 def get_config():
-    return Settings()
+    return settings
 
 @app.get("/debug/jwt-config")
 def get_jwt_config(Authorize: AuthJWT = Depends()):
-    """Endpoint per verificare la configurazione JWT e generare un token di test"""
+    """Verifica la configurazione JWT e genera un token di test"""
     try:
         token_test = Authorize.create_access_token(subject="test-user")
         return {
-            "authjwt_secret_key": get_config().authjwt_secret_key,
+            "authjwt_secret_key": settings.authjwt_secret_key,
             "token_test": token_test
         }
     except Exception as e:
@@ -89,7 +91,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inclusione delle route
+# Inclusione delle route (senza prefisso duplicato)
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(users_router, prefix="/users", tags=["Users"])
 app.include_router(transactions_router, prefix="/transactions", tags=["Transactions"])
@@ -107,6 +109,8 @@ def debug_test():
 @app.get("/debug/jwt-key")
 def get_jwt_key():
     """Endpoint per controllare il valore di AUTHJWT_SECRET_KEY"""
-    return {"AUTHJWT_SECRET_KEY": os.getenv("AUTHJWT_SECRET_KEY")}
+    return {"AUTHJWT_SECRET_KEY": settings.authjwt_secret_key}
 
-
+# Avvio dell'applicazione solo se il file viene eseguito direttamente
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
