@@ -101,3 +101,7 @@ def read_root():
 # Avvio dell'applicazione solo se il file viene eseguito direttamente
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
+    
+@app.post("/debug/test")
+def debug_test():
+    return {"message": "API sta ricevendo le richieste"}
