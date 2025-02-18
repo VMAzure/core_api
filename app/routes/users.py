@@ -21,7 +21,11 @@ def get_db():
 # Endpoint per ottenere tutti gli utenti (solo per superadmin)
 @router.get("/")
 def get_users(user_data: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    print(f"🔍 DEBUG: Token decodificato - {user_data}")
+    print(f"🔍 DEBUG: Dati utente ricevuti in users.py: {user_data}")
+    
+    if "role" not in user_data:
+        raise HTTPException(status_code=401, detail="Token JWT non valido o dati mancanti")
+
     if user_data["role"] != "superadmin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
     
