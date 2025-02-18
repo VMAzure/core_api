@@ -24,6 +24,10 @@ class ServiceCreate(BaseModel):
     name: str
     description: str
     price: float
+    
+class AssignServiceRequest(BaseModel):
+    admin_email: str = None  # Facoltativo, lo useremo solo se il Super Admin assegna un servizio
+    service_id: int
 
 @marketplace_router.post("/services")
 def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
