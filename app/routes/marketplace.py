@@ -115,8 +115,17 @@ def assign_service(
     print(f"❌ DEBUG: Credito insufficiente per Admin {admin.email}")    
     new_purchase = PurchasedServices(admin_id=admin.id, service_id=service.id, status="attivo")
     
-    db.add(new_purchase)
-    db.commit()
+    print(f"🔍 DEBUG: Creazione record PurchasedServices - Admin ID: {admin.id}, Service ID: {service.id}")
+
+    try:
+        db.add(new_purchase)
+        db.commit()
+        print("✅ DEBUG: Commit eseguito con successo")
+    except Exception as e:
+        db.rollback()
+        print(f"❌ DEBUG: Errore durante il commit: {str(e)}")
+        raise HTTPException(status_code=500, detail="Errore nel salvataggio del servizio")
+
     db.refresh(new_purchase)
     db.refresh(admin)
 
@@ -124,7 +133,6 @@ def assign_service(
         "message": f"Servizio assegnato con successo a {admin.email}",
         "admin_credito_rimanente": admin.credit
     }
-
 @marketplace_router.post("/buy-service")
 def buy_service(
     request: AssignServiceRequest, 
