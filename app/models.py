@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, func
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from passlib.context import CryptContext
@@ -41,15 +41,20 @@ class User(Base):
     def check_password(self, password: str):
         """Verifica la password"""
         return pwd_context.verify(password, self.hashed_password)
+        
 class Services(Base):
     __tablename__ = "services"
+
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    description = Column(String)
-    price = Column(Float)
+    name = Column(String, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    price = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=func.now())  # ✅ Aggiunto
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())  # ✅ Aggiunto
 
 class PurchasedServices(Base):
     __tablename__ = "purchased_services"
+
     id = Column(Integer, primary_key=True, index=True)
     admin_id = Column(Integer, ForeignKey("users.id"))
     service_id = Column(Integer, ForeignKey("services.id"))
