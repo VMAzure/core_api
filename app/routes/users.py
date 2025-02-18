@@ -34,13 +34,19 @@ class AdminCreateRequest(BaseModel):
     credit: float = 0.0  # Gli admin iniziano con 0 credito
 
 # Endpoint per ottenere tutti gli utenti (solo per superadmin)
+# Endpoint per ottenere tutti gli utenti (solo per superadmin)
 @router.get("/")
-def get_users(user_data: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    if user_data["role"] != "superadmin":
+def get_users(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    Authorize.jwt_required()
+    user_data = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_data).first()
+
+    if not user or user.role != "superadmin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
     
     users = db.query(User).all()
     return users
+
 
 # Creazione di un Admin (solo per Superadmin)
 @router.post("/admin")
