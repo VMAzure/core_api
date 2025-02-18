@@ -50,11 +50,16 @@ class AdminCreateRequest(BaseModel):
 
 # Creazione di un Admin (solo per Superadmin)
 @router.post("/admin")
-def create_admin(admin_data: AdminCreateRequest, user_data: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    if user_data["role"] != "superadmin":
+def create_admin(admin_data: AdminCreateRequest, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    
+    print(f"🔍 DEBUG: Token valido, utente autenticato: {user_email}")
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user or user.role != "superadmin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
 
-    # Controlliamo se l'email esiste già
     if db.query(User).filter(User.email == admin_data.email).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email già in uso")
 
@@ -63,7 +68,7 @@ def create_admin(admin_data: AdminCreateRequest, user_data: dict = Depends(get_c
     new_admin = User(
         email=admin_data.email,
         hashed_password=hashed_password,
-        role="admin",  # Il ruolo viene assegnato automaticamente
+        role="admin",
         nome=admin_data.nome,
         cognome=admin_data.cognome,
         indirizzo=admin_data.indirizzo,
@@ -81,6 +86,7 @@ def create_admin(admin_data: AdminCreateRequest, user_data: dict = Depends(get_c
     db.refresh(new_admin)
 
     return {"message": "Admin creato con successo", "user": new_admin}
+
 
 # Funzione per ottenere i costi dal database
 def get_costs(db: Session):
