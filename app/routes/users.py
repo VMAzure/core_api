@@ -34,6 +34,15 @@ class AdminCreateRequest(BaseModel):
     codice_sdi: str | None = None
     credit: float = 0.0  # Gli admin iniziano con 0 credito
 
+
+# Configurazione di AuthJWT
+class Settings:
+    authjwt_secret_key: str = "supersecretkey"
+
+@AuthJWT.load_config
+def get_config():
+    return Settings()
+    
 # Endpoint per ottenere tutti gli utenti (solo per superadmin)
 # Endpoint per ottenere tutti gli utenti (solo per superadmin)
 @router.get("/")
