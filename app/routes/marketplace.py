@@ -60,17 +60,20 @@ def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Sess
 
 
 @marketplace_router.post("/assign-service")
-@marketplace_router.post("/assign-service")
 def assign_service(
     request: AssignServiceRequest, 
-    print(f"🔍 DEBUG: Token ricevuto -> {Authorize._token}")
-
     Authorize: AuthJWT = Depends(), 
     db: Session = Depends(get_db)
 ):
-    print("🔍 DEBUG: La funzione assign_service è stata chiamata")
+    try:
+        token = Authorize.get_raw_jwt()
+        print(f"🔍 DEBUG: Token ricevuto -> {token}")
+    except Exception as e:
+        print(f"❌ DEBUG: Errore nel recupero del token -> {str(e)}")
+
     Authorize.jwt_required()
     superadmin_email = Authorize.get_jwt_subject()
+
     
     # Verifica che chi effettua l'operazione sia un Super Admin
     superadmin = db.query(User).filter(User.email == superadmin_email).first()
