@@ -33,7 +33,7 @@ def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Sess
     
     logger.info(f"✅ [DEBUG] - Utente autenticato con ID: {user_id}")
 
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.email == user_id).first()
     if not user or user.role != 'superadmin':
         raise HTTPException(status_code=403, detail="Accesso negato")
 
