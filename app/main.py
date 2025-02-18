@@ -13,13 +13,14 @@ print(f"🔍 DEBUG: Il percorso del progetto è stato aggiunto a sys.path → {P
 
 import traceback
 import uvicorn
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import OAuth2PasswordBearer
 from fastapi_jwt_auth import AuthJWT
-from pydantic import BaseModel
+from fastapi_jwt_auth.exceptions import AuthJWTException
+from pydantic import BaseSettings
 
 # Importiamo database e modelli
 from app.database import engine
@@ -36,31 +37,19 @@ app = FastAPI(title="CORE API", version="1.0")
 # Configurazione dello schema di autenticazione Bearer per Swagger UI
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-# 🔹 CONFIGURAZIONE JWT (passata correttamente come dizionario)
-def get_jwt_settings():
-    return {
-        "authjwt_secret_key": os.getenv("AUTHJWT_SECRET_KEY", "chiave-di-default")
-    }
+# 🔹 CONFIGURAZIONE JWT (Versione 0.5.0)
+class Settings(BaseSettings):
+    authjwt_secret_key: str = os.getenv("AUTHJWT_SECRET_KEY", "chiave-di-default")
+    authjwt_algorithm: str = "HS256"
+
 @AuthJWT.load_config
 def get_config():
-    """Restituisce un dizionario per configurare JWT"""
-    return get_jwt_settings()
-    
-def get_jwt_auth():
-    """Restituisce un'istanza di AuthJWT con la configurazione corretta"""
-    return AuthJWT(settings)
+    return Settings()
 
-@app.get("/debug/jwt-config")
-def get_jwt_config(Authorize: AuthJWT = Depends()):
-    """Verifica la configurazione JWT e genera un token di test"""
-    try:
-        token_test = Authorize.create_access_token(subject="test-user")
-        return {
-            "authjwt_secret_key": get_jwt_settings()["authjwt_secret_key"],
-            "token_test": token_test
-        }
-    except Exception as e:
-        return {"error": str(e)}
+# 🔹 Handler per errori JWT
+@app.exception_handler(AuthJWTException)
+def authjwt_exception_handler(request, exc):
+    return HTTPException(status_code=exc.status_code, detail=exc.message)
 
 # Funzione per personalizzare OpenAPI senza eliminare la documentazione
 def custom_openapi():
@@ -110,10 +99,17 @@ def read_root():
 def debug_test():
     return {"message": "API sta ricevendo le richieste"}
 
-@app.get("/debug/jwt-key")
-def get_jwt_key():
-    """Endpoint per controllare il valore di AUTHJWT_SECRET_KEY"""
-    return {"AUTHJWT_SECRET_KEY": get_jwt_settings()["authjwt_secret_key"]}
+@app.get("/debug/jwt-config")
+def get_jwt_config(Authorize: AuthJWT = Depends()):
+    """Verifica la configurazione JWT e genera un token di test"""
+    try:
+        token_test = Authorize.create_access_token(subject="test-user")
+        return {
+            "authjwt_secret_key": os.getenv("AUTHJWT_SECRET_KEY", "chiave-di-default"),
+            "token_test": token_test
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 # Avvio dell'applicazione solo se il file viene eseguito direttamente
 if __name__ == "__main__":
