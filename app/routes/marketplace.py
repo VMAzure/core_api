@@ -63,6 +63,8 @@ def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Sess
 @marketplace_router.post("/assign-service")
 def assign_service(
     request: AssignServiceRequest, 
+    print(f"🔍 DEBUG: Token ricevuto -> {Authorize._token}")
+
     Authorize: AuthJWT = Depends(), 
     db: Session = Depends(get_db)
 ):
