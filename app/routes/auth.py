@@ -50,15 +50,18 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 
 def get_current_user(token: str = Security(oauth2_scheme), db: Session = Depends(get_db)):
     print(f"🔍 DEBUG: Token ricevuto: {token}")
+    
     if token is None:
         raise HTTPException(status_code=401, detail="Token JWT mancante")
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        print(f"🔍 DEBUG: Token decodificato: {payload}")
+        print(f"🔍 DEBUG: Token decodificato: {payload}")  # 🔹 Stampa il payload ricevuto
     except jwt.ExpiredSignatureError:
+        print("❌ DEBUG: Token JWT scaduto")
         raise HTTPException(status_code=401, detail="Token JWT scaduto")
-    except jwt.JWTError:
+    except jwt.JWTError as e:
+        print(f"❌ DEBUG: Errore nella decodifica del token: {e}")
         raise HTTPException(status_code=401, detail="Token JWT non valido")
 
     user_email = payload.get("sub")
@@ -71,7 +74,7 @@ def get_current_user(token: str = Security(oauth2_scheme), db: Session = Depends
 
     return {"user": user, "role": user.role, "credit": user.credit}
 
-
+    
 # Endpoint di login
 @router.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db), Authorize: AuthJWT = Depends()):
