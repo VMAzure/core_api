@@ -26,34 +26,14 @@ class ServiceCreate(BaseModel):
     price: float
 
 @marketplace_router.post("/services")
-def add_service(Authorize: AuthJWT = Depends()):
+def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
-    return {"message": "Token verificato con successo"}
-
-
-    
-    try:
-        logger.info("🔐 [DEBUG] - Verifica autenticazione JWT")
-        Authorize.jwt_required()
-        logger.info("✅ [DEBUG] - Token JWT verificato con successo")
-    except Exception as e:
-        logger.error(f"❌ [ERRORE] - JWT non valido: {str(e)}")
-        raise HTTPException(status_code=401, detail="Token non valido")
-
     user_id = Authorize.get_jwt_subject()
+    
     logger.info(f"✅ [DEBUG] - Utente autenticato con ID: {user_id}")
 
-    try:
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            logger.error("❌ [ERRORE] - Utente non trovato nel database")
-            raise HTTPException(status_code=404, detail="Utente non trovato")
-    except Exception as e:
-        logger.error(f"❌ [ERRORE] - Problema nella query dell'utente: {str(e)}")
-        raise HTTPException(status_code=500, detail="Errore nel recupero utente")
-
-    if user.role != 'superadmin':
-        logger.error(f"❌ [ERRORE] - Accesso negato per l'utente {user_id} con ruolo {user.role}")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or user.role != 'superadmin':
         raise HTTPException(status_code=403, detail="Accesso negato")
 
     logger.info("✅ [DEBUG] - Utente verificato come Super Admin, procediamo con la creazione del servizio")
@@ -61,10 +41,9 @@ def add_service(Authorize: AuthJWT = Depends()):
     try:
         new_service = Services(name=service.name, description=service.description, price=service.price)
         db.add(new_service)
-        logger.info("✅ [DEBUG] - Servizio aggiunto al database, prima del commit")
-
         db.commit()
         db.refresh(new_service)
+        
         logger.info(f"✅ [SUCCESSO] - Servizio creato con successo: ID {new_service.id}")
         
         return {"message": "Servizio aggiunto con successo", "service_id": new_service.id}
