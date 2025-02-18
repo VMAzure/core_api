@@ -25,3 +25,4 @@ fastapi-jwt-auth==0.5.0
 PyJWT==1.7.1
 pydantic==1.10.13
 
+
