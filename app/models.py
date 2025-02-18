@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from passlib.context import CryptContext
-from app.database import Base  # Manteniamo solo Base senza importare engine
+from database import Base  # Manteniamo solo Base senza importare engine
 
 # Configurazione hashing password
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
