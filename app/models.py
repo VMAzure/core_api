@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, func
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from passlib.context import CryptContext
