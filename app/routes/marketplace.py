@@ -99,12 +99,15 @@ def assign_service(
         raise HTTPException(status_code=400, detail="L'Admin ha già questo servizio")
 
     # Controlla se l'Admin ha credito sufficiente per il primo mese
+    
     if admin.credit < service.price:
+        print(f"🔍 DEBUG: Credito attuale di {admin.email}: {admin.credit}, Prezzo del servizio: {service.price}")
         raise HTTPException(status_code=400, detail="Credito insufficiente per attivare il servizio")
 
     # Scalare il credito e assegnare il servizio
+    print(f"🔍 DEBUG: Credito attuale di {admin.email}: {admin.credit}, Prezzo del servizio: {service.price}")
     admin.credit -= service.price
-    print(f"❌ DEBUG: Credito insufficiente per Admin {admin.email}")
+    print(f"❌ DEBUG: Credito insufficiente per Admin {admin.email}")    
     new_purchase = PurchasedServices(admin_id=admin.id, service_id=service.id, status="attivo")
     
     db.add(new_purchase)
