@@ -49,12 +49,13 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 # Funzione per ottenere l'utente corrente dal token JWT
 
 def get_current_user(token: str = Security(oauth2_scheme), db: Session = Depends(get_db)):
+    print(f"🔍 DEBUG: Token ricevuto: {token}")
     if token is None:
         raise HTTPException(status_code=401, detail="Token JWT mancante")
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        print(f"🔍 DEBUG: Token decodificato - {payload}")  # Aggiungiamo un debug
+        print(f"🔍 DEBUG: Token decodificato: {payload}")
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token JWT scaduto")
     except jwt.JWTError:
@@ -69,8 +70,6 @@ def get_current_user(token: str = Security(oauth2_scheme), db: Session = Depends
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
     return {"user": user, "role": user.role, "credit": user.credit}
-
-
 
 
 # Endpoint di login
