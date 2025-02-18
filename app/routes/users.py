@@ -6,6 +6,7 @@ from app.models import User
 from app.routes.auth import get_current_user  # ✅ Usa lo stesso metodo di auth.py
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
+from fastapi_jwt_auth import AuthJWT  # Importiamo AuthJWT
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -20,13 +21,12 @@ def get_db():
 
 # Endpoint per ottenere tutti gli utenti (solo per superadmin)
 @router.get("/")
-def get_users(user_data: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    print(f"🔍 DEBUG: Dati utente ricevuti in users.py: {user_data}")
+def get_users(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    Authorize.jwt_required()  # Verifica il token direttamente
+    user_email = Authorize.get_jwt_subject()
     
-    if "role" not in user_data:
-        raise HTTPException(status_code=401, detail="Token JWT non valido o dati mancanti")
-
-    if user_data["role"] != "superadmin":
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user or user.role != "superadmin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
     
     users = db.query(User).all()
