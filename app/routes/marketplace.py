@@ -51,6 +51,7 @@ def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Sess
     except Exception as e:
         db.rollback()
         logger.error(f"❌ [ERRORE] - Errore nel salvataggio: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Errore nel salvataggio: {str(e)}")
+        raise HTTPException(status_code=500, detail="Errore nel salvataggio")
+
 
 
