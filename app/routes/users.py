@@ -6,6 +6,7 @@ from app.models import User
 from app.routes.auth import get_current_user
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
+from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
