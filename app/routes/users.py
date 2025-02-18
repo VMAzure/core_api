@@ -3,10 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import SessionLocal
 from app.models import User
-from app.routes.auth import get_current_user
+from app.routes.auth import get_current_user  # ✅ Usa lo stesso metodo di auth.py
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
-from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -18,6 +17,15 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# Endpoint per ottenere tutti gli utenti (solo per superadmin)
+@router.get("/")
+def get_users(user_data: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    if user_data["role"] != "superadmin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
+    
+    users = db.query(User).all()
+    return users
 
 # Modello per la creazione di un Admin
 class AdminCreateRequest(BaseModel):
@@ -33,30 +41,6 @@ class AdminCreateRequest(BaseModel):
     partita_iva: str | None = None
     codice_sdi: str | None = None
     credit: float = 0.0  # Gli admin iniziano con 0 credito
-
-
-# Configurazione di AuthJWT
-class Settings:
-    authjwt_secret_key: str = "supersecretkey"
-
-@AuthJWT.load_config
-def get_config():
-    return Settings()
-    
-# Endpoint per ottenere tutti gli utenti (solo per superadmin)
-# Endpoint per ottenere tutti gli utenti (solo per superadmin)
-@router.get("/")
-def get_users(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    Authorize.jwt_required()
-    user_data = Authorize.get_jwt_subject()
-    user = db.query(User).filter(User.email == user_data).first()
-
-    if not user or user.role != "superadmin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
-    
-    users = db.query(User).all()
-    return users
-
 
 # Creazione di un Admin (solo per Superadmin)
 @router.post("/admin")
@@ -93,8 +77,6 @@ def create_admin(admin_data: AdminCreateRequest, user_data: dict = Depends(get_c
     return {"message": "Admin creato con successo", "user": new_admin}
 
 # Funzione per ottenere i costi dal database
-from sqlalchemy import text
-
 def get_costs(db: Session):
     query = text("SELECT dealer_activation_cost, dealer_monthly_cost FROM settings")
     result = db.execute(query).fetchone()
