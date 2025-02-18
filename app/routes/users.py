@@ -21,11 +21,13 @@ def get_db():
 # Endpoint per ottenere tutti gli utenti (solo per superadmin)
 @router.get("/")
 def get_users(user_data: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    print(f"🔍 DEBUG: Token decodificato - {user_data}")
     if user_data["role"] != "superadmin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
     
     users = db.query(User).all()
     return users
+
 
 # Modello per la creazione di un Admin
 class AdminCreateRequest(BaseModel):
