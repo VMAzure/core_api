@@ -71,16 +71,19 @@ def assign_service(
     # Verifica che chi effettua l'operazione sia un Super Admin
     superadmin = db.query(User).filter(User.email == superadmin_email).first()
     if not superadmin or superadmin.role != "superadmin":
+        print("❌ DEBUG: Accesso negato - Utente non è un Super Admin")
         raise HTTPException(status_code=403, detail="Accesso negato")
 
     # Verifica che l'Admin esista
     admin = db.query(User).filter(User.email == request.admin_email, User.role == "admin").first()
     if not admin:
+        print(f"❌ DEBUG: Admin {request.admin_email} non trovato")
         raise HTTPException(status_code=404, detail="Admin non trovato")
 
     # Verifica che il servizio esista
     service = db.query(Services).filter(Services.id == request.service_id).first()
     if not service:
+        print(f"❌ DEBUG: Servizio con ID {request.service_id} non trovato")
         raise HTTPException(status_code=404, detail="Servizio non trovato")
 
     # Controlla se l'Admin ha già acquistato questo servizio
@@ -90,6 +93,7 @@ def assign_service(
     ).first()
 
     if existing_service:
+        print(f"❌ DEBUG: Admin {admin.email} ha già il servizio con ID {service.id}")
         raise HTTPException(status_code=400, detail="L'Admin ha già questo servizio")
 
     # Controlla se l'Admin ha credito sufficiente per il primo mese
@@ -98,6 +102,7 @@ def assign_service(
 
     # Scalare il credito e assegnare il servizio
     admin.credit -= service.price
+    print(f"❌ DEBUG: Credito insufficiente per Admin {admin.email}")
     new_purchase = PurchasedServices(admin_id=admin.id, service_id=service.id, status="attivo")
     
     db.add(new_purchase)
