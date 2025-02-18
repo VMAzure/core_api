@@ -155,8 +155,8 @@ def buy_service(
 
     # Controlla se l'Admin ha credito sufficiente
     if admin.credit < service.price:
-    print(f"❌ DEBUG: Credito insufficiente per Admin {admin.email}")
-    raise HTTPException(status_code=400, detail="Credito insufficiente per attivare il servizio")
+        print(f"❌ DEBUG: Credito insufficiente per Admin {admin.email}")
+        raise HTTPException(status_code=400, detail="Credito insufficiente per attivare il servizio")
 
     # Scalare il credito e assegnare il servizio
     # Scalare il credito e assegnare il servizio
