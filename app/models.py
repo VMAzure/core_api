@@ -8,7 +8,7 @@ from app.database import Base  # Manteniamo solo Base senza importare engine
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class User(Base):
-    __tablename__ = "users"
+    __tablename__ = "utenti"
     __table_args__ = {"schema": "public"}  # Forziamo lo schema "public"
 
     id = Column(Integer, primary_key=True, index=True)
