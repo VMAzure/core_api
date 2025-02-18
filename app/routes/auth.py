@@ -8,6 +8,8 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 import os
 from dotenv import load_dotenv
+from fastapi_jwt_auth import AuthJWT
+
 
 # Carica le variabili dal file .env
 load_dotenv()
@@ -69,9 +71,11 @@ def get_current_user(token: str = Security(oauth2_scheme), db: Session = Depends
     return {"user": user, "role": user.role, "credit": user.credit}
 
 
+
+
 # Endpoint di login
 @router.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db), Authorize: AuthJWT = Depends()):
     print(f"🔍 DEBUG: Tentativo di login con username={form_data.username}, password={form_data.password}")
 
     user = db.query(User).filter(User.email == form_data.username).first()
@@ -86,10 +90,12 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     
     print(f"✅ DEBUG: Utente autenticato: {user.email}, ruolo: {user.role}, credito: {user.credit}")
 
-    access_token = create_access_token(data={"sub": user.email, "role": user.role, "credit": user.credit})
+    # 🔹 Usa `AuthJWT` per generare il token invece di una funzione separata
+    access_token = Authorize.create_access_token(subject=user.email, user_claims={"role": user.role, "credit": user.credit})
     
     print(f"🔑 DEBUG: Token generato: {access_token}")
     
     return {"access_token": access_token, "token_type": "bearer"}
+
 
 
