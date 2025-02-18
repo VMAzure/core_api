@@ -27,6 +27,7 @@ class ServiceCreate(BaseModel):
 
 @marketplace_router.post("/services")
 def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    print(f"🔍 DEBUG: Token ricevuto: {Authorize._token}")
     Authorize.jwt_required()
     user_id = Authorize.get_jwt_subject()
     
