@@ -60,14 +60,16 @@ def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Sess
 
 
 @marketplace_router.post("/assign-service")
+@marketplace_router.post("/assign-service")
 def assign_service(
     request: AssignServiceRequest, 
     Authorize: AuthJWT = Depends(), 
     db: Session = Depends(get_db)
 ):
+    print("🔍 DEBUG: La funzione assign_service è stata chiamata")
     Authorize.jwt_required()
     superadmin_email = Authorize.get_jwt_subject()
-
+    
     # Verifica che chi effettua l'operazione sia un Super Admin
     superadmin = db.query(User).filter(User.email == superadmin_email).first()
     if not superadmin or superadmin.role != "superadmin":
