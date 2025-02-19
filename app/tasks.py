@@ -27,7 +27,7 @@ def check_and_charge_services():
         if not service or not admin:
             continue
 
-        service_duration = service.duration_minutes or default_duration
+        service_duration = default_duration  # Usa sempre il valore globale da settings
         expiration_time = purchased.activated_at + timedelta(minutes=service_duration)
 
         logging.info(f"⏳ Controllando servizio {service.id} per {admin.email} - Scade alle {expiration_time}")
