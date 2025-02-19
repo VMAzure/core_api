@@ -194,16 +194,32 @@ def update_service_duration(duration: int, Authorize: AuthJWT = Depends(), db: S
     """Permette al Super Admin di modificare la durata dei servizi"""
     Authorize.jwt_required()
     user_id = Authorize.get_jwt_subject()
-    
+
+    # Debug: Log dell'utente
+    print(f"🔍 DEBUG: Richiesta da {user_id}, durata richiesta: {duration}")
+
     user = db.query(User).filter(User.email == user_id).first()
     if not user or user.role != "superadmin":
+        print("❌ DEBUG: Accesso negato - Utente non è Super Admin")
         raise HTTPException(status_code=403, detail="Accesso negato")
 
+    # Controlliamo se esiste già un record nella tabella settings
     setting = db.execute("SELECT * FROM settings").fetchone()
-    if setting:
-        db.execute("UPDATE settings SET service_duration_minutes = :duration", {"duration": duration})
-    else:
-        db.execute("INSERT INTO settings (service_duration_minutes) VALUES (:duration)", {"duration": duration})
-    
-    db.commit()
-    return {"message": f"Durata servizio aggiornata a {duration} minuti"}
+    print(f"🔍 DEBUG: Setting attuale: {setting}")
+
+    try:
+        if setting:
+            db.execute("UPDATE settings SET service_duration_minutes = :duration", {"duration": duration})
+        else:
+            db.execute("INSERT INTO settings (service_duration_minutes) VALUES (:duration)", {"duration": duration})
+
+        db.commit()
+        print(f"✅ DEBUG: Durata aggiornata con successo a {duration} minuti")
+
+        return {"message": f"Durata servizio aggiornata a {duration} minuti"}
+
+    except Exception as e:
+        db.rollback()
+        print(f"❌ ERRORE: {str(e)}")
+        raise HTTPException(status_code=500, detail="Errore nell'aggiornamento della durata")
+
