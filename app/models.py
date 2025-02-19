@@ -45,13 +45,18 @@ class User(Base):
         
 class Services(Base):
     __tablename__ = "services"
+    __table_args__ = {"schema": "public"}  # ✅ Aggiunto per uniformità
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, index=True)
     description = Column(Text, nullable=True)
     price = Column(Float, nullable=False)
-    created_at = Column(DateTime, default=func.now())  # ✅ Aggiunto
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())  # ✅ Aggiunto
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # ✅ Aggiunto il back_populates per il collegamento con PurchasedServices
+    purchased_services = relationship("PurchasedServices", back_populates="service")
+
 
 class PurchasedServices(Base):
     __tablename__ = "purchased_services"
