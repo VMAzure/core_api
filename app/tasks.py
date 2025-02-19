@@ -46,3 +46,9 @@ def check_and_charge_services():
 
     db.close()
 
+# ✅ Definizione corretta di run_scheduler
+def run_scheduler():
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+
