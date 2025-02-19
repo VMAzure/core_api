@@ -45,7 +45,7 @@ class User(Base):
         
 class Services(Base):
     __tablename__ = "services"
-    __table_args__ = {"schema": "public"}  # ✅ Aggiunto per uniformità
+    __table_args__ = {"schema": "public"}
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, index=True)
@@ -54,8 +54,8 @@ class Services(Base):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
-    # ✅ Aggiunto il back_populates per il collegamento con PurchasedServices
-    purchased_services = relationship("PurchasedServices", back_populates="service")
+    # ✅ RIMOSSO il `back_populates="purchased_services"`
+
 
 
 class PurchasedServices(Base):
@@ -73,16 +73,13 @@ class PurchasedServices(Base):
 
 
 
-class Services(Base):
-    __tablename__ = "services"
-    __table_args__ = {"schema": "public"}
+class CreditTransaction(Base):
+    __tablename__ = "credit_transactions"
+    __table_args__ = {"schema": "public"}  # ✅ Aggiunto
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, index=True)
-    description = Column(Text, nullable=True)
-    price = Column(Float, nullable=False)
+    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=False)  # ✅ Modificato
+    amount = Column(Float, nullable=False)
+    transaction_type = Column(String, nullable=False)
     created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-
-    # ✅ RIMOSSO il `back_populates="purchased_services"`
 
