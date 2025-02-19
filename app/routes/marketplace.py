@@ -105,9 +105,21 @@ def assign_service(
 
     # Controlla se l'Admin ha credito sufficiente per il primo mese
     
-    if admin.credit < service.price:
-        print(f"❌ DEBUG: Errore credito - Credito Admin: {admin.credit}, Prezzo Servizio: {service.price}")
-        raise HTTPException(status_code=400, detail=f"Credito insufficiente! Credito disponibile: {admin.credit}, Costo: {service.price}")
+    print(f"🔍 DEBUG: Credito Attuale di {admin.email}: {admin.credit}, Tipo: {type(admin.credit)}")
+    print(f"🔍 DEBUG: Prezzo del Servizio: {service.price}, Tipo: {type(service.price)}")
+
+    try:
+        credito_admin = float(admin.credit)
+        prezzo_servizio = float(service.price)
+        print(f"🔍 DEBUG: Conversione completata → Credito: {credito_admin}, Prezzo: {prezzo_servizio}")
+    except ValueError as e:
+        print(f"❌ DEBUG: Errore nella conversione dei valori numerici: {e}")
+        raise HTTPException(status_code=500, detail="Errore interno nella gestione del credito")
+
+    if credito_admin < prezzo_servizio:
+        print(f"❌ DEBUG: Errore credito - Admin: {admin.email}, Credito Attuale: {credito_admin}, Prezzo Servizio: {prezzo_servizio}")
+        raise HTTPException(status_code=400, detail=f"Credito insufficiente! Credito disponibile: {credito_admin}, Costo: {prezzo_servizio}")
+
 
 
     # Scalare il credito e assegnare il servizio
