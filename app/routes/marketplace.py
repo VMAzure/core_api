@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import SessionLocal  # Importiamo solo SessionLocal
-from app.models import Services, PurchasedServices, User
+from app.models import Services, PurchasedServices, User, CreditTransaction  # Importiamo solo i modelli necessari
 from pydantic import BaseModel
 from sqlalchemy.sql import func
 
@@ -60,8 +60,6 @@ def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Sess
         logger.error(f"❌ [ERRORE] - Errore nel salvataggio: {str(e)}")
         raise HTTPException(status_code=500, detail="Errore nel salvataggio")
 
-
-@marketplace_router.post("/assign-service")
 @marketplace_router.post("/assign-service")
 def assign_service(
     request: AssignServiceRequest, 
