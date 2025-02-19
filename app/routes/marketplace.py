@@ -108,6 +108,7 @@ def assign_service(
             admin_id=admin.id, amount=-service.price, transaction_type="USE"
         )
         db.add(new_transaction)
+        db.add(new_purchase)
         db.commit()
         db.refresh(admin)
 
@@ -160,16 +161,18 @@ def buy_service(
         # Controllo del credito dell'Admin
         total_credit = admin.credit
 
-        print(f"🔍 DEBUG: Credito Admin {admin.email}: {total_credit}, Prezzo Servizio: {service.price}")
-        sys.stdout.flush()
-
         if total_credit < service.price:
-            print("❌ DEBUG: Credito insufficiente per Admin!")
             raise HTTPException(status_code=400, detail="Credito insufficiente per attivare il servizio")
 
-        # Scalare il credito e registrare l'acquisto
+        # Scalare il credito e registrare l'acquisto con attivazione immediata
         admin.credit -= service.price
-        new_purchase = PurchasedServices(admin_id=admin.id, service_id=service.id)
+        new_purchase = PurchasedServices(
+            admin_id=admin.id, 
+            service_id=service.id,
+            activated_at=func.now(),  # Salviamo la data di attivazione
+            status="attivo"
+        )
+
         db.add(new_purchase)
         db.commit()
         db.refresh(admin)
@@ -184,40 +187,6 @@ def buy_service(
 
     except Exception as e:
         db.rollback()
-        print(f"❌ ERRORE GENERICO: {str(e)}")
         traceback.print_exc()
         sys.stdout.flush()
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
-    
-@marketplace_router.put("/update-duration")
-def update_service_duration(duration: int, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    """Permette al Super Admin di modificare la durata dei servizi"""
-    Authorize.jwt_required()
-    user_id = Authorize.get_jwt_subject()
-
-    print(f"🔍 DEBUG: Richiesta da {user_id}, durata richiesta: {duration}")
-
-    user = db.query(User).filter(User.email == user_id).first()
-    if not user or user.role != "superadmin":
-        print("❌ DEBUG: Accesso negato - Utente non è Super Admin")
-        return HTTPException(status_code=403, detail="Accesso negato")
-
-    # Controlliamo se esiste già un record nella tabella settings
-    setting = db.execute(text("SELECT * FROM settings")).fetchone()
-    print(f"🔍 DEBUG: Setting attuale: {setting}")
-
-    try:
-        if setting:
-            db.execute(text("UPDATE settings SET service_duration_minutes = :duration"), {"duration": duration})
-        else:
-            db.execute(text("INSERT INTO settings (service_duration_minutes) VALUES (:duration)"), {"duration": duration})
-
-        db.commit()
-        print(f"✅ DEBUG: Durata aggiornata con successo a {duration} minuti")
-
-        return {"message": f"Durata servizio aggiornata a {duration} minuti"}
-
-    except Exception as e:
-        db.rollback()
-        print(f"❌ ERRORE: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Errore nell'aggiornamento della durata: {str(e)}")
