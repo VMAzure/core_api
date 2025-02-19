@@ -189,3 +189,21 @@ def buy_service(
         sys.stdout.flush()
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
 
+@marketplace_router.put("/update-duration")
+def update_service_duration(duration: int, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    """Permette al Super Admin di modificare la durata dei servizi"""
+    Authorize.jwt_required()
+    user_id = Authorize.get_jwt_subject()
+    
+    user = db.query(User).filter(User.email == user_id).first()
+    if not user or user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Accesso negato")
+
+    setting = db.execute("SELECT * FROM settings").fetchone()
+    if setting:
+        db.execute("UPDATE settings SET service_duration_minutes = :duration", {"duration": duration})
+    else:
+        db.execute("INSERT INTO settings (service_duration_minutes) VALUES (:duration)", {"duration": duration})
+    
+    db.commit()
+    return {"message": f"Durata servizio aggiornata a {duration} minuti"}
