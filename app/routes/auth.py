@@ -87,7 +87,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenziali non valide")
     
     if not verify_password(form_data.password, user.hashed_password):
-        print("❌ DEBUG: Password errata!")
+        print(f"❌ DEBUG: Password errata! Inserita: {form_data.password}, Attesa: {user.hashed_password}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenziali non valide")
     
     print(f"✅ DEBUG: Utente autenticato: {user.email}, ruolo: {user.role}, credito: {user.credit}")
