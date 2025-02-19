@@ -3,19 +3,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
 
-# Determiniamo se siamo in ambiente di produzione o sviluppo
-ENV_FILE = "config.env" if os.getenv("RAILWAY_ENVIRONMENT") else "config.dev.env"
-
-# Percorso assoluto del file di configurazione
-env_path = os.path.join(os.path.dirname(__file__), "..", ENV_FILE)
-
-# Carichiamo le variabili d'ambiente
-if os.path.exists(env_path):
-    load_dotenv(env_path)
-    print(f"✅ Variabili d'ambiente caricate da {env_path}")
-else:
-    raise ValueError(f"❌ ERRORE: Il file {env_path} non esiste! Crealo nella cartella principale del progetto.")
-
 # Otteniamo DATABASE_URL dal file di configurazione
 DATABASE_URL = os.getenv("DATABASE_URL")
 
