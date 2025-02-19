@@ -36,9 +36,20 @@ from app.routes.users import router as users_router
 from app.routes.transactions import router as transactions_router
 from app.routes.marketplace import marketplace_router
 from app import models  # Importiamo i modelli prima di avviare l'app
+import threading
+from app.tasks import run_scheduler
+from fastapi import FastAPI
+
 
 # Creazione dell'istanza di FastAPI
 app = FastAPI(title="CORE API", version="1.0")
+
+# ✅ Avvia il cron job in un thread separato all'avvio dell'app
+@app.on_event("startup")
+def start_cron_job():
+    thread = threading.Thread(target=run_scheduler, daemon=True)
+    thread.start()
+    print("✅ Cron job avviato!")
 
 # Configurazione dello schema di autenticazione Bearer per Swagger UI
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
