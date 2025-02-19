@@ -11,10 +11,10 @@ logging.basicConfig(filename="cron_job.log", level=logging.DEBUG, format="%(asct
 
 def check_and_charge_services():
     db = SessionLocal()
-    
-    # Recupera la durata impostata dal Super Admin
+
+    # Recupera la durata globale (30 giorni)
     setting = db.execute(text("SELECT service_duration_minutes FROM settings")).fetchone()
-    default_duration = setting.service_duration_minutes if setting else 43200  # Default: 30 giorni
+    default_duration = setting.service_duration_minutes if setting else 43200  # 43200 minuti = 30 giorni
 
     logging.info("🔍 Controllo servizi scaduti avviato...")
 
@@ -27,10 +27,9 @@ def check_and_charge_services():
         if not service or not admin:
             continue
 
-        service_duration = default_duration  # Usa sempre il valore globale da settings
-        expiration_time = purchased.activated_at + timedelta(minutes=service_duration)
+        expiration_time = purchased.activated_at + timedelta(minutes=default_duration)
 
-        logging.info(f"⏳ Controllando servizio {service.id} per {admin.email} - Scade alle {expiration_time}")
+        logging.info(f"⏳ Controllando servizio {service.id} per {admin.email} - Scadenza: {expiration_time}")
 
         if datetime.utcnow() >= expiration_time:
             if admin.credit >= service.price:
@@ -46,10 +45,10 @@ def check_and_charge_services():
     db.close()
     logging.info("✅ Controllo servizi scaduti completato.")
 
-# Controlla ogni minuto
-schedule.every(1).minutes.do(check_and_charge_services)
+ # Esegui il cron job ogni giorno a mezzanotte
+schedule.every().day.at("00:00").do(check_and_charge_services)
 
 def run_scheduler():
     while True:
         schedule.run_pending()
-        time.sleep(60)  # Controlla ogni minuto
+        time.sleep(60)  # Controlla ogni minuto se è l'orario giusto
