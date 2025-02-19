@@ -4,7 +4,7 @@ from fastapi_jwt_auth import AuthJWT
 from app.database import SessionLocal  # Importiamo solo SessionLocal
 from app.models import Services, PurchasedServices, User, CreditTransaction  # Importiamo solo i modelli necessari
 from pydantic import BaseModel
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 import traceback
 import sys
 import logging
