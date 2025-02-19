@@ -12,11 +12,9 @@ logging.basicConfig(filename="cron_job.log", level=logging.DEBUG, format="%(asct
 def check_and_charge_services():
     db = SessionLocal()
 
-    # Recupera la durata globale (30 giorni)
+    # Recupera la durata globale impostata dal Super Admin
     setting = db.execute(text("SELECT service_duration_minutes FROM settings")).fetchone()
-    default_duration = setting.service_duration_minutes if setting else 43200  # 43200 minuti = 30 giorni
-
-    logging.info("🔍 Controllo servizi scaduti avviato...")
+    default_duration = setting.service_duration_minutes if setting else 43200  # 30 giorni
 
     purchased_services = db.query(PurchasedServices).all()
 
@@ -29,26 +27,22 @@ def check_and_charge_services():
 
         expiration_time = purchased.activated_at + timedelta(minutes=default_duration)
 
-        logging.info(f"⏳ Controllando servizio {service.id} per {admin.email} - Scadenza: {expiration_time}")
-
         if datetime.utcnow() >= expiration_time:
             if admin.credit >= service.price:
                 admin.credit -= service.price
                 purchased.activated_at = datetime.utcnow()  # Reset scadenza
+                db.execute(
+                    text("INSERT INTO logs (admin_email, event_type, message) VALUES (:email, :event, :msg)"),
+                    {"email": admin.email, "event": "rinnovo", "msg": f"Servizio {service.name} rinnovato"}
+                )
                 db.commit()
-                logging.info(f"✅ Servizio {service.name} rinnovato per {admin.email}, nuovo credito: {admin.credit}")
             else:
                 purchased.status = "sospeso"
+                db.execute(
+                    text("INSERT INTO logs (admin_email, event_type, message) VALUES (:email, :event, :msg)"),
+                    {"email": admin.email, "event": "sospensione", "msg": f"Servizio {service.name} sospeso"}
+                )
                 db.commit()
-                logging.warning(f"❌ Credito insufficiente per {admin.email}, servizio {service.name} sospeso!")
 
     db.close()
-    logging.info("✅ Controllo servizi scaduti completato.")
 
- # Esegui il cron job ogni giorno a mezzanotte
-schedule.every().day.at("00:00").do(check_and_charge_services)
-
-def run_scheduler():
-    while True:
-        schedule.run_pending()
-        time.sleep(60)  # Controlla ogni minuto se è l'orario giusto

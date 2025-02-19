@@ -19,31 +19,34 @@ def get_logs(
     start_date: str = Query(None, description="Data di inizio (YYYY-MM-DD)"),
     end_date: str = Query(None, description="Data di fine (YYYY-MM-DD)"),
     admin_email: str = Query(None, description="Email dell'admin"),
-    event_type: str = Query(None, description="Tipo di evento (rinnovo, sospensione, errore)")
+    event_type: str = Query(None, description="Tipo di evento (rinnovo, sospensione, errore)"),
+    db: Session = Depends(get_db)
 ):
-    """Restituisce i log filtrati per data, admin o tipo di evento"""
+    """Restituisce i log filtrati per data, admin o tipo di evento dal database"""
     
-    log_file_path = "cron_job.log"  # Nome del file log generato dal cron job
-    
-    if not os.path.exists(log_file_path):
-        raise HTTPException(status_code=404, detail="File di log non trovato.")
+    query = text("SELECT timestamp, admin_email, event_type, message FROM logs WHERE 1=1")
+    params = {}
 
-    filtered_logs = []
+    if start_date:
+        query = text(query.text + " AND timestamp >= :start_date")
+        params["start_date"] = start_date
 
-    with open(log_file_path, "r") as log_file:
-        for line in log_file:
-            if start_date and start_date not in line:
-                continue
-            if end_date and end_date not in line:
-                continue
-            if admin_email and admin_email not in line:
-                continue
-            if event_type and event_type.lower() not in line.lower():
-                continue
-            
-            filtered_logs.append(line.strip())
+    if end_date:
+        query = text(query.text + " AND timestamp <= :end_date")
+        params["end_date"] = end_date
 
-    if not filtered_logs:
+    if admin_email:
+        query = text(query.text + " AND admin_email = :admin_email")
+        params["admin_email"] = admin_email
+
+    if event_type:
+        query = text(query.text + " AND event_type = :event_type")
+        params["event_type"] = event_type
+
+    logs = db.execute(query, params).fetchall()
+
+    if not logs:
         return {"message": "Nessun log trovato con i filtri selezionati."}
 
-    return {"logs": filtered_logs}
+    return {"logs": [dict(log) for log in logs]}
+
