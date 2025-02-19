@@ -53,14 +53,6 @@ class Services(Base):
     created_at = Column(DateTime, default=func.now())  # ✅ Aggiunto
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())  # ✅ Aggiunto
 
-class PurchasedServices(Base):
-    __tablename__ = "purchased_services"
-
-    id = Column(Integer, primary_key=True, index=True)
-    admin_id = Column(Integer, ForeignKey("utenti.id"))
-    service_id = Column(Integer, ForeignKey("services.id"))
-    status = Column(String, default="attivo")
-
 class CreditTransaction(Base):
     __tablename__ = "credit_transactions"
     
@@ -70,3 +62,14 @@ class CreditTransaction(Base):
     transaction_type = Column(String, nullable=False)
     created_at = Column(DateTime, default=func.now())
 
+class PurchasedServices(Base):
+    __tablename__ = "purchased_services"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, ForeignKey("utenti.id"), nullable=False)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
+    status = Column(String, default="attivo")
+    activated_at = Column(DateTime, default=func.now())  # ✅ Aggiunto il campo activated_at
+
+    admin = relationship("User", back_populates="purchased_services")
+    service = relationship("Services", back_populates="purchased_services")
