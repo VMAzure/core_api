@@ -35,6 +35,7 @@ from app.routes.auth import router as auth_router
 from app.routes.users import router as users_router
 from app.routes.transactions import router as transactions_router
 from app.routes.marketplace import marketplace_router
+from app.routes.logs import logs_router
 from app import models  # Importiamo i modelli prima di avviare l'app
 import threading
 from app.tasks import run_scheduler
@@ -106,6 +107,7 @@ app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(users_router, prefix="/users", tags=["Users"])
 app.include_router(transactions_router, prefix="/transactions", tags=["Transactions"])
 app.include_router(marketplace_router, prefix="/api")
+app.include_router(logs_router)
 
 @app.get("/")
 def read_root():
