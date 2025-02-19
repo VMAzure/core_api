@@ -27,12 +27,13 @@ class User(Base):
     cellulare = Column(String, nullable=False)
 
     credit = Column(Float, default=0.0)
-    parent_id = Column(Integer, ForeignKey("public.users.id"), nullable=True)
+    parent_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    parent = relationship("User", remote_side=[id], backref="dealers")
+    parent = relationship("User", remote_side=[id], backref="dealers", primaryjoin="User.parent_id == User.id")
+
 
     def set_password(self, password: str):
         """Salva la password criptata"""
