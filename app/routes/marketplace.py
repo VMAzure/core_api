@@ -65,87 +65,41 @@ def assign_service(
     Authorize: AuthJWT = Depends(), 
     db: Session = Depends(get_db)
 ):
-    try:
-        token = Authorize.get_raw_jwt()
-        print(f"🔍 DEBUG: Token ricevuto -> {token}")
-    except Exception as e:
-        print(f"❌ DEBUG: Errore nel recupero del token -> {str(e)}")
-
     Authorize.jwt_required()
     superadmin_email = Authorize.get_jwt_subject()
 
-    
     # Verifica che chi effettua l'operazione sia un Super Admin
     superadmin = db.query(User).filter(User.email == superadmin_email).first()
     if not superadmin or superadmin.role != "superadmin":
-        print("❌ DEBUG: Accesso negato - Utente non è un Super Admin")
         raise HTTPException(status_code=403, detail="Accesso negato")
 
     # Verifica che l'Admin esista
     admin = db.query(User).filter(User.email == request.admin_email, User.role == "admin").first()
     if not admin:
-        print(f"❌ DEBUG: Admin {request.admin_email} non trovato")
         raise HTTPException(status_code=404, detail="Admin non trovato")
 
     # Verifica che il servizio esista
     service = db.query(Services).filter(Services.id == request.service_id).first()
     if not service:
-        print(f"❌ DEBUG: Servizio con ID {request.service_id} non trovato")
         raise HTTPException(status_code=404, detail="Servizio non trovato")
 
-    # Controlla se l'Admin ha già acquistato questo servizio
-    existing_service = db.query(PurchasedServices).filter(
-        PurchasedServices.admin_id == admin.id,
-        PurchasedServices.service_id == service.id
-    ).first()
+    # Controlla il credito disponibile usando la nuova tabella
+    total_credit = db.query(func.sum(CreditTransaction.amount)).filter(
+        CreditTransaction.admin_id == admin.id
+    ).scalar() or 0  # Se non ci sono transazioni, credito iniziale è 0
 
-    if existing_service:
-        print(f"❌ DEBUG: Admin {admin.email} ha già il servizio con ID {service.id}")
-        raise HTTPException(status_code=400, detail="L'Admin ha già questo servizio")
+    if total_credit < service.price:
+        raise HTTPException(status_code=400, detail="Credito insufficiente per attivare il servizio")
 
-    # Controlla se l'Admin ha credito sufficiente per il primo mese
-    
-    print(f"🔍 DEBUG: Credito Attuale di {admin.email}: {admin.credit}, Tipo: {type(admin.credit)}")
-    print(f"🔍 DEBUG: Prezzo del Servizio: {service.price}, Tipo: {type(service.price)}")
+    # Registra la transazione di utilizzo credito
+    new_transaction = CreditTransaction(
+        admin_id=admin.id, amount=-service.price, transaction_type="USE"
+    )
+    db.add(new_transaction)
+    db.commit()
 
-    try:
-        credito_admin = float(admin.credit)
-        prezzo_servizio = float(service.price)
-        print(f"🔍 DEBUG: Conversione completata → Credito: {credito_admin}, Prezzo: {prezzo_servizio}")
-    except ValueError as e:
-        print(f"❌ DEBUG: Errore nella conversione dei valori numerici: {e}")
-        raise HTTPException(status_code=500, detail="Errore interno nella gestione del credito")
+    return {"message": f"Servizio assegnato con successo a {admin.email}, Credito rimanente: {total_credit - service.price}"}
 
-    if credito_admin < prezzo_servizio:
-        print(f"❌ DEBUG: Errore credito - Admin: {admin.email}, Credito Attuale: {credito_admin}, Prezzo Servizio: {prezzo_servizio}")
-        raise HTTPException(status_code=400, detail=f"Credito insufficiente! Credito disponibile: {credito_admin}, Costo: {prezzo_servizio}")
-
-
-
-    # Scalare il credito e assegnare il servizio
-    print(f"🔍 DEBUG: Credito attuale di {admin.email}: {admin.credit}, Prezzo del servizio: {service.price}")
-    admin.credit -= service.price
-    print(f"❌ DEBUG: Credito insufficiente per Admin {admin.email}")    
-    new_purchase = PurchasedServices(admin_id=admin.id, service_id=service.id, status="attivo")
-    
-    print(f"🔍 DEBUG: Creazione record PurchasedServices - Admin ID: {admin.id}, Service ID: {service.id}")
-
-    try:
-        db.add(new_purchase)
-        db.commit()
-        print("✅ DEBUG: Commit eseguito con successo")
-    except Exception as e:
-        db.rollback()
-        print(f"❌ DEBUG: Errore durante il commit: {str(e)}")
-        raise HTTPException(status_code=500, detail="Errore nel salvataggio del servizio")
-
-    db.refresh(new_purchase)
-    db.refresh(admin)
-
-    return {
-        "message": f"Servizio assegnato con successo a {admin.email}",
-        "admin_credito_rimanente": admin.credit
-    }
 @marketplace_router.post("/buy-service")
 def buy_service(
     request: AssignServiceRequest, 

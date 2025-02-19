@@ -60,3 +60,13 @@ class PurchasedServices(Base):
     admin_id = Column(Integer, ForeignKey("utenti.id"))
     service_id = Column(Integer, ForeignKey("services.id"))
     status = Column(String, default="attivo")
+
+class CreditTransaction(Base):
+    __tablename__ = "credit_transactions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=False)
+    amount = Column(Float, nullable=False)
+    transaction_type = Column(String, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+
