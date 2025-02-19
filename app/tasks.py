@@ -3,15 +3,20 @@ import time
 from datetime import datetime, timedelta
 from app.database import SessionLocal
 from app.models import User, PurchasedServices, Services
+import logging
+
+# Configura i log
+logging.basicConfig(filename="cron_job.log", level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 def check_and_charge_services():
     db = SessionLocal()
-
-    # Recupera la durata globale impostata dal Super Admin
+    
+    # Recupera la durata impostata dal Super Admin
     setting = db.execute("SELECT service_duration_minutes FROM settings").fetchone()
     default_duration = setting.service_duration_minutes if setting else 43200  # Default: 30 giorni
 
-    # Trova tutti i servizi acquistati dagli Admin
+    logging.info("🔍 Controllo servizi scaduti avviato...")
+
     purchased_services = db.query(PurchasedServices).all()
 
     for purchased in purchased_services:
@@ -19,26 +24,26 @@ def check_and_charge_services():
         admin = db.query(User).filter(User.id == purchased.admin_id).first()
 
         if not service or not admin:
-            continue  # Se l'Admin o il servizio non esistono più, passa oltre
+            continue
 
-        # Usa la durata del servizio o la durata globale
         service_duration = service.duration_minutes or default_duration
         expiration_time = purchased.activated_at + timedelta(minutes=service_duration)
 
+        logging.info(f"⏳ Controllando servizio {service.id} per {admin.email} - Scade alle {expiration_time}")
+
         if datetime.utcnow() >= expiration_time:
             if admin.credit >= service.price:
-                # Scala il credito e rinnova il servizio
                 admin.credit -= service.price
                 purchased.activated_at = datetime.utcnow()  # Reset scadenza
                 db.commit()
-                print(f"✅ Servizio {service.name} rinnovato per {admin.email}")
+                logging.info(f"✅ Servizio {service.name} rinnovato per {admin.email}, nuovo credito: {admin.credit}")
             else:
-                # Credito insufficiente: sospende il servizio
                 purchased.status = "sospeso"
                 db.commit()
-                print(f"❌ Credito insufficiente per {admin.email}, servizio {service.name} sospeso!")
+                logging.warning(f"❌ Credito insufficiente per {admin.email}, servizio {service.name} sospeso!")
 
     db.close()
+    logging.info("✅ Controllo servizi scaduti completato.")
 
 # Controlla ogni minuto
 schedule.every(1).minutes.do(check_and_charge_services)
