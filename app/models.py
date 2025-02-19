@@ -57,6 +57,6 @@ class PurchasedServices(Base):
     __tablename__ = "purchased_services"
 
     id = Column(Integer, primary_key=True, index=True)
-    admin_id = Column(Integer, ForeignKey("users.id"))
+    admin_id = Column(Integer, ForeignKey("utenti.id"))
     service_id = Column(Integer, ForeignKey("services.id"))
     status = Column(String, default="attivo")
