@@ -60,25 +60,29 @@ class Services(Base):
 
 class PurchasedServices(Base):
     __tablename__ = "purchased_services"
-    __table_args__ = {"schema": "public"}  # ✅ Aggiunto per rispettare lo schema
+    __table_args__ = {"schema": "public"}
 
     id = Column(Integer, primary_key=True, index=True)
-    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=False)  # ✅ Modificato
-    service_id = Column(Integer, ForeignKey("public.services.id"), nullable=False)  # ✅ Modificato
+    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=False)
+    service_id = Column(Integer, ForeignKey("public.services.id"), nullable=False)
     status = Column(String, default="attivo")
     activated_at = Column(DateTime, default=func.now())
 
-    admin = relationship("User", backref="purchased_services")
-    service = relationship("Services", backref="purchased_services")
+    admin = relationship("User", backref="purchased_services")  
+    service = relationship("Services", backref="purchased_services")  # ✅ Modificato da back_populates a backref
 
 
-class CreditTransaction(Base):
-    __tablename__ = "credit_transactions"
-    __table_args__ = {"schema": "public"}  # ✅ Aggiunto
+
+class Services(Base):
+    __tablename__ = "services"
+    __table_args__ = {"schema": "public"}
 
     id = Column(Integer, primary_key=True, index=True)
-    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=False)  # ✅ Modificato
-    amount = Column(Float, nullable=False)
-    transaction_type = Column(String, nullable=False)
+    name = Column(String, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    price = Column(Float, nullable=False)
     created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # ✅ RIMOSSO il `back_populates="purchased_services"`
 
