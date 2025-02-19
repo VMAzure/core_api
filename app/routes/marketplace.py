@@ -74,55 +74,58 @@ def assign_service(
         Authorize.jwt_required()
         superadmin_email = Authorize.get_jwt_subject()
 
-        # Verifica che chi effettua l'operazione sia un Super Admin
+        # Verifica che l'utente sia un Super Admin
         superadmin = db.query(User).filter(User.email == superadmin_email).first()
         if not superadmin or superadmin.role != "superadmin":
-            print("❌ DEBUG: Accesso negato - Utente non è un Super Admin")
             raise HTTPException(status_code=403, detail="Accesso negato")
 
         # Verifica che l'Admin esista
         admin = db.query(User).filter(User.email == request.admin_email, User.role == "admin").first()
         if not admin:
-            print(f"❌ DEBUG: Admin {request.admin_email} non trovato")
             raise HTTPException(status_code=404, detail="Admin non trovato")
 
         # Verifica che il servizio esista
         service = db.query(Services).filter(Services.id == request.service_id).first()
         if not service:
-            print(f"❌ DEBUG: Servizio con ID {request.service_id} non trovato")
             raise HTTPException(status_code=404, detail="Servizio non trovato")
 
-        # Controllo credito dall'Admin (uso direttamente admin.credit)
-        total_credit = admin.credit
-
-        print(f"🔍 DEBUG: Credito Admin {admin.email}: {total_credit}, Prezzo Servizio: {service.price}")
-        sys.stdout.flush()
-
-        if total_credit < service.price:
-            print("❌ DEBUG: Credito insufficiente!")
+        # Controllo credito
+        if admin.credit < service.price:
             raise HTTPException(status_code=400, detail="Credito insufficiente per attivare il servizio")
 
-        # Scalare il credito e registrare la transazione
+        # Controlla se il servizio è già assegnato
+        existing_service = db.query(PurchasedServices).filter(
+            PurchasedServices.admin_id == admin.id,
+            PurchasedServices.service_id == service.id
+        ).first()
+
+        if existing_service:
+            existing_service.activated_at = func.now()  # Aggiorna la data di attivazione
+            existing_service.status = "attivo"
+        else:
+            db.add(PurchasedServices(
+                admin_id=admin.id, 
+                service_id=service.id,
+                activated_at=func.now(),
+                status="attivo"
+            ))
+
+        # Scala il credito e salva la transazione
         admin.credit -= service.price
-        new_transaction = CreditTransaction(
+        db.add(CreditTransaction(
             admin_id=admin.id, amount=-service.price, transaction_type="USE"
-        )
-        db.add(new_transaction)
-        db.add(new_purchase)
+        ))
+
         db.commit()
         db.refresh(admin)
-
-        print(f"✅ DEBUG: Servizio assegnato, nuovo credito: {admin.credit}")
-        sys.stdout.flush()
 
         return {"message": f"Servizio assegnato con successo a {admin.email}, Credito rimanente: {admin.credit}"}
 
     except Exception as e:
         db.rollback()
-        print(f"❌ ERRORE GENERICO: {str(e)}")
         traceback.print_exc()
-        sys.stdout.flush()
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+
 
 
 
@@ -156,37 +159,33 @@ def buy_service(
         ).first()
 
         if existing_service:
-            raise HTTPException(status_code=400, detail="Hai già acquistato questo servizio")
+            existing_service.activated_at = func.now()  # Aggiorna la data di attivazione
+            existing_service.status = "attivo"
+        else:
+            db.add(PurchasedServices(
+                admin_id=admin.id, 
+                service_id=service.id,
+                activated_at=func.now(),
+                status="attivo"
+            ))
 
-        # Controllo del credito dell'Admin
-        total_credit = admin.credit
-
-        if total_credit < service.price:
+        # Controllo del credito
+        if admin.credit < service.price:
             raise HTTPException(status_code=400, detail="Credito insufficiente per attivare il servizio")
 
-        # Scalare il credito e registrare l'acquisto con attivazione immediata
+        # Scala il credito e salva la transazione
         admin.credit -= service.price
-        new_purchase = PurchasedServices(
-            admin_id=admin.id, 
-            service_id=service.id,
-            activated_at=func.now(),  # Salviamo la data di attivazione
-            status="attivo"
-        )
+        db.add(CreditTransaction(
+            admin_id=admin.id, amount=-service.price, transaction_type="USE"
+        ))
 
-        db.add(new_purchase)
         db.commit()
         db.refresh(admin)
 
-        print(f"✅ DEBUG: Servizio acquistato, nuovo credito: {admin.credit}")
-        sys.stdout.flush()
-
-        return {
-            "message": f"Servizio acquistato con successo",
-            "admin_credito_rimanente": admin.credit
-        }
+        return {"message": f"Servizio acquistato con successo, Credito rimanente: {admin.credit}"}
 
     except Exception as e:
         db.rollback()
         traceback.print_exc()
-        sys.stdout.flush()
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+
