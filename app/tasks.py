@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from app.database import SessionLocal
 from app.models import User, PurchasedServices, Services
 import logging
+from sqlalchemy import text
 
 # Configura i log
 logging.basicConfig(filename="cron_job.log", level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -12,7 +13,7 @@ def check_and_charge_services():
     db = SessionLocal()
     
     # Recupera la durata impostata dal Super Admin
-    setting = db.execute("SELECT service_duration_minutes FROM settings").fetchone()
+    setting = db.execute(text("SELECT service_duration_minutes FROM settings")).fetchone()
     default_duration = setting.service_duration_minutes if setting else 43200  # Default: 30 giorni
 
     logging.info("🔍 Controllo servizi scaduti avviato...")
