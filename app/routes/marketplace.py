@@ -188,20 +188,19 @@ def buy_service(
         traceback.print_exc()
         sys.stdout.flush()
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
-
+    
 @marketplace_router.put("/update-duration")
 def update_service_duration(duration: int, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """Permette al Super Admin di modificare la durata dei servizi"""
     Authorize.jwt_required()
     user_id = Authorize.get_jwt_subject()
 
-    # Debug: Log dell'utente
     print(f"🔍 DEBUG: Richiesta da {user_id}, durata richiesta: {duration}")
 
     user = db.query(User).filter(User.email == user_id).first()
     if not user or user.role != "superadmin":
         print("❌ DEBUG: Accesso negato - Utente non è Super Admin")
-        raise HTTPException(status_code=403, detail="Accesso negato")
+        return HTTPException(status_code=403, detail="Accesso negato")
 
     # Controlliamo se esiste già un record nella tabella settings
     setting = db.execute(text("SELECT * FROM settings")).fetchone()
@@ -209,9 +208,9 @@ def update_service_duration(duration: int, Authorize: AuthJWT = Depends(), db: S
 
     try:
         if setting:
-            db.execute("UPDATE settings SET service_duration_minutes = :duration", {"duration": duration})
+            db.execute(text("UPDATE settings SET service_duration_minutes = :duration"), {"duration": duration})
         else:
-            db.execute("INSERT INTO settings (service_duration_minutes) VALUES (:duration)", {"duration": duration})
+            db.execute(text("INSERT INTO settings (service_duration_minutes) VALUES (:duration)"), {"duration": duration})
 
         db.commit()
         print(f"✅ DEBUG: Durata aggiornata con successo a {duration} minuti")
@@ -221,5 +220,4 @@ def update_service_duration(duration: int, Authorize: AuthJWT = Depends(), db: S
     except Exception as e:
         db.rollback()
         print(f"❌ ERRORE: {str(e)}")
-        raise HTTPException(status_code=500, detail="Errore nell'aggiornamento della durata")
-
+        raise HTTPException(status_code=500, detail=f"Errore nell'aggiornamento della durata: {str(e)}")
