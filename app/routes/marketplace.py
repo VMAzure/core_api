@@ -204,7 +204,7 @@ def update_service_duration(duration: int, Authorize: AuthJWT = Depends(), db: S
         raise HTTPException(status_code=403, detail="Accesso negato")
 
     # Controlliamo se esiste già un record nella tabella settings
-    setting = db.execute("SELECT * FROM settings").fetchone()
+    setting = db.execute(text("SELECT * FROM settings")).fetchone()
     print(f"🔍 DEBUG: Setting attuale: {setting}")
 
     try:
