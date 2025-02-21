@@ -101,6 +101,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"]
     app.add_middleware(
+    )
 )
 
 # Inclusione delle route (senza prefisso duplicato)
@@ -110,7 +111,7 @@ app.include_router(transactions_router, prefix="/transactions", tags=["Transacti
 app.include_router(marketplace_router, prefix="/api")
 app.include_router(logs_router)
 app.include_router(users_router, prefix="/users", tags=["Users"])
-
+                                                )
 
 @app.get("/")
 def read_root():
