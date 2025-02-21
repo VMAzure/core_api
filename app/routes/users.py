@@ -174,24 +174,34 @@ def create_dealer(
 
 @router.get("/list", tags=["Users"])
 def get_users_list(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    """Restituisce l'elenco degli utenti con ID, email, ruolo, dipendenza (Admin), data di attivazione e credito."""
-    
+    """Restituisce l'elenco completo degli utenti con tutti i campi richiesti."""
+
     # Verifica del token JWT
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
-    
+
     # Verifica se l'utente è Super Admin
     user = db.query(User).filter(User.email == user_email).first()
     if not user or user.role != "superadmin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
 
-    # Query per ottenere i dati richiesti
+    # Query per ottenere tutti i dati richiesti
     users = db.query(
         User.id,
-        User.email,
-        User.role,
+        User.ragione_sociale,
         User.parent_id.label("admin_id"),
+        User.email,
+        User.partita_iva,
+        User.indirizzo,
         User.created_at.label("activation_date"),
+        User.updated_at,
+        User.cap,
+        User.citta,
+        User.role,
+        User.codice_sdi,
+        User.nome,
+        User.cognome,
+        User.cellulare,
         User.credit
     ).order_by(User.id).all()
 
@@ -199,10 +209,20 @@ def get_users_list(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
     users_list = [
         {
             "id": u.id,
-            "email": u.email,
-            "role": u.role,
+            "ragione_sociale": u.ragione_sociale,
             "admin_id": u.admin_id,
+            "email": u.email,
+            "partita_iva": u.partita_iva,
+            "indirizzo": u.indirizzo,
             "activation_date": u.activation_date.isoformat() if u.activation_date else None,
+            "updated_at": u.updated_at.isoformat() if u.updated_at else None,
+            "cap": u.cap,
+            "citta": u.citta,
+            "role": u.role,
+            "codice_sdi": u.codice_sdi,
+            "nome": u.nome,
+            "cognome": u.cognome,
+            "cellulare": u.cellulare,
             "credit": u.credit
         }
         for u in users
