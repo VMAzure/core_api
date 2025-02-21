@@ -94,15 +94,14 @@ app.openapi = custom_openapi
 
 # Middleware per la gestione delle richieste e della sicurezza
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+CORSMiddleware,
+allow_origins=["https://corewebapp-azcore.up.railway.app"],  # ❌ Deve essere aggiornato quando cambi dominio
+allow_credentials=True,
+allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+allow_headers=["Authorization", "Content-Type"]
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://corewebapp-azcore.up.railway.app"],  # ❌ Deve essere aggiornato quando cambi dominio
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"]
-    app.add_middleware(
-    )
 )
+
 
 # Inclusione delle route (senza prefisso duplicato)
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
@@ -111,7 +110,7 @@ app.include_router(transactions_router, prefix="/transactions", tags=["Transacti
 app.include_router(marketplace_router, prefix="/api")
 app.include_router(logs_router)
 app.include_router(users_router, prefix="/users", tags=["Users"])
-                                                )
+
 
 @app.get("/")
 def read_root():
