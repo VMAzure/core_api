@@ -19,6 +19,12 @@ def get_db():
     finally:
         db.close()
 
+@router.options("/{full_path:path}")
+async def preflight(full_path: str):
+    """Gestisce le richieste pre-flight per evitare problemi di CORS"""
+    return {"message": "OK"}
+
+
 # Endpoint per ottenere tutti gli utenti (solo per superadmin)
 @router.get("/")
 def get_users(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
