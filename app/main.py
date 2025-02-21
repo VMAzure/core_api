@@ -98,7 +98,7 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 # ✅ Corretto: Aggiunta corretta di CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://corewebapp-azcore.up.railway.app"],  # ✅ Aggiorna con il dominio corretto quando necessario
+    allow_origins=["*"],  # ✅ Aggiorna con il dominio corretto quando necessario
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"]
