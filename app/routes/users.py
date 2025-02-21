@@ -165,3 +165,41 @@ def create_dealer(
         "message": f"Dealer creato con successo. Credito rimanente: {admin_user.credit}",
         "user": new_dealer
     }
+
+@router.get("/list", tags=["Users"])
+def get_users_list(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    """Restituisce l'elenco degli utenti con ID, email, ruolo, dipendenza (Admin), data di attivazione e credito."""
+    
+    # Verifica del token JWT
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    
+    # Verifica se l'utente è Super Admin
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user or user.role != "superadmin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
+
+    # Query per ottenere i dati richiesti
+    users = db.query(
+        User.id,
+        User.email,
+        User.role,
+        User.parent_id.label("admin_id"),
+        User.created_at.label("activation_date"),
+        User.credit
+    ).order_by(User.id).all()
+
+    # Convertiamo i risultati in formato JSON
+    users_list = [
+        {
+            "id": u.id,
+            "email": u.email,
+            "role": u.role,
+            "admin_id": u.admin_id,
+            "activation_date": u.activation_date.isoformat() if u.activation_date else None,
+            "credit": u.credit
+        }
+        for u in users
+    ]
+
+    return users_list
