@@ -302,3 +302,23 @@ def get_users_list(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
 
     return users_list
 
+@router.get("/credit", tags=["Users"])
+def get_user_credit(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    """
+    API per ottenere il credito dell'utente autenticato.
+    - Recupera l'utente dal token JWT.
+    - Restituisce il credito disponibile.
+    """
+    # ✅ Verifica del token JWT
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    # ✅ Recupero informazioni utente
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Utente non trovato")
+
+    return {"email": user.email, "credit": user.credit}
+
+
