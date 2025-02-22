@@ -156,26 +156,35 @@ class DealerCreateRequest(BaseModel):
 
 @router.post("/dealer")
 def create_dealer(
-    dealer_data: DealerCreateRequest,  # Corretto il tipo
-    user_data: dict = Depends(get_current_user),
+    dealer_data: DealerCreateRequest,
+    Authorize: AuthJWT = Depends(),  # 🔥 Sostituiamo get_current_user con AuthJWT
     db: Session = Depends(get_db)
 ):
-    if user_data["role"] != "admin":
+    # ✅ Verifica del token JWT
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    # ✅ Recupera i dati dell'utente autenticato (Admin)
+    admin_user = db.query(User).filter(User.email == user_email).first()
+    if not admin_user or admin_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
 
+    # ✅ Verifica credito sufficiente
     dealer_activation_cost, dealer_monthly_cost = get_costs(db)
-
-    if user_data["credit"] < dealer_activation_cost + dealer_monthly_cost:
+    if admin_user.credit < dealer_activation_cost + dealer_monthly_cost:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Credito insufficiente. Servono almeno {dealer_activation_cost + dealer_monthly_cost} crediti."
         )
 
+    # ✅ Controlla se l'email è già registrata
     if db.query(User).filter(User.email == dealer_data.email).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email già in uso")
 
+    # ✅ Hash della password
     hashed_password = pwd_context.hash(dealer_data.password)
 
+    # ✅ Creazione del nuovo dealer
     new_dealer = User(
         email=dealer_data.email,
         hashed_password=hashed_password,
@@ -190,10 +199,10 @@ def create_dealer(
         partita_iva=dealer_data.partita_iva,
         codice_sdi=dealer_data.codice_sdi,
         credit=0.0,
-        parent_id=user_data["user"].id
+        parent_id=admin_user.id
     )
 
-    admin_user = db.query(User).filter(User.email == user_data["user"].email).first()
+    # ✅ Aggiornamento credito Admin
     admin_user.credit -= dealer_activation_cost + dealer_monthly_cost
     print(f"🔍 DEBUG: Credito Admin aggiornato. Nuovo saldo: {admin_user.credit}")
 
@@ -206,6 +215,7 @@ def create_dealer(
         "message": f"Dealer creato con successo. Credito rimanente: {admin_user.credit}",
         "user": new_dealer
     }
+
 
 @router.get("/list", tags=["Users"])
 def get_users_list(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
