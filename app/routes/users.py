@@ -219,36 +219,63 @@ def create_dealer(
 
 @router.get("/list", tags=["Users"])
 def get_users_list(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    """Restituisce l'elenco completo degli utenti con tutti i campi richiesti."""
-
+    """Restituisce l'elenco utenti: i Super Admin vedono tutti, gli Admin solo i loro Dealer."""
+    
     # Verifica del token JWT
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
-    # Verifica se l'utente è Super Admin
+    # Recupero informazioni utente
     user = db.query(User).filter(User.email == user_email).first()
-    if not user or user.role != "superadmin":
+    
+    if not user:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
 
-    # Query per ottenere tutti i dati richiesti
-    users = db.query(
-        User.id,
-        User.ragione_sociale,
-        User.parent_id.label("admin_id"),
-        User.email,
-        User.partita_iva,
-        User.indirizzo,
-        User.created_at.label("activation_date"),
-        User.updated_at,
-        User.cap,
-        User.citta,
-        User.role,
-        User.codice_sdi,
-        User.nome,
-        User.cognome,
-        User.cellulare,
-        User.credit
-    ).order_by(User.id).all()
+    # Se l'utente è un Super Admin, restituisce tutti gli utenti
+    if user.role == "superadmin":
+        users = db.query(
+            User.id,
+            User.ragione_sociale,
+            User.parent_id.label("admin_id"),
+            User.email,
+            User.partita_iva,
+            User.indirizzo,
+            User.created_at.label("activation_date"),
+            User.updated_at,
+            User.cap,
+            User.citta,
+            User.role,
+            User.codice_sdi,
+            User.nome,
+            User.cognome,
+            User.cellulare,
+            User.credit
+        ).order_by(User.id).all()
+    
+    # Se l'utente è un Admin, restituisce solo i suoi Dealer
+    elif user.role == "admin":
+        users = db.query(
+            User.id,
+            User.ragione_sociale,
+            User.parent_id.label("admin_id"),
+            User.email,
+            User.partita_iva,
+            User.indirizzo,
+            User.created_at.label("activation_date"),
+            User.updated_at,
+            User.cap,
+            User.citta,
+            User.role,
+            User.codice_sdi,
+            User.nome,
+            User.cognome,
+            User.cellulare,
+            User.credit
+        ).filter(User.parent_id == user.id, User.role == "dealer").order_by(User.id).all()
+    
+    # Se l'utente ha un ruolo diverso, accesso negato
+    else:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
 
     # Convertiamo i risultati in formato JSON
     users_list = [
@@ -274,3 +301,4 @@ def get_users_list(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
     ]
 
     return users_list
+
