@@ -189,3 +189,28 @@ def buy_service(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
 
+@marketplace_router.get("/service-list", response_model=list)
+def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    try:
+        Authorize.jwt_required()
+        user_email = Authorize.get_jwt_subject()
+        
+        # Verifica se l'utente esiste
+        user = db.query(User).filter(User.email == user_email).first()
+        if not user:
+            raise HTTPException(status_code=403, detail="Accesso negato")
+        
+        # Recupera tutti i servizi disponibili per tutti gli utenti
+        services = db.query(Services).all()
+        
+        return [{
+            "id": service.id,
+            "name": service.name,
+            "description": service.description,
+            "price": service.price
+        } for service in services]
+        
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+
