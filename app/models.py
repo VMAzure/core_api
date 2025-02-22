@@ -83,3 +83,4 @@ class CreditTransaction(Base):
     transaction_type = Column(String, nullable=False)
     created_at = Column(DateTime, default=func.now())
 
+
