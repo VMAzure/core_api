@@ -57,20 +57,40 @@ class AdminCreateRequest(BaseModel):
 # Creazione di un Admin (solo per Superadmin)
 @router.post("/admin")
 def create_admin(admin_data: AdminCreateRequest, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    """
+    API per la creazione di un nuovo Admin, accessibile solo ai Superadmin.
+    - Controlla se il token è valido
+    - Controlla se l'utente è un Superadmin
+    - Verifica che l'email e la Partita IVA non siano già registrate
+    - Crea il nuovo admin nel database
+    """
+    
+    # ✅ Verifica del token
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
     
     print(f"🔍 DEBUG: Token valido, utente autenticato: {user_email}")
 
+    # ✅ Controlla se l'utente è Superadmin
     user = db.query(User).filter(User.email == user_email).first()
     if not user or user.role != "superadmin":
+        print("⛔ DEBUG: Accesso negato, l'utente non è un superadmin")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
 
+    # ✅ Controllo se l'email è già in uso
     if db.query(User).filter(User.email == admin_data.email).first():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email già in uso")
+        print("⛔ DEBUG: Email già registrata")
+        return {"status": "error", "message": "Email già in uso", "exists": True}
 
+    # ✅ Controllo se la Partita IVA è già in uso
+    if db.query(User).filter(User.partita_iva == admin_data.partita_iva).first():
+        print("⛔ DEBUG: Partita IVA già registrata")
+        return {"status": "error", "message": "Partita IVA già in uso", "exists": True}
+
+    # ✅ Hash della password
     hashed_password = pwd_context.hash(admin_data.password)
 
+    # ✅ Creazione del nuovo admin
     new_admin = User(
         email=admin_data.email,
         hashed_password=hashed_password,
@@ -91,7 +111,22 @@ def create_admin(admin_data: AdminCreateRequest, Authorize: AuthJWT = Depends(),
     db.commit()
     db.refresh(new_admin)
 
-    return {"message": "Admin creato con successo", "user": new_admin}
+    print(f"✅ DEBUG: Admin creato con successo -> {new_admin.email}")
+
+    return {
+        "status": "success",
+        "message": "Admin creato con successo",
+        "user": {
+            "id": new_admin.id,
+            "email": new_admin.email,
+            "nome": new_admin.nome,
+            "cognome": new_admin.cognome,
+            "ragione_sociale": new_admin.ragione_sociale,
+            "partita_iva": new_admin.partita_iva,
+            "codice_sdi": new_admin.codice_sdi,
+            "credit": new_admin.credit
+        }
+    }
 
 
 # Funzione per ottenere i costi dal database
