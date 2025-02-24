@@ -11,8 +11,9 @@ import logging
 import os
 from dotenv import load_dotenv
 
-# ✅ Carichiamo le variabili d'ambiente
-load_dotenv()
+# ✅ Carichiamo dotenv SOLO se non siamo in produzione
+if os.getenv("ENV") != "production":
+    load_dotenv()
 
 # ✅ Configuriamo il logging
 logging.basicConfig(level=logging.DEBUG, handlers=[logging.StreamHandler(sys.stdout)])
@@ -27,10 +28,8 @@ try:
     SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
     # ✅ Debug per verificare il caricamento delle variabili
-    if not SUPABASE_URL:
-        raise ValueError("❌ ERRORE: SUPABASE_URL non è stato caricato correttamente!")
-    if not SUPABASE_KEY:
-        raise ValueError("❌ ERRORE: SUPABASE_KEY non è stato caricato correttamente!")
+    if SUPABASE_URL is None or SUPABASE_KEY is None:
+        raise ValueError("❌ ERRORE: Le credenziali Supabase non sono state caricate correttamente!")
 
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -82,15 +81,24 @@ async def add_service(
     if file_extension not in allowed_extensions:
         raise HTTPException(status_code=400, detail="Formato file non valido! Usa PNG, JPG, JPEG, WEBP.")
 
-    # ✅ Controlliamo la dimensione del file (max 5MB)
-    file_size = await file.read()
-    if len(file_size) > 5 * 1024 * 1024:
+    # ✅ Controlliamo la dimensione del file (max 5MB) senza leggerlo completamente
+    file_size = file.file.seek(0, 2)  # Spostiamo il puntatore alla fine per ottenere la dimensione
+    if file_size > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File troppo grande! Dimensione massima: 5MB.")
+
+    # ✅ Resettiamo il puntatore del file
+    file.file.seek(0)
 
     # ✅ Caricamento dell'immagine su Supabase
     try:
         file_name = f"services/{file.filename}"
-        response = supabase.storage.from_("services").upload(file_name, file_size, {"content-type": file.content_type})
+        
+        # ✅ Verifica se la cartella "services" esiste
+        bucket = supabase.storage.from_("services")
+        if not bucket:
+            raise HTTPException(status_code=500, detail="Errore: la cartella 'services' non esiste in Supabase.")
+
+        response = bucket.upload(file_name, file.file, {"content-type": file.content_type})
 
         if not response or "error" in response:
             raise HTTPException(status_code=500, detail="Errore nel caricamento dell'immagine su Supabase")
