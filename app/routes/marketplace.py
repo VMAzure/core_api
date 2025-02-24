@@ -60,7 +60,7 @@ async def add_service(
     name: str = Form(...),
     description: str = Form(...),
     price: float = Form(...),
-    file: UploadFile = File(...),
+    file: UploadFile = File(...),  # ✅ Riceviamo l'immagine
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -81,24 +81,20 @@ async def add_service(
     if file_extension not in allowed_extensions:
         raise HTTPException(status_code=400, detail="Formato file non valido! Usa PNG, JPG, JPEG, WEBP.")
 
-    # ✅ Controlliamo la dimensione del file (max 5MB) senza leggerlo completamente
-    file_size = file.file.seek(0, 2)  # Spostiamo il puntatore alla fine per ottenere la dimensione
-    if file_size > 5 * 1024 * 1024:
+    # ✅ Controlliamo la dimensione del file (max 5MB)
+    file_size = await file.read()
+    if len(file_size) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File troppo grande! Dimensione massima: 5MB.")
 
-    # ✅ Resettiamo il puntatore del file
+    # ✅ Resettiamo il puntatore del file per poterlo riutilizzare
     file.file.seek(0)
 
     # ✅ Caricamento dell'immagine su Supabase
     try:
         file_name = f"services/{file.filename}"
+        file_content = await file.read()  # ✅ Convertiamo il file in `bytes`
         
-        # ✅ Verifica se la cartella "services" esiste
-        bucket = supabase.storage.from_("services")
-        if not bucket:
-            raise HTTPException(status_code=500, detail="Errore: la cartella 'services' non esiste in Supabase.")
-
-        response = bucket.upload(file_name, file.file, {"content-type": file.content_type})
+        response = supabase.storage.from_("services").upload(file_name, file_content, {"content-type": file.content_type})
 
         if not response or "error" in response:
             raise HTTPException(status_code=500, detail="Errore nel caricamento dell'immagine su Supabase")
@@ -121,6 +117,7 @@ async def add_service(
         raise HTTPException(status_code=500, detail="Errore nel salvataggio del servizio.")
 
     return {"message": "Servizio aggiunto con successo", "service_id": new_service.id, "image_url": image_url}
+
 
 @marketplace_router.get("/service-list", response_model=list)
 def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
