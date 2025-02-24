@@ -33,33 +33,43 @@ class AssignServiceRequest(BaseModel):
     service_id: int
 
 @marketplace_router.post("/services")
-def add_service(service: ServiceCreate, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    print(f"🔍 DEBUG: Token ricevuto: {Authorize._token}")
+async def add_service(
+    name: str,
+    description: str,
+    price: float,
+    file: UploadFile = File(...),  # Accettiamo un'immagine
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
     Authorize.jwt_required()
     user_id = Authorize.get_jwt_subject()
-    
-    logger.info(f"✅ [DEBUG] - Utente autenticato con ID: {user_id}")
 
     user = db.query(User).filter(User.email == user_id).first()
     if not user or user.role != 'superadmin':
         raise HTTPException(status_code=403, detail="Accesso negato")
 
-    logger.info("✅ [DEBUG] - Utente verificato come Super Admin, procediamo con la creazione del servizio")
-
+    # Carica l'immagine su Supabase Storage
     try:
-        new_service = Services(name=service.name, description=service.description, price=service.price)
-        db.add(new_service)
-        db.commit()
-        db.refresh(new_service)
-        
-        logger.info(f"✅ [SUCCESSO] - Servizio creato con successo: ID {new_service.id}")
-        
-        return {"message": "Servizio aggiunto con successo", "service_id": new_service.id}
+        file_content = await file.read()
+        file_name = f"services/{file.filename}"
 
+        # Carica su Supabase
+        response = supabase.storage.from_("services").upload(file_name, file_content, {"content-type": file.content_type})
+        
+        if "error" in response:
+            raise HTTPException(status_code=500, detail="Errore nel caricamento dell'immagine")
+        
+        image_url = f"{SUPABASE_URL}/storage/v1/object/public/services/{file_name}"
     except Exception as e:
-        db.rollback()
-        logger.error(f"❌ [ERRORE] - Errore nel salvataggio: {str(e)}")
-        raise HTTPException(status_code=500, detail="Errore nel salvataggio")
+        raise HTTPException(status_code=500, detail=f"Errore nel caricamento dell'immagine: {str(e)}")
+
+    # Crea il nuovo servizio nel database
+    new_service = Services(name=name, description=description, price=price, image_url=image_url)
+    db.add(new_service)
+    db.commit()
+    db.refresh(new_service)
+
+    return {"message": "Servizio aggiunto con successo", "service_id": new_service.id, "image_url": image_url}
 
 @marketplace_router.post("/assign-service")
 def assign_service(
@@ -191,26 +201,21 @@ def buy_service(
 
 @marketplace_router.get("/service-list", response_model=list)
 def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    try:
-        Authorize.jwt_required()
-        user_email = Authorize.get_jwt_subject()
-        
-        # Verifica se l'utente esiste
-        user = db.query(User).filter(User.email == user_email).first()
-        if not user:
-            raise HTTPException(status_code=403, detail="Accesso negato")
-        
-        # Recupera tutti i servizi disponibili per tutti gli utenti
-        services = db.query(Services).all()
-        
-        return [{
-            "id": service.id,
-            "name": service.name,
-            "description": service.description,
-            "price": service.price
-        } for service in services]
-        
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=403, detail="Accesso negato")
+
+    services = db.query(Services).all()
+
+    return [{
+        "id": service.id,
+        "name": service.name,
+        "description": service.description,
+        "price": service.price,
+        "image_url": service.image_url  # Includiamo l'immagine nella risposta
+    } for service in services]
+
 
