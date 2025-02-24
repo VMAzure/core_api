@@ -1,25 +1,9 @@
 ﻿import sys
 import os
 import logging
-
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
-logger = logging.getLogger("uvicorn")
-
-logger.debug("✅ DEBUG: Logger FastAPI/Uvicorn attivo")
-
-# Otteniamo il percorso assoluto del progetto
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
-
-# Aggiungiamo il percorso del progetto a sys.path se non è già presente
-if PROJECT_ROOT not in sys.path:
-    sys.path.append(PROJECT_ROOT)
-
-print(f"🔍 DEBUG: Il percorso del progetto è stato aggiunto a sys.path → {PROJECT_ROOT}")
-
 import traceback
 import uvicorn
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, File, UploadFile, Form
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -27,22 +11,34 @@ from fastapi.security import OAuth2PasswordBearer
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from pydantic import BaseSettings
+from dotenv import load_dotenv  # ✅ Importiamo dotenv PRIMA di qualsiasi import dipendente dalle variabili
 
-# Importiamo database e modelli
+# ✅ Carichiamo le variabili d'ambiente PRIMA di qualsiasi import di moduli che le usano
+load_dotenv()
+
+# ✅ Ora possiamo importare i moduli che dipendono dalle variabili d'ambiente
 from app.database import engine
 from app.models import Base
 from app.routes.auth import router as auth_router
 from app.routes.users import router as users_router
 from app.routes.transactions import router as transactions_router
-from app.routes.marketplace import marketplace_router
+from app.routes.marketplace import marketplace_router  # 🔹 Importato DOPO dotenv!
 from app.routes.logs import logs_router
-from app import models  # Importiamo i modelli prima di avviare l'app
+from app import models
 import threading
 from app.tasks import run_scheduler
-from fastapi import FastAPI
 
+# ✅ Configuriamo il logging
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
+logger = logging.getLogger("uvicorn")
 
-# Creazione dell'istanza di FastAPI
+logger.debug("✅ DEBUG: Logger FastAPI/Uvicorn attivo")
+
+# ✅ Debug delle variabili Supabase
+print("✅ DEBUG (main.py) - SUPABASE_URL:", os.getenv("SUPABASE_URL"))
+print("✅ DEBUG (main.py) - SUPABASE_KEY:", os.getenv("SUPABASE_KEY"))
+
+# ✅ Creazione dell'istanza di FastAPI
 app = FastAPI(title="CORE API", version="1.0")
 
 # ✅ Avvia il cron job in un thread separato all'avvio dell'app
@@ -52,10 +48,10 @@ def start_cron_job():
     thread.start()
     print("✅ Cron job avviato!")
 
-# Configurazione dello schema di autenticazione Bearer per Swagger UI
+# ✅ Configurazione dello schema di autenticazione Bearer per Swagger UI
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-# 🔹 CONFIGURAZIONE JWT (Versione 0.5.0)
+# 🔹 CONFIGURAZIONE JWT
 class Settings(BaseSettings):
     authjwt_secret_key: str = os.getenv("AUTHJWT_SECRET_KEY", "chiave-di-default")
     authjwt_algorithm: str = "HS256"
@@ -69,7 +65,7 @@ def get_config():
 def authjwt_exception_handler(request, exc):
     return HTTPException(status_code=exc.status_code, detail=exc.message)
 
-# Funzione per personalizzare OpenAPI senza eliminare la documentazione
+# ✅ Personalizzazione OpenAPI
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -92,30 +88,30 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
-# Middleware per la gestione delle richieste e della sicurezza
+# ✅ Middleware di sicurezza
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 
-# ✅ Corretto: Aggiunta corretta di CORS Middleware
+# ✅ Middleware CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # ✅ Aggiorna con il dominio corretto quando necessario
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"]
 )
 
-# Inclusione delle route (senza prefisso duplicato)
+# ✅ Inclusione delle route (senza prefisso duplicato)
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(users_router, prefix="/users", tags=["Users"])
 app.include_router(transactions_router, prefix="/transactions", tags=["Transactions"])
-app.include_router(marketplace_router, prefix="/api")
+app.include_router(marketplace_router, prefix="/api")  # ✅ Ora Marketplace viene importato con le variabili già caricate!
 app.include_router(logs_router)
 
 @app.get("/")
 def read_root():
     return {"message": "Welcome to CORE API"}
 
-# Endpoint di debug
+# ✅ Endpoint di debug
 @app.post("/debug/test")
 def debug_test():
     return {"message": "API sta ricevendo le richieste"}
@@ -132,6 +128,6 @@ def get_jwt_config(Authorize: AuthJWT = Depends()):
     except Exception as e:
         return {"error": str(e)}
 
-# Avvio dell'applicazione solo se il file viene eseguito direttamente
+# ✅ Avvio dell'applicazione
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
