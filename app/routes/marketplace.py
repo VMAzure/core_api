@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+﻿from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import SessionLocal  # Importiamo solo SessionLocal
