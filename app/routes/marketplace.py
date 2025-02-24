@@ -60,7 +60,7 @@ async def add_service(
     name: str = Form(...),
     description: str = Form(...),
     price: float = Form(...),
-    file: UploadFile = File(...),  # ✅ Riceviamo l'immagine
+    file: UploadFile = File(...),
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -96,10 +96,13 @@ async def add_service(
         
         response = supabase.storage.from_("services").upload(file_name, file_content, {"content-type": file.content_type})
 
-        if not response or "error" in response:
-            raise HTTPException(status_code=500, detail="Errore nel caricamento dell'immagine su Supabase")
+        # ✅ Estrarre il contenuto della risposta
+        response_data = response.json()  # Convertiamo la risposta in JSON
 
-        image_url = f"{SUPABASE_URL}/storage/v1/object/public/services/{file_name}"
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail=f"Errore nel caricamento dell'immagine: {response_data}")
+
+        image_url = f"{SUPABASE_URL}/storage/v1/object/public/services/{file.filename}"
 
     except Exception as e:
         logger.error(f"❌ ERRORE: Impossibile caricare l'immagine su Supabase: {e}")
@@ -117,6 +120,7 @@ async def add_service(
         raise HTTPException(status_code=500, detail="Errore nel salvataggio del servizio.")
 
     return {"message": "Servizio aggiunto con successo", "service_id": new_service.id, "image_url": image_url}
+
 
 
 @marketplace_router.get("/service-list", response_model=list)
