@@ -19,7 +19,7 @@ print(f"🔍 DEBUG: Il percorso del progetto è stato aggiunto a sys.path → {P
 
 import traceback
 import uvicorn
-from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
