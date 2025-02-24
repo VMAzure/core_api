@@ -51,6 +51,7 @@ class Services(Base):
     name = Column(String, nullable=False, index=True)
     description = Column(Text, nullable=True)
     price = Column(Float, nullable=False)
+    image_url = Column(Text, nullable=True)  # Nuovo campo per l'immagine
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
