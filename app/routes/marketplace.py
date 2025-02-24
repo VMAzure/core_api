@@ -34,10 +34,10 @@ class AssignServiceRequest(BaseModel):
 
 @marketplace_router.post("/services")
 async def add_service(
-    name: str,
-    description: str,
-    price: float,
-    file: UploadFile = File(...),  # Accettiamo un'immagine
+    name: str = Form(...),  # ✅ I dati devono essere in Form() per funzionare con multipart/form-data
+    description: str = Form(...),
+    price: float = Form(...),
+    file: UploadFile = File(...),  # ✅ Accettiamo l'immagine
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -48,7 +48,7 @@ async def add_service(
     if not user or user.role != 'superadmin':
         raise HTTPException(status_code=403, detail="Accesso negato")
 
-    # Carica l'immagine su Supabase Storage
+    # ✅ Caricamento dell'immagine su Supabase Storage
     try:
         file_content = await file.read()
         file_name = f"services/{file.filename}"
@@ -63,7 +63,7 @@ async def add_service(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore nel caricamento dell'immagine: {str(e)}")
 
-    # Crea il nuovo servizio nel database
+    # ✅ Creazione del servizio nel database
     new_service = Services(name=name, description=description, price=price, image_url=image_url)
     db.add(new_service)
     db.commit()
