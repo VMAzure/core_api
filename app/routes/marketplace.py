@@ -14,6 +14,10 @@ from dotenv import load_dotenv
 # ✅ Carichiamo variabili d'ambiente come in database.py
 load_dotenv()
 
+print("✅ DEBUG - SUPABASE_URL:", os.getenv("SUPABASE_URL"))
+print("✅ DEBUG - SUPABASE_KEY:", os.getenv("SUPABASE_KEY"))
+
+
 # ✅ Configuriamo il logging per il debug
 logging.basicConfig(level=logging.DEBUG, handlers=[logging.StreamHandler(sys.stdout)])
 logger = logging.getLogger(__name__)
