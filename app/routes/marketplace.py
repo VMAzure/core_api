@@ -126,7 +126,7 @@ async def add_service(
 @marketplace_router.get("/service-list", response_model=list)
 def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """
-    Recupera la lista dei servizi disponibili.
+    Recupera la lista dei servizi disponibili e verifica quali sono attivi per l'Admin.
     """
 
     Authorize.jwt_required()
@@ -138,10 +138,77 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
 
     services = db.query(Services).all()
 
+    # 🔹 Recuperiamo i servizi acquistati dall'Admin
+    purchased_services = {p.service_id for p in db.query(PurchasedServices).filter(PurchasedServices.admin_id == user.id).all()}
+
     return [{
         "id": service.id,
         "name": service.name,
         "description": service.description,
         "price": service.price,
-        "image_url": service.image_url
+        "image_url": service.image_url,
+        "is_active": service.id in purchased_services  # 🔹 Indichiamo se il servizio è attivo
     } for service in services]
+
+
+@marketplace_router.post("/purchase-service")
+async def purchase_service(
+    service_id: int,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+    Permette a un Admin di acquistare un servizio, verificando il credito disponibile.
+    """
+
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    # ✅ Recuperiamo l'utente (Admin)
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=403, detail="Accesso negato: solo gli Admin possono acquistare servizi.")
+
+    # ✅ Recuperiamo il servizio richiesto
+    service = db.query(Services).filter(Services.id == service_id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Servizio non trovato.")
+
+    # ✅ Controlliamo se il servizio è già attivo per l'Admin
+    existing_purchase = db.query(PurchasedServices).filter(
+        PurchasedServices.admin_id == user.id,
+        PurchasedServices.service_id == service.id
+    ).first()
+
+    if existing_purchase:
+        raise HTTPException(status_code=400, detail="Hai già acquistato questo servizio.")
+
+    # ✅ Controlliamo il credito dell'Admin
+    if user.credit < service.price:
+        raise HTTPException(status_code=402, detail="Credito insufficiente per acquistare il servizio.")
+
+    try:
+        # 🔹 Sottraiamo il costo dal credito dell'Admin
+        user.credit -= service.price
+        db.commit()
+
+        # 🔹 Registriamo la transazione nei log di credito
+        transaction = CreditTransaction(
+            admin_id=user.id,
+            amount=-service.price,
+            transaction_type="Acquisto servizio"
+        )
+        db.add(transaction)
+        db.commit()
+
+        # 🔹 Salviamo l'attivazione del servizio
+        new_purchase = PurchasedServices(admin_id=user.id, service_id=service.id, status="active")
+        db.add(new_purchase)
+        db.commit()
+
+        return {"message": "Servizio acquistato con successo!", "service_id": service.id, "remaining_credit": user.credit}
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ ERRORE durante l'acquisto del servizio: {e}")
+        raise HTTPException(status_code=500, detail="Errore nell'elaborazione dell'acquisto.")
