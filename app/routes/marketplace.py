@@ -102,7 +102,7 @@ async def add_service(
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail=f"Errore nel caricamento dell'immagine: {response_data}")
 
-        image_url = f"{SUPABASE_URL}/storage/v1/object/public/public/services/{file.filename}"
+        image_url = f"{SUPABASE_URL}/storage/v1/object/public/services/services/{file.filename}"
 
     except Exception as e:
         logger.error(f"❌ ERRORE: Impossibile caricare l'immagine su Supabase: {e}")
