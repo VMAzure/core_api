@@ -197,10 +197,11 @@ async def purchase_service(
 
         # 🔹 Registriamo la transazione nei log di credito
         transaction = CreditTransaction(
-            admin_id=user.id,
-            amount=-service.price,
-            transaction_type="Acquisto servizio"
-        )
+        admin_id=user.id,
+        amount=service.price,  # ✅ Inseriamo il valore positivo
+        transaction_type="USE"  # ✅ Cambiamo "Acquisto servizio" con "USE"
+)
+
         db.add(transaction)
         db.commit()
 
