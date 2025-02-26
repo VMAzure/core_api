@@ -211,3 +211,7 @@ async def purchase_service(
 
         return {"message": "Servizio acquistato con successo!", "service_id": service.id, "remaining_credit": user.credit}
 
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ ERRORE durante l'acquisto del servizio: {e}")
+        raise HTTPException(status_code=500, detail="Errore nell'elaborazione dell'acquisto.")
