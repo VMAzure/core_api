@@ -151,9 +151,12 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
     } for service in services]
 
 
+class PurchaseServiceRequest(BaseModel):
+    service_id: int
+
 @marketplace_router.post("/purchase-service")
 async def purchase_service(
-    service_id: int,
+    request: PurchaseServiceRequest,  # ✅ Ora FastAPI leggerà "service_id" dal JSON
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -170,7 +173,7 @@ async def purchase_service(
         raise HTTPException(status_code=403, detail="Accesso negato: solo gli Admin possono acquistare servizi.")
 
     # ✅ Recuperiamo il servizio richiesto
-    service = db.query(Services).filter(Services.id == service_id).first()
+    service = db.query(Services).filter(Services.id == request.service_id).first()
     if not service:
         raise HTTPException(status_code=404, detail="Servizio non trovato.")
 
@@ -208,7 +211,3 @@ async def purchase_service(
 
         return {"message": "Servizio acquistato con successo!", "service_id": service.id, "remaining_credit": user.credit}
 
-    except Exception as e:
-        db.rollback()
-        logger.error(f"❌ ERRORE durante l'acquisto del servizio: {e}")
-        raise HTTPException(status_code=500, detail="Errore nell'elaborazione dell'acquisto.")
