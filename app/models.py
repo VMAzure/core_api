@@ -13,6 +13,20 @@ if TYPE_CHECKING:
 # Configurazione hashing password
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+class Services(Base):
+    __tablename__ = "services"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    price = Column(Float, nullable=False)
+    image_url = Column(Text, nullable=True)  # Nuovo campo per l'immagine
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # ✅ RIMOSSO il `back_populates="purchased_services"`
+
 class User(Base):
     __tablename__ = "utenti"
     __table_args__ = {"schema": "public"}  # Forziamo lo schema "public"
@@ -49,21 +63,6 @@ class User(Base):
         """Verifica la password"""
         return pwd_context.verify(password, self.hashed_password)
         
-class Services(Base):
-    __tablename__ = "services"
-    __table_args__ = {"schema": "public"}
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, index=True)
-    description = Column(Text, nullable=True)
-    price = Column(Float, nullable=False)
-    image_url = Column(Text, nullable=True)  # Nuovo campo per l'immagine
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-
-    # ✅ RIMOSSO il `back_populates="purchased_services"`
-
-
 
 class PurchasedServices(Base):
     __tablename__ = "purchased_services"
