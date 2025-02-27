@@ -3,7 +3,11 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from passlib.context import CryptContext
 from app.database import Base  # Manteniamo solo Base senza importare engine
-from app.models import AssignedServices
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models import AssignedServices
+
 
 
 # Configurazione hashing password
