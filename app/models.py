@@ -3,6 +3,8 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from passlib.context import CryptContext
 from app.database import Base  # Manteniamo solo Base senza importare engine
+from app.models import AssignedServices
+
 
 # Configurazione hashing password
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -84,3 +86,21 @@ class CreditTransaction(Base):
     transaction_type = Column(String, nullable=False)
     created_at = Column(DateTime, default=func.now())
 
+
+
+# ✅ Modello AssignedServices
+class AssignedServices(Base):
+    __tablename__ = "assigned_services"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, ForeignKey("utenti.id"), nullable=True)
+    dealer_id = Column(Integer, ForeignKey("utenti.id"), nullable=True)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=True)
+    status = Column(String, nullable=True, default="attivo")
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Relazioni
+    service = relationship("Services", back_populates="assigned_services")
+    dealer = relationship("User", foreign_keys=[dealer_id])
+    admin = relationship("User", foreign_keys=[admin_id])
