@@ -136,7 +136,8 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
     if not user:
         raise HTTPException(status_code=403, detail="Accesso negato")
 
-    services = db.query(Services).all()
+    # 🔹 Recuperiamo tutti i servizi con la `page_url` associata
+    services = db.query(Services, ServicePages.page_url).outerjoin(ServicePages, Services.id == ServicePages.service_id).all()
 
     # 🔹 Recuperiamo i servizi acquistati dall'Admin
     purchased_services = {p.service_id for p in db.query(PurchasedServices).filter(PurchasedServices.admin_id == user.id).all()}
@@ -147,8 +148,10 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
         "description": service.description,
         "price": service.price,
         "image_url": service.image_url,
-        "is_active": service.id in purchased_services  # 🔹 Indichiamo se il servizio è attivo
-    } for service in services]
+        "is_active": service.id in purchased_services,  # 🔹 Indichiamo se il servizio è attivo
+        "page_url": page_url if page_url else "#"  # ✅ Aggiungiamo il link della pagina
+    } for service, page_url in services]
+
 
 
 class PurchaseServiceRequest(BaseModel):
