@@ -7,21 +7,18 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.models import AssignedServices
-
-
-
 # Configurazione hashing password
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class Services(Base):
     __tablename__ = "services"
     __table_args__ = {"schema": "public"}
-
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, index=True)
     description = Column(Text, nullable=True)
     price = Column(Float, nullable=False)
-    image_url = Column(Text, nullable=True)  # Nuovo campo per l'immagine
+    image_url = Column(Text, nullable=True)
+    page_url = Column(String, nullable=True)  # ✅ Aggiunto il campo per la pagina del servizio
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -63,7 +60,6 @@ class User(Base):
         """Verifica la password"""
         return pwd_context.verify(password, self.hashed_password)
         
-
 class PurchasedServices(Base):
     __tablename__ = "purchased_services"
     __table_args__ = {"schema": "public"}
@@ -77,8 +73,6 @@ class PurchasedServices(Base):
     admin = relationship("User", backref="purchased_services")  
     service = relationship("Services", backref="purchased_services")  # ✅ Modificato da back_populates a backref
 
-
-
 class CreditTransaction(Base):
     __tablename__ = "credit_transactions"
     __table_args__ = {"schema": "public"}  # ✅ Aggiunto
@@ -88,8 +82,6 @@ class CreditTransaction(Base):
     amount = Column(Float, nullable=False)
     transaction_type = Column(String, nullable=False)
     created_at = Column(DateTime, default=func.now())
-
-
 
 # ✅ Modello AssignedServices
 class AssignedServices(Base):
