@@ -27,7 +27,7 @@ from app.routes.logs import logs_router
 from app import models
 import threading
 from app.tasks import run_scheduler
-from routes.services import service_router
+from app.routes.services import service_router
 
 
 
