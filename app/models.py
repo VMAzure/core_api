@@ -86,16 +86,20 @@ class CreditTransaction(Base):
 # ✅ Modello AssignedServices
 class AssignedServices(Base):
     __tablename__ = "assigned_services"
+    __table_args__ = {"schema": "public"}  # ✅ Assicura che sia nello schema corretto
 
     id = Column(Integer, primary_key=True, index=True)
-    admin_id = Column(Integer, ForeignKey("utenti.id"), nullable=True)
-    dealer_id = Column(Integer, ForeignKey("utenti.id"), nullable=True)
-    service_id = Column(Integer, ForeignKey("services.id"), nullable=True)
+    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
+    dealer_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
+    service_id = Column(Integer, ForeignKey("public.services.id"), nullable=True)  # ✅ AGGIUNTO SCHEMA "public."
+
     status = Column(String, nullable=True, default="attivo")
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relazioni
-    service = relationship("Services", back_populates="assigned_services")
+    service = relationship("Services", backref="assigned_services")  # ✅ Manteniamo `backref`
     dealer = relationship("User", foreign_keys=[dealer_id])
     admin = relationship("User", foreign_keys=[admin_id])
+
+
