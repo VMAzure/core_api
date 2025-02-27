@@ -109,7 +109,7 @@ app.include_router(users_router, prefix="/users", tags=["Users"])
 app.include_router(transactions_router, prefix="/transactions", tags=["Transactions"])
 app.include_router(marketplace_router, prefix="/api")  # ✅ Ora Marketplace viene importato con le variabili già caricate!
 app.include_router(logs_router)
-app.include_router(service_router), prefix="/api"  # 🔹 Aggiunto il prefisso /api"
+app.include_router(service_router, prefix="/api")  # 🔹 Aggiunto il prefisso /api"
 
 @app.get("/")
 def read_root():
