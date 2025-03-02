@@ -22,7 +22,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Configurazione JWT
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 300
 
 # OAuth2 per gestione token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
@@ -39,12 +39,6 @@ def get_db():
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
-# Funzione per creare un token JWT con ruolo e credito
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 # Funzione per ottenere l'utente corrente dal token JWT
 
@@ -93,7 +87,12 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     print(f"✅ DEBUG: Utente autenticato: {user.email}, ruolo: {user.role}, credito: {user.credit}")
 
     # 🔹 Usa `AuthJWT` per generare il token invece di una funzione separata
-    access_token = Authorize.create_access_token(subject=user.email, user_claims={"role": user.role, "credit": user.credit})
+    access_token = Authorize.create_access_token(
+    subject=user.email, 
+    user_claims={"role": user.role, "credit": user.credit},
+    expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+)
+
     
     print(f"🔑 DEBUG: Token generato: {access_token}")
     
