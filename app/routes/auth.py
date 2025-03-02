@@ -22,7 +22,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Configurazione JWT
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 300
+ACCESS_TOKEN_EXPIRE_MINUTES = 1
 
 # OAuth2 per gestione token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
@@ -98,5 +98,22 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     
     return {"access_token": access_token, "token_type": "bearer"}
 
+@router.post('/refresh-token')
+def refresh_token(Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()  # verifica token attuale
+
+    current_user_email = Authorize.get_jwt_subject()
+    user_claims = Authorize.get_raw_jwt()
+
+    new_token = Authorize.create_access_token(
+        subject=current_user_email,
+        user_claims={
+            "role": user_claims["role"],
+            "credit": user_claims["credit"]
+        },
+        expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+
+    return {"access_token": new_token}
 
 
