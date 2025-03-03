@@ -7,6 +7,13 @@ from app.routes.auth import get_current_user  # ✅ Usa lo stesso metodo di auth
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
 from fastapi_jwt_auth import AuthJWT  # Importiamo AuthJWT
+from fastapi import UploadFile, File
+import supabase
+from supabase import create_client, Client
+
+
+import os
+from datetime import datetime
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -327,44 +334,44 @@ def get_user_credit(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db
 
     return {"email": user.email, "credit": user.credit}
 
-from fastapi import UploadFile, File
-import supabase
-import os
-from datetime import datetime
+
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 @router.post("/upload-logo", tags=["Users"])
-async def upload_logo(file: UploadFile = File(...), Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    # Verifica del token JWT
+async def upload_logo(
+    file: UploadFile = File(...),
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
-    # Recupero informazioni utente
     user = db.query(User).filter(User.email == user_email).first()
-
     if not user or user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
 
-    # Controlla formato immagine
     if file.content_type not in ["image/png", "image/jpeg", "image/jpg"]:
         raise HTTPException(status_code=400, detail="Formato immagine non supportato")
 
-    # Nome univoco file
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
     file_name = f"logos/{user.id}_{timestamp}_{file.filename}"
 
-    # Carica immagine su Supabase
     try:
         content = await file.read()
-        response = supabase_client.storage().from_("logos").upload(file_name, content, {"content-type": file.content_type})
+
+        # Chiamata asincrona corretta
+        response = await supabase_client.storage.from_("logos").upload(
+            path=file_name,
+            file=content,
+            file_options={"content-type": file.content_type}
+        )
 
         image_url = f"{SUPABASE_URL}/storage/v1/object/public/logos/{file_name}"
 
-        # Aggiorna URL nel DB
         user.logo_url = image_url
         db.commit()
         db.refresh(user)
@@ -372,5 +379,6 @@ async def upload_logo(file: UploadFile = File(...), Authorize: AuthJWT = Depends
         return {"message": "Logo caricato con successo", "logo_url": image_url}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore upload: {str(e)}")
+        print(f"❌ Errore durante l'upload su Supabase: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
 
