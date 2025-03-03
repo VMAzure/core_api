@@ -359,9 +359,12 @@ async def upload_logo(file: UploadFile = File(...), Authorize: AuthJWT = Depends
     try:
         content = await file.read()
 
-        # ⚠️ Rimuovi 'await' da qui perché la libreria è sincrona
-        response = supabase_client.storage().from_("logos").upload(
-            file_name, content, {"content-type": file.content_type})
+        # ✅ CHIAMATA CORRETTA (storage SENZA parentesi)
+        response = supabase_client.storage.from_("logos").upload(
+            file_name, 
+            content, 
+            {"content-type": file.content_type}
+        )
 
         image_url = f"{SUPABASE_URL}/storage/v1/object/public/logos/{file_name}"
 
@@ -374,4 +377,5 @@ async def upload_logo(file: UploadFile = File(...), Authorize: AuthJWT = Depends
     except Exception as e:
         print(f"❌ Errore durante l'upload su Supabase: {e}")
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+
 
