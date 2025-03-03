@@ -249,7 +249,9 @@ def get_users_list(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
             User.nome,
             User.cognome,
             User.cellulare,
-            User.credit
+            User.credit,
+            User.logo_url  # ✅ aggiungi questo
+
         ).order_by(User.id).all()
     
     # Se l'utente è un Admin, restituisce solo i suoi Dealer
@@ -270,7 +272,9 @@ def get_users_list(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
             User.nome,
             User.cognome,
             User.cellulare,
-            User.credit
+            User.credit,
+            User.logo_url  # ✅ aggiungi questo
+
         ).filter(User.parent_id == user.id, User.role == "dealer").order_by(User.id).all()
     
     # Se l'utente ha un ruolo diverso, accesso negato
@@ -295,7 +299,9 @@ def get_users_list(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
             "nome": u.nome,
             "cognome": u.cognome,
             "cellulare": u.cellulare,
-            "credit": u.credit
+            "credit": u.credit,
+            "logo_url": u.logo_url  # ✅ aggiungi questo
+
         }
         for u in users
     ]
@@ -321,4 +327,50 @@ def get_user_credit(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db
 
     return {"email": user.email, "credit": user.credit}
 
+from fastapi import UploadFile, File
+import supabase
+import os
+from datetime import datetime
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
+
+@router.post("/upload-logo", tags=["Users"])
+async def upload_logo(file: UploadFile = File(...), Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    # Verifica del token JWT
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    # Recupero informazioni utente
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
+
+    # Controlla formato immagine
+    if file.content_type not in ["image/png", "image/jpeg", "image/jpg"]:
+        raise HTTPException(status_code=400, detail="Formato immagine non supportato")
+
+    # Nome univoco file
+    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    file_name = f"logos/{user.id}_{timestamp}_{file.filename}"
+
+    # Carica immagine su Supabase
+    try:
+        content = await file.read()
+        response = supabase_client.storage().from_("logos").upload(file_name, content, {"content-type": file.content_type})
+
+        image_url = f"{SUPABASE_URL}/storage/v1/object/public/logos/{file_name}"
+
+        # Aggiorna URL nel DB
+        user.logo_url = image_url
+        db.commit()
+        db.refresh(user)
+
+        return {"message": "Logo caricato con successo", "logo_url": image_url}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore upload: {str(e)}")
 
