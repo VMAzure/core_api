@@ -342,11 +342,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 @router.post("/upload-logo", tags=["Users"])
-async def upload_logo(
-    file: UploadFile = File(...),
-    Authorize: AuthJWT = Depends(),
-    db: Session = Depends(get_db)
-):
+async def upload_logo(file: UploadFile = File(...), Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
@@ -363,12 +359,9 @@ async def upload_logo(
     try:
         content = await file.read()
 
-        # Chiamata asincrona corretta
-        response = await supabase_client.storage.from_("logos").upload(
-            path=file_name,
-            file=content,
-            file_options={"content-type": file.content_type}
-        )
+        # ⚠️ Rimuovi 'await' da qui perché la libreria è sincrona
+        response = supabase_client.storage().from_("logos").upload(
+            file_name, content, {"content-type": file.content_type})
 
         image_url = f"{SUPABASE_URL}/storage/v1/object/public/logos/{file_name}"
 
