@@ -33,3 +33,37 @@ class UserUpdateRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
+
+
+
+class ClienteCreateRequest(BaseModel):
+    tipo_cliente: str
+    nome: str
+    cognome: str
+    ragione_sociale: str | None = None
+    codice_fiscale: str
+    partita_iva: str | None = None
+    indirizzo: str
+    telefono: str
+    email: EmailStr
+    iban: str | None = None
+
+class ClienteResponse(BaseModel):
+    id: int
+    admin_id: int
+    dealer_id: int | None = None
+    tipo_cliente: str
+    nome: str
+    cognome: str
+    ragione_sociale: str | None = None
+    codice_fiscale: str
+    partita_iva: str | None = None
+    indirizzo: str
+    telefono: str
+    email: EmailStr
+    iban: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True

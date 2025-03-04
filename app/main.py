@@ -28,6 +28,8 @@ from app import models
 import threading
 from app.tasks import run_scheduler
 from app.routes.services import service_router
+from app.routes.customers import router as customers_router
+
 
 # ✅ Configuriamo il logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
@@ -109,6 +111,8 @@ app.include_router(transactions_router, prefix="/transactions", tags=["Transacti
 app.include_router(marketplace_router, prefix="/api")  # ✅ Ora Marketplace viene importato con le variabili già caricate!
 app.include_router(logs_router)
 app.include_router(service_router, prefix="/api")  # 🔹 Aggiunto il prefisso /api"
+app.include_router(customers_router, prefix="/customers", tags=["Customers"])
+
 
 @app.get("/")
 def read_root():

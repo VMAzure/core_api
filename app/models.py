@@ -106,4 +106,28 @@ class AssignedServices(Base):
     admin = relationship("User", foreign_keys=[admin_id])
 
 
+class Cliente(Base):
+    __tablename__ = "clienti"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=False)
+    dealer_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
+
+    tipo_cliente = Column(String(20), nullable=False)
+    nome = Column(String(100))
+    cognome = Column(String(100))
+    ragione_sociale = Column(String(150))
+    codice_fiscale = Column(String(16))
+    partita_iva = Column(String(15))
+    indirizzo = Column(String(255))
+    telefono = Column(String(20))
+    email = Column(String(150), nullable=False)
+    iban = Column(String(34))
+
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    admin = relationship("User", foreign_keys=[admin_id])
+    dealer = relationship("User", foreign_keys=[dealer_id])
 
