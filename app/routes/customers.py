@@ -4,7 +4,7 @@ from datetime import datetime
 from app.database import get_db
 from app.models import User, Cliente
 from fastapi_jwt_auth import AuthJWT
-from typing import List
+from typing import List, Optional
 from app.schemas import ClienteResponse, ClienteCreateRequest
 from pydantic import BaseModel
 
@@ -41,8 +41,9 @@ def get_clienti(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
 # Richiesta per verifica cliente
 class ClienteCheckRequest(BaseModel):
     tipo_cliente: str
-    codice_fiscale: str | None = None
-    partita_iva: str | None = None
+    codice_fiscale: Optional[str] = None
+    partita_iva: Optional[str] = None
+
 
 
 # Endpoint verifica esistenza cliente
@@ -64,23 +65,24 @@ def check_cliente_exists(
     if user.role == "dealer":
         query = query.filter(Cliente.dealer_id == user.id)
 
+    # ✅ Logica aggiornata
     if check.tipo_cliente == "Privato":
         if not check.codice_fiscale:
             raise HTTPException(status_code=400, detail="Codice Fiscale obbligatorio per Privato")
-        query = query.filter(Cliente.codice_fiscale == check.codice_fiscale)
+
+        cliente_esistente = query.filter(
+            Cliente.codice_fiscale == check.codice_fiscale
+        ).first()
 
     elif check.tipo_cliente in ["Società", "Professionista"]:
-        if not (check.codice_fiscale and check.partita_iva):
-            raise HTTPException(status_code=400, detail="Codice Fiscale e Partita IVA obbligatori per Società e Professionista")
+        if not check.partita_iva:
+            raise HTTPException(status_code=400, detail="Partita IVA obbligatoria per Società e Professionista")
 
-        query = query.filter(
-            (Cliente.codice_fiscale == check.codice_fiscale) |
-            (Cliente.partita_iva == check.partita_iva)
-        )
+        cliente_esistente = query.filter(
+            Cliente.partita_iva == check.partita_iva
+        ).first()
     else:
         raise HTTPException(status_code=400, detail="Tipo cliente non valido")
-
-    cliente_esistente = query.first()
 
     if cliente_esistente:
         return {
@@ -99,6 +101,7 @@ def check_cliente_exists(
         "exists": False,
         "message": "Cliente disponibile"
     }
+
 
 
 # Endpoint creazione nuovo cliente
