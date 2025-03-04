@@ -378,4 +378,67 @@ async def upload_logo(file: UploadFile = File(...), Authorize: AuthJWT = Depends
         print(f"❌ Errore durante l'upload su Supabase: {e}")
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
 
+    @router.get("/me", tags=["Users"])
+def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+
+    data = {
+        "id": user.id,
+        "email": user.email,
+        "nome": user.nome,
+        "cognome": user.cognome,
+        "ragione_sociale": user.ragione_sociale,
+        "partita_iva": user.partita_iva,
+        "indirizzo": user.indirizzo,
+        "cap": user.cap,
+        "citta": user.citta,
+        "codice_sdi": user.codice_sdi,
+        "cellulare": user.cellulare,
+        "credit": user.credit,
+        "logo_url": user.logo_url,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at
+    }
+
+    # Se è dealer, recupera anche il logo del proprio Admin automaticamente
+    if user.role == "dealer":
+        admin = db.query(User).filter(User.id == user.parent_id).first()
+        data["logo_url"] = admin.logo_url if admin else None
+
+    return data
+
+@router.post("/change-password", tags=["Users"])
+def change_password(
+    password_data: ChangePasswordRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+
+    # Verifica della vecchia password
+    if not pwd_context.verify(password_data.old_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="La password attuale non è corretta")
+
+    # Hash della nuova password e aggiornamento
+    user.hashed_password = pwd_context.hash(password_data.new_password)
+    user.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(user)
+
+    return {"message": "Password cambiata correttamente"}
+
+
 
