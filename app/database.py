@@ -22,3 +22,10 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Importiamo i modelli per assicurarci che siano registrati prima della creazione delle tabelle
 from app import models
 
+ 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
