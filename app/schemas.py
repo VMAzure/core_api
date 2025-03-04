@@ -1,7 +1,8 @@
 ﻿# schemas.py
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, root_validator 
 from typing import Optional
 from datetime import datetime
+
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -49,22 +50,29 @@ class ClienteCreateRequest(BaseModel):
     iban: Optional[str] = None
 
 
+
+
 class ClienteResponse(BaseModel):
     id: int
     admin_id: int
-    dealer_id: int | None = None
+    dealer_id: Optional[int] = None
     tipo_cliente: str
-    nome: str
-    cognome: str
-    ragione_sociale: str | None = None
-    codice_fiscale: str
-    partita_iva: str | None = None
+    nome: Optional[str] = None
+    cognome: Optional[str] = None
+    ragione_sociale: Optional[str] = None
+    codice_fiscale: Optional[str] = None
+    partita_iva: Optional[str] = None
     indirizzo: str
     telefono: str
-    email: EmailStr
-    iban: str | None = None
-    created_at: datetime
-    updated_at: datetime
+    email: str
+    iban: Optional[str] = None
+
+    @root_validator
+    def validate_codici(cls, values):
+        cf, piva = values.get('codice_fiscale'), values.get('partita_iva')
+        if not cf and not piva:
+            raise ValueError('Almeno uno tra Codice Fiscale e Partita IVA deve essere presente.')
+        return values
 
     class Config:
         orm_mode = True
