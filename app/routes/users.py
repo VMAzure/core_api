@@ -10,6 +10,8 @@ from fastapi_jwt_auth import AuthJWT  # Importiamo AuthJWT
 from fastapi import UploadFile, File
 import supabase
 from supabase import create_client, Client
+from app.schemas import UserUpdateRequest, ChangePasswordRequest
+
 
 
 import os
