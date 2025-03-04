@@ -387,34 +387,38 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
-    user = db.query(User).filter(User.email == user_email).first()
+    try:
+        user = db.query(User).filter(User.email == user_email).first()
 
-    if not user:
-        raise HTTPException(status_code=404, detail="Utente non trovato")
+        if not user:
+            raise HTTPException(status_code=404, detail="Utente non trovato")
 
-    data = {
-        "id": user.id,
-        "email": user.email,
-        "nome": user.nome,
-        "cognome": user.cognome,
-        "ragione_sociale": user.ragione_sociale,
-        "partita_iva": user.partita_iva,
-        "indirizzo": user.indirizzo,
-        "cap": user.cap,
-        "citta": user.citta,
-        "codice_sdi": user.codice_sdi,
-        "cellulare": user.cellulare,
-        "credit": user.credit,
-        "logo_url": user.logo_url,
-        "created_at": user.created_at,
-        "updated_at": user.updated_at
-    }
+        data = {
+            "id": user.id,
+            "email": user.email,
+            "nome": user.nome,
+            "cognome": user.cognome,
+            "ragione_sociale": user.ragione_sociale,
+            "partita_iva": user.partita_iva,
+            "indirizzo": user.indirizzo,
+            "cap": user.cap,
+            "citta": user.citta,
+            "codice_sdi": user.codice_sdi,
+            "cellulare": user.cellulare,
+            "credit": user.credit,
+            "logo_url": user.logo_url,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "updated_at": user.updated_at.isoformat() if user.updated_at else None
+        }
 
-    # Se è dealer, recupera il logo Admin
-    if user.role == "dealer":
-        admin = db.query(User).filter(User.id == user.parent_id).first()
-        data["logo_url"] = admin.logo_url if admin else None
+        if user.role == "dealer":
+            admin = db.query(User).filter(User.id == user.parent_id).first()
+            data["logo_url"] = admin.logo_url if admin else None
 
-    return data
+        return data
+
+    except Exception as e:
+        print(f"❌ ERRORE DETTAGLIATO endpoint /me: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore interno dettagliato: {str(e)}")
 
 
