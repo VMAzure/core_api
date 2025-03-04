@@ -105,6 +105,7 @@ def check_cliente_exists(
 
 
 # Endpoint creazione nuovo cliente
+# Endpoint creazione nuovo cliente
 @router.post("/clienti", response_model=ClienteResponse)
 def crea_cliente(
     cliente: ClienteCreateRequest,
@@ -118,22 +119,23 @@ def crea_cliente(
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato")
 
-   # Controlli obbligatorietà campi
-    if cliente.tipo_cliente == "Privato" and not cliente.codice_fiscale:
-        raise HTTPException(status_code=400, detail="Codice Fiscale obbligatorio per Privato")
-
-    if cliente.tipo_cliente in ["Società", "Professionista"] and not cliente.partita_iva:
-        raise HTTPException(status_code=400, detail="Partita IVA obbligatoria per Società e Professionista")
+    admin_id = user.parent_id if user.role == "dealer" else user.id
+    dealer_id = user.id if user.role == "dealer" else None
 
     # Verifica duplicati cliente sotto lo stesso Admin/Dealer
-    query = db.query(Cliente).filter(Cliente.admin_id == user.id)
+    query = db.query(Cliente).filter(Cliente.admin_id == admin_id)
 
-    if user.role == "dealer":
-        query = query.filter(Cliente.dealer_id == user.id)
+    if dealer_id:
+        query = query.filter(Cliente.dealer_id == dealer_id)
 
     if cliente.tipo_cliente == "Privato":
+        if not cliente.codice_fiscale:
+            raise HTTPException(status_code=400, detail="Codice Fiscale obbligatorio per Privato")
         query = query.filter(Cliente.codice_fiscale == cliente.codice_fiscale)
+
     else:
+        if not cliente.partita_iva:
+            raise HTTPException(status_code=400, detail="Partita IVA obbligatoria per Società e Professionista")
         query = query.filter(Cliente.partita_iva == cliente.partita_iva)
 
     if query.first():
@@ -141,8 +143,8 @@ def crea_cliente(
 
     # Creazione cliente
     nuovo_cliente = Cliente(
-        admin_id=user.parent_id if user.role == "dealer" else user.id,
-        dealer_id=user.id if user.role == "dealer" else None,
+        admin_id=admin_id,
+        dealer_id=dealer_id,
         tipo_cliente=cliente.tipo_cliente,
         nome=cliente.nome,
         cognome=cliente.cognome,
@@ -158,7 +160,12 @@ def crea_cliente(
     )
 
     db.add(nuovo_cliente)
-    db.commit()
-    db.refresh(nuovo_cliente)
+
+    try:
+        db.commit()
+        db.refresh(nuovo_cliente)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Errore inserimento cliente, possibile duplicato o dati errati.")
 
     return nuovo_cliente
