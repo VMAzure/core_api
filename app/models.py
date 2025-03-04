@@ -28,7 +28,7 @@ class Services(Base):
 
 class User(Base):
     __tablename__ = "utenti"
-    __table_args__ = {"schema": "public"}  # Forziamo lo schema "public"
+    __table_args__ = {"schema": "public"}
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
@@ -47,12 +47,12 @@ class User(Base):
 
     credit = Column(Float, default=0.0)
     parent_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
+    logo_url = Column(String, nullable=True)  # ✅ aggiunta
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     parent = relationship("User", remote_side=[id], backref="dealers", primaryjoin="User.parent_id == User.id")
-
 
     def set_password(self, password: str):
         """Salva la password criptata"""
@@ -61,6 +61,7 @@ class User(Base):
     def check_password(self, password: str):
         """Verifica la password"""
         return pwd_context.verify(password, self.hashed_password)
+
         
 class PurchasedServices(Base):
     __tablename__ = "purchased_services"
