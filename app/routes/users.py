@@ -421,4 +421,47 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
         print(f"❌ ERRORE DETTAGLIATO endpoint /me: {e}")
         raise HTTPException(status_code=500, detail=f"Errore interno dettagliato: {str(e)}")
 
+# Modello Pydantic per aggiornamento utente
+class UserUpdateRequest(BaseModel):
+    nome: str
+    cognome: str
+    indirizzo: str
+    cap: str
+    citta: str
+    cellulare: str
+
+@router.put("/update-profile", tags=["Users"])
+def update_user_profile(
+    user_data: UserUpdateRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+
+    user.nome = user_data.nome
+    user.cognome = user_data.cognome
+    user.indirizzo = user_data.indirizzo
+    user.cap = user_data.cap
+    user.citta = user_data.citta
+    user.cellulare = user_data.cellulare
+    user.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(user)
+
+    return {"message": "Profilo aggiornato con successo", "user": {
+        "nome": user.nome,
+        "cognome": user.cognome,
+        "indirizzo": user.indirizzo,
+        "cap": user.cap,
+        "citta": user.citta,
+        "cellulare": user.cellulare
+    }}
+
 
