@@ -379,11 +379,11 @@ async def upload_logo(file: UploadFile = File(...), Authorize: AuthJWT = Depends
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
 
     @router.get("/me", tags=["Users"])
-def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    Authorize.jwt_required()
-    user_email = Authorize.get_jwt_subject()
+    def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+        Authorize.jwt_required()
+        user_email = Authorize.get_jwt_subject()
 
-    user = db.query(User).filter(User.email == user_email).first()
+        user = db.query(User).filter(User.email == user_email).first()
 
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato")
