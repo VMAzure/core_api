@@ -3,7 +3,9 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from passlib.context import CryptContext
 from app.database import Base  # Manteniamo solo Base senza importare engine
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
+from pydantic import BaseModel, EmailStr
+
 
 if TYPE_CHECKING:
     from app.models import AssignedServices
@@ -101,5 +103,6 @@ class AssignedServices(Base):
     service = relationship("Services", backref="assigned_services")  # ✅ Manteniamo `backref`
     dealer = relationship("User", foreign_keys=[dealer_id])
     admin = relationship("User", foreign_keys=[admin_id])
+
 
 
