@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+Ôªøfrom fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
 from app.database import get_db
@@ -69,9 +69,9 @@ def check_cliente_exists(
             raise HTTPException(status_code=400, detail="Codice Fiscale obbligatorio per Privato")
         query = query.filter(Cliente.codice_fiscale == check.codice_fiscale)
 
-    elif check.tipo_cliente in ["Societ‡", "Professionista"]:
+    elif check.tipo_cliente in ["Societ√†", "Professionista"]:
         if not (check.codice_fiscale and check.partita_iva):
-            raise HTTPException(status_code=400, detail="Codice Fiscale e Partita IVA obbligatori per Societ‡ e Professionista")
+            raise HTTPException(status_code=400, detail="Codice Fiscale e Partita IVA obbligatori per Societ√† e Professionista")
 
         query = query.filter(
             (Cliente.codice_fiscale == check.codice_fiscale) |
@@ -92,7 +92,7 @@ def check_cliente_exists(
                 "codice_fiscale": cliente_esistente.codice_fiscale,
                 "partita_iva": cliente_esistente.partita_iva
             },
-            "message": "Cliente gi‡ assegnato"
+            "message": "Cliente gi√† assegnato"
         }
 
     return {
@@ -115,12 +115,12 @@ def crea_cliente(
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato")
 
-    # Controlli obbligatoriet‡ campi
+    # Controlli obbligatoriet√† campi
     if cliente.tipo_cliente == "Privato" and not cliente.codice_fiscale:
         raise HTTPException(status_code=400, detail="Codice Fiscale obbligatorio per Privato")
 
-    if cliente.tipo_cliente in ["Societ‡", "Professionista"] and not (cliente.codice_fiscale and cliente.partita_iva):
-        raise HTTPException(status_code=400, detail="Codice Fiscale e Partita IVA obbligatori per Societ‡ e Professionista")
+    if cliente.tipo_cliente in ["Societ√†", "Professionista"] and not (cliente.codice_fiscale and cliente.partita_iva):
+        raise HTTPException(status_code=400, detail="Codice Fiscale e Partita IVA obbligatori per Societ√† e Professionista")
 
     # Verifica duplicati cliente sotto lo stesso Admin/Dealer
     query = db.query(Cliente).filter(Cliente.admin_id == user.id)
@@ -137,7 +137,7 @@ def crea_cliente(
         )
 
     if query.first():
-        raise HTTPException(status_code=400, detail="Cliente gi‡ assegnato sotto questo Admin/Dealer")
+        raise HTTPException(status_code=400, detail="Cliente gi√† assegnato sotto questo Admin/Dealer")
 
     # Creazione cliente
     nuovo_cliente = Cliente(
