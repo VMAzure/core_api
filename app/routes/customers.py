@@ -118,12 +118,12 @@ def crea_cliente(
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato")
 
-    # Controlli obbligatorietà campi
+   # Controlli obbligatorietà campi
     if cliente.tipo_cliente == "Privato" and not cliente.codice_fiscale:
         raise HTTPException(status_code=400, detail="Codice Fiscale obbligatorio per Privato")
 
-    if cliente.tipo_cliente in ["Società", "Professionista"] and not (cliente.codice_fiscale and cliente.partita_iva):
-        raise HTTPException(status_code=400, detail="Codice Fiscale e Partita IVA obbligatori per Società e Professionista")
+    if cliente.tipo_cliente in ["Società", "Professionista"] and not cliente.partita_iva:
+        raise HTTPException(status_code=400, detail="Partita IVA obbligatoria per Società e Professionista")
 
     # Verifica duplicati cliente sotto lo stesso Admin/Dealer
     query = db.query(Cliente).filter(Cliente.admin_id == user.id)
@@ -134,10 +134,7 @@ def crea_cliente(
     if cliente.tipo_cliente == "Privato":
         query = query.filter(Cliente.codice_fiscale == cliente.codice_fiscale)
     else:
-        query = query.filter(
-            (Cliente.codice_fiscale == cliente.codice_fiscale) |
-            (Cliente.partita_iva == cliente.partita_iva)
-        )
+        query = query.filter(Cliente.partita_iva == cliente.partita_iva)
 
     if query.first():
         raise HTTPException(status_code=400, detail="Cliente già assegnato sotto questo Admin/Dealer")

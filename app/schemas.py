@@ -1,4 +1,4 @@
-# schemas.py
+﻿# schemas.py
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime
@@ -38,15 +38,16 @@ class ChangePasswordRequest(BaseModel):
 
 class ClienteCreateRequest(BaseModel):
     tipo_cliente: str
-    nome: str
-    cognome: str
-    ragione_sociale: str | None = None
-    codice_fiscale: str
-    partita_iva: str | None = None
+    nome: Optional[str] = None
+    cognome: Optional[str] = None
+    ragione_sociale: Optional[str] = None
+    codice_fiscale: Optional[str] = None  # ✅ Ora opzionale
+    partita_iva: Optional[str] = None
     indirizzo: str
     telefono: str
     email: EmailStr
-    iban: str | None = None
+    iban: Optional[str] = None
+
 
 class ClienteResponse(BaseModel):
     id: int
