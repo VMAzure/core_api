@@ -5,6 +5,7 @@ from passlib.context import CryptContext
 from app.database import Base  # Manteniamo solo Base senza importare engine
 from typing import TYPE_CHECKING, Optional
 from pydantic import BaseModel, EmailStr
+from .database import Base
 
 
 if TYPE_CHECKING:
@@ -131,3 +132,16 @@ class Cliente(Base):
     admin = relationship("User", foreign_keys=[admin_id])
     dealer = relationship("User", foreign_keys=[dealer_id])
 
+class ClienteModifica(Base):
+    __tablename__ = "clienti_modifiche"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cliente_id = Column(Integer, ForeignKey("clienti.id"), nullable=False)
+    richiesto_da = Column(Integer, ForeignKey("utenti.id"), nullable=False)
+    campo_modificato = Column(String(50), nullable=False)
+    valore_vecchio = Column(String(255), nullable=True)
+    valore_nuovo = Column(String(255), nullable=False)
+    messaggio = Column(Text, nullable=True)
+    stato = Column(String(20), default="In attesa")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
