@@ -122,4 +122,27 @@ class ClienteModifica(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class Cliente(Base):
+    __tablename__ = "clienti"
+    __table_args__ = {"schema": "public"}
 
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=False)
+    dealer_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
+    
+    tipo_cliente = Column(String, nullable=False)
+    nome = Column(String, nullable=True)
+    cognome = Column(String, nullable=True)
+    ragione_sociale = Column(String, nullable=True)
+    codice_fiscale = Column(String, nullable=True)
+    partita_iva = Column(String, nullable=True)
+    indirizzo = Column(String, nullable=True)
+    telefono = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    iban = Column(String, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    admin = relationship("User", foreign_keys=[admin_id])
+    dealer = relationship("User", foreign_keys=[dealer_id])
