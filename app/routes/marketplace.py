@@ -127,8 +127,8 @@ async def add_service(
 def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """
     Recupera la lista dei servizi disponibili:
-    - Se Super Admin, mostra tutti i servizi disponibili con stato sempre 'active'.
-    - Se Admin, ritorna tutti i servizi disponibili con stato specifico ('active' o 'not_purchased').
+    - Se Super Admin, mostra tutti i servizi disponibili sempre attivi.
+    - Se Admin, mostra tutti i servizi con il loro stato reale (acquistato o no).
     - Se Dealer, mostra solo i servizi acquistati dal proprio admin.
     """
 
@@ -139,38 +139,37 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato")
 
+    services = db.query(Services).all()
+
     if user.role == "superadmin":
-        services = db.query(Services).all()
         result = [{
             "id": service.id,
             "name": service.name,
             "description": service.description,
+            "price": service.price,
             "image_url": service.image_url,
             "page_url": service.page_url,
-            "status": "active"
+            "is_active": True
         } for service in services]
 
     elif user.role == "admin":
-        services = db.query(Services).all()
-        result = []
-        for service in services:
-            purchased = db.query(PurchasedServices).filter(
-                PurchasedServices.admin_id == user.id,
-                PurchasedServices.service_id == service.id,
-                PurchasedServices.status == 'active'
-            ).first()
+        purchased_services = {p.service_id for p in db.query(PurchasedServices).filter(
+            PurchasedServices.admin_id == user.id,
+            PurchasedServices.status == 'active'
+        ).all()}
 
-            result.append({
-                "id": service.id,
-                "name": service.name,
-                "description": service.description,
-                "image_url": service.image_url,
-                "page_url": service.page_url,
-                "status": purchased.status if purchased else "not_purchased"
-            })
+        result = [{
+            "id": service.id,
+            "name": service.name,
+            "description": service.description,
+            "price": service.price,
+            "image_url": service.image_url,
+            "page_url": service.page_url if service.page_url else "#",
+            "is_active": service.id in purchased_services
+        } for service in services]
 
     elif user.role == "dealer":
-        services = db.query(Services).join(PurchasedServices).filter(
+        purchased_services = db.query(Services).join(PurchasedServices).filter(
             PurchasedServices.admin_id == user.parent_id,
             PurchasedServices.status == 'active'
         ).all()
@@ -179,33 +178,17 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
             "id": service.id,
             "name": service.name,
             "description": service.description,
+            "price": service.price,
             "image_url": service.image_url,
-            "page_url": service.page_url,
-            "status": "active"
-        } for service in services]
+            "page_url": service.page_url if service.page_url else "#",
+            "is_active": True
+        } for service in purchased_services]
 
-    else:  # Admin
-        services = db.query(Services).all()
-
-        result = []
-
-        for service in services:
-            purchased = db.query(PurchasedServices).filter(
-                PurchasedServices.admin_id == user.id,
-                PurchasedServices.service_id == service.id,
-                PurchasedServices.status == 'active'
-            ).first()
-
-            result.append({
-                "id": service.id,
-                "name": service.name,
-                "description": service.description,
-                "image_url": service.image_url,
-                "page_url": service.page_url if service.page_url else "#",
-                "status": "active" if purchased else "not_purchased"
-            })
+    else:
+        raise HTTPException(status_code=403, detail="Ruolo non valido")
 
     return result
+
 
 
 
