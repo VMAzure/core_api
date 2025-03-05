@@ -60,12 +60,11 @@ def check_cliente_exists(
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato")
 
-    query = db.query(Cliente).filter(Cliente.admin_id == user.id)
+    # Se l'utente è dealer, cerca fra tutti i clienti dell'admin associato
+    admin_id = user.parent_id if user.role == "dealer" else user.id
+    query = db.query(Cliente).filter(Cliente.admin_id == admin_id)
 
-    if user.role == "dealer":
-        query = query.filter(Cliente.dealer_id == user.id)
-
-    # ✅ Logica aggiornata
+    # Logica di controllo aggiornata
     if check.tipo_cliente == "Privato":
         if not check.codice_fiscale:
             raise HTTPException(status_code=400, detail="Codice Fiscale obbligatorio per Privato")
@@ -94,13 +93,14 @@ def check_cliente_exists(
                 "codice_fiscale": cliente_esistente.codice_fiscale,
                 "partita_iva": cliente_esistente.partita_iva
             },
-            "message": "Cliente già assegnato"
+            "message": "Cliente già assegnato sotto il tuo Admin"
         }
 
     return {
         "exists": False,
         "message": "Cliente disponibile"
     }
+
 
 
 
