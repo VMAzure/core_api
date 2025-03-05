@@ -173,3 +173,43 @@ def crea_cliente(
         raise HTTPException(status_code=400, detail="Errore inserimento cliente, possibile duplicato o dati errati.")
 
     return nuovo_cliente
+
+class RichiestaModificaCliente(BaseModel):
+    campo_modificato: str
+    valore_nuovo: str
+    messaggio: Optional[str] = None
+
+@router.post("/clienti/{cliente_id}/richiedi-modifica")
+def richiedi_modifica_cliente(
+    cliente_id: int,
+    richiesta: RichiestaModificaCliente,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user or user.role != "dealer":
+        raise HTTPException(status_code=403, detail="Accesso non autorizzato")
+
+    cliente = db.query(Cliente).filter(Cliente.id == cliente_id, Cliente.dealer_id == user.id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+
+    modifica = ClienteModifica(
+        cliente_id=cliente.id,
+        richiesto_da=user.id,
+        campo_modificato=richiesta.campo_modificato,
+        valore_vecchio=getattr(cliente, richiesta.campo_modificato),
+        valore_nuovo=richiesta.valore_nuovo,
+        messaggio=richiesta.messaggio,
+        stato="In attesa"
+    )
+
+    db.add(modifica)
+    db.commit()
+    db.refresh(modifica)
+
+    return {"msg": "Richiesta modifica inviata correttamente", "id_richiesta": modifica.id}
+
