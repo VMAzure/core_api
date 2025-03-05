@@ -107,30 +107,22 @@ class AssignedServices(Base):
     admin = relationship("User", foreign_keys=[admin_id])
 
 
-class Cliente(Base):
-    __tablename__ = "clienti"
-    __table_args__ = {"schema": "public"}
+class ClienteModifica(Base):
+    __tablename__ = "clienti_modifiche"
+    __table_args__ = {"schema": "public"}  # <-- Aggiungi questa riga!
 
     id = Column(Integer, primary_key=True, index=True)
-    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=False)
-    dealer_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
+    cliente_id = Column(Integer, ForeignKey("public.clienti.id"))  # <-- aggiungi public.
+    richiesto_da = Column(Integer, ForeignKey("public.utenti.id"))
+    approvato_da = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
+    campo_modificato = Column(String(255))
+    valore_vecchio = Column(Text)
+    valore_nuovo = Column(Text)
+    messaggio = Column(Text)
+    stato = Column(String(50), default="In attesa")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    tipo_cliente = Column(String(20), nullable=False)
-    nome = Column(String(100))
-    cognome = Column(String(100))
-    ragione_sociale = Column(String(150))
-    codice_fiscale = Column(String(16))
-    partita_iva = Column(String(15))
-    indirizzo = Column(String(255))
-    telefono = Column(String(20))
-    email = Column(String(150), nullable=False)
-    iban = Column(String(34))
-
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-
-    admin = relationship("User", foreign_keys=[admin_id])
-    dealer = relationship("User", foreign_keys=[dealer_id])
 
 class ClienteModifica(Base):
     __tablename__ = "clienti_modifiche"
