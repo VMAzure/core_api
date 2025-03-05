@@ -210,6 +210,7 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
 
 
 
+
 class PurchaseServiceRequest(BaseModel):
     service_id: int
 
