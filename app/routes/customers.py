@@ -213,3 +213,32 @@ def richiedi_modifica_cliente(
 
     return {"msg": "Richiesta modifica inviata correttamente", "id_richiesta": modifica.id}
 
+@router.put("/clienti/{cliente_id}/modifica")
+def modifica_cliente(
+    cliente_id: int,
+    dati_cliente: ClienteCreateRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user or user.role not in ["admin", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Accesso non autorizzato")
+
+    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+
+    for key, value in dati_cliente.dict().items():
+        setattr(cliente, key, value)
+
+    cliente.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(cliente)
+
+    return {"msg": "Cliente modificato correttamente", "cliente": cliente}
+
+
