@@ -464,4 +464,34 @@ def update_user_profile(
         "cellulare": user.cellulare
     }}
 
+@router.post("/change-password", tags=["Users"])
+def change_password(
+    passwords: ChangePasswordRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+
+    # Verifica vecchia password
+    if not pwd_context.verify(passwords.old_password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="La password attuale non è corretta.")
+
+    # Hash della nuova password
+    hashed_password = pwd_context.hash(passwords.new_password)
+
+    # Aggiorna password utente
+    user.hashed_password = hashed_password
+    user.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(user)
+
+    return {"message": "Password aggiornata con successo!"}
+
 
