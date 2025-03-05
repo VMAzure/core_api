@@ -126,7 +126,10 @@ async def add_service(
 @marketplace_router.get("/service-list", response_model=list)
 def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """
-    Recupera la lista dei servizi disponibili e verifica quali sono attivi per l'Admin.
+    Recupera la lista dei servizi disponibili:
+    - Se Super Admin, mostra tutti i servizi disponibili con stato sempre 'active'.
+    - Se Admin, ritorna tutti i servizi disponibili con stato specifico ('active' o 'not_purchased').
+    - Se Dealer, mostra solo i servizi acquistati dal proprio admin.
     """
 
     Authorize.jwt_required()
@@ -134,23 +137,75 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
 
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
-        raise HTTPException(status_code=403, detail="Accesso negato")
+        raise HTTPException(status_code=404, detail="Utente non trovato")
 
-    # 🔹 Recuperiamo tutti i servizi
-    services = db.query(Services).all()
+    if user.role == "superadmin":
+        services = db.query(Services).all()
+        result = [{
+            "id": service.id,
+            "name": service.name,
+            "description": service.description,
+            "image_url": service.image_url,
+            "page_url": service.page_url,
+            "status": "active"
+        } for service in services]
 
-    # 🔹 Recuperiamo i servizi acquistati dall'Admin
-    purchased_services = {p.service_id for p in db.query(PurchasedServices).filter(PurchasedServices.admin_id == user.id).all()}
+    elif user.role == "admin":
+        services = db.query(Services).all()
+        result = []
+        for service in services:
+            purchased = db.query(PurchasedServices).filter(
+                PurchasedServices.admin_id == user.id,
+                PurchasedServices.service_id == service.id,
+                PurchasedServices.status == 'active'
+            ).first()
 
-    return [{
-        "id": service.id,
-        "name": service.name,
-        "description": service.description,
-        "price": service.price,
-        "image_url": service.image_url,
-        "is_active": service.id in purchased_services,  # 🔹 Indichiamo se il servizio è attivo
-        "page_url": service.page_url if service.page_url else "#"  # ✅ Ora viene preso direttamente da `services`
-    } for service in services]  # ✅ Rimosso il riferimento errato a `page_url`
+            result.append({
+                "id": service.id,
+                "name": service.name,
+                "description": service.description,
+                "image_url": service.image_url,
+                "page_url": service.page_url,
+                "status": purchased.status if purchased else "not_purchased"
+            })
+
+    elif user.role == "dealer":
+        services = db.query(Services).join(PurchasedServices).filter(
+            PurchasedServices.admin_id == user.parent_id,
+            PurchasedServices.status == 'active'
+        ).all()
+
+        result = [{
+            "id": service.id,
+            "name": service.name,
+            "description": service.description,
+            "image_url": service.image_url,
+            "page_url": service.page_url,
+            "status": "active"
+        } for service in services]
+
+    else:  # Admin
+        services = db.query(Services).all()
+
+        result = []
+
+        for service in services:
+            purchased = db.query(PurchasedServices).filter(
+                PurchasedServices.admin_id == user.id,
+                PurchasedServices.service_id == service.id,
+                PurchasedServices.status == 'active'
+            ).first()
+
+            result.append({
+                "id": service.id,
+                "name": service.name,
+                "description": service.description,
+                "image_url": service.image_url,
+                "page_url": service.page_url if service.page_url else "#",
+                "status": "active" if purchased else "not_purchased"
+            })
+
+    return result
 
 
 
