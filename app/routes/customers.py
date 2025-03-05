@@ -141,6 +141,10 @@ def crea_cliente(
     if query.first():
         raise HTTPException(status_code=400, detail="Cliente già assegnato sotto questo Admin/Dealer")
 
+    # Imposta ragione_sociale a None se il cliente è privato
+    if cliente.tipo_cliente == "Privato":
+        cliente.ragione_sociale = None
+
     # Creazione cliente
     nuovo_cliente = Cliente(
         admin_id=admin_id,
