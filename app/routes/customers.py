@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from datetime import datetime
 from app.database import get_db
-from app.models import User, Cliente
+from app.models import User, Cliente, ClienteModifica
 from fastapi_jwt_auth import AuthJWT
 from typing import List, Optional
 from app.schemas import ClienteResponse, ClienteCreateRequest
