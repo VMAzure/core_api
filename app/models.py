@@ -150,7 +150,7 @@ class Cliente(Base):
     admin = relationship("User", foreign_keys=[admin_id])
     dealer = relationship("User", foreign_keys=[dealer_id])
 
-    class NltService(Base):
+class NltService(Base):
     __tablename__ = "nlt_services"
     __table_args__ = {"schema": "public"}
 
