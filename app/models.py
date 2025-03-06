@@ -1,10 +1,13 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from passlib.context import CryptContext
 from app.database import Base  # Manteniamo solo Base senza importare engine
 from typing import TYPE_CHECKING, Optional
 from pydantic import BaseModel, EmailStr
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+import uuid
+
 
 
 if TYPE_CHECKING:
@@ -146,3 +149,16 @@ class Cliente(Base):
 
     admin = relationship("User", foreign_keys=[admin_id])
     dealer = relationship("User", foreign_keys=[dealer_id])
+
+    class NltService(Base):
+    __tablename__ = "nlt_services"
+    __table_args__ = {"schema": "public"}
+
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(150), nullable=False)
+    description = Column(String)
+    conditions = Column(JSONB)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

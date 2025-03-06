@@ -29,6 +29,8 @@ import threading
 from app.tasks import run_scheduler
 from app.routes.services import service_router
 from app.routes.customers import router as customers_router
+from app.routes.nlt import router as nlt_router
+
 
 
 # ✅ Configuriamo il logging
@@ -112,6 +114,8 @@ app.include_router(marketplace_router, prefix="/api")  # ✅ Ora Marketplace vie
 app.include_router(logs_router)
 app.include_router(service_router, prefix="/api")  # 🔹 Aggiunto il prefisso /api"
 app.include_router(customers_router, prefix="/customers", tags=["Customers"])
+app.include_router(nlt_router, prefix="")
+
 
 
 @app.get("/")
