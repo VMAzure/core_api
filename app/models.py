@@ -162,3 +162,12 @@ class NltService(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+class NltDocumentiRichiesti(Base):
+    __tablename__ = "nlt_documenti_richiesti"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tipo_cliente = Column(String(50), nullable=False, index=True)
+    documento = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
