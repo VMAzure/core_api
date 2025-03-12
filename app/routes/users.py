@@ -381,7 +381,7 @@ async def upload_logo(file: UploadFile = File(...), Authorize: AuthJWT = Depends
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
 
 
-# endpoint me (correttamente separato!)
+# endpoint me aggiornato
 @router.get("/me", tags=["Users"])
 def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
@@ -393,7 +393,7 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
         if not user:
             raise HTTPException(status_code=404, detail="Utente non trovato")
 
-        data = {
+        user_data = {
             "id": user.id,
             "email": user.email,
             "nome": user.nome,
@@ -411,15 +411,45 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
             "updated_at": user.updated_at.isoformat() if user.updated_at else None
         }
 
+        response = {
+            "role": user.role,
+            "admin_info": None,
+            "dealer_info": None
+        }
+
         if user.role == "dealer":
             admin = db.query(User).filter(User.id == user.parent_id).first()
-            data["logo_url"] = admin.logo_url if admin else None
 
-        return data
+            admin_data = {
+                "id": admin.id,
+                "email": admin.email,
+                "nome": admin.nome,
+                "cognome": admin.cognome,
+                "ragione_sociale": admin.ragione_sociale,
+                "partita_iva": admin.partita_iva,
+                "indirizzo": admin.indirizzo,
+                "cap": admin.cap,
+                "citta": admin.citta,
+                "codice_sdi": admin.codice_sdi,
+                "cellulare": admin.cellulare,
+                "credit": admin.credit,
+                "logo_url": admin.logo_url,
+                "created_at": admin.created_at.isoformat() if admin.created_at else None,
+                "updated_at": admin.updated_at.isoformat() if admin.updated_at else None
+            }
+
+            response["dealer_info"] = user_data
+            response["admin_info"] = admin_data
+
+        elif user.role == "admin":
+            response["admin_info"] = user_data
+
+        return response
 
     except Exception as e:
         print(f"❌ ERRORE DETTAGLIATO endpoint /me: {e}")
         raise HTTPException(status_code=500, detail=f"Errore interno dettagliato: {str(e)}")
+
 
 # Modello Pydantic per aggiornamento utente
 class UserUpdateRequest(BaseModel):
