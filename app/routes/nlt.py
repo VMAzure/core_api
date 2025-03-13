@@ -74,3 +74,25 @@ async def salva_preventivo(
     db.refresh(nuovo_preventivo)
 
     return {"success": True, "file_url": file_url, "preventivo_id": nuovo_preventivo.id}
+
+@router.get("/preventivi/{cliente_id}")
+async def get_preventivi_cliente(cliente_id: int, db: Session = Depends(get_db)):
+    # Recupera tutti i preventivi associati al cliente
+    preventivi = db.query(NltPreventivi).filter(NltPreventivi.cliente_id == cliente_id).all()
+
+    # Se non ci sono preventivi, restituisce un array vuoto
+    if not preventivi:
+        return {"success": True, "preventivi": []}
+
+    # Formatta i risultati in un array di dizionari
+    lista_preventivi = [
+        {
+            "id": p.id,
+            "file_url": p.file_url,
+            "creato_da": p.creato_da,
+            "created_at": p.created_at
+        }
+        for p in preventivi
+    ]
+
+    return {"success": True, "preventivi": lista_preventivi}
