@@ -171,3 +171,17 @@ class NltDocumentiRichiesti(Base):
     documento = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class NltPreventivi(Base):
+    __tablename__ = "nlt_preventivi"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cliente_id = Column(Integer, ForeignKey("public.clienti.id"), nullable=True)
+    file_url = Column(Text, nullable=False)
+    creato_da = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relazioni utili (opzionali)
+    cliente = relationship("Cliente")
+    creatore = relationship("User", foreign_keys=[creato_da])
