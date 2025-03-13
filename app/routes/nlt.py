@@ -1,7 +1,11 @@
-﻿from fastapi import APIRouter, Depends
+﻿from fastapi import APIRouter, Depends, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import NltService, NltDocumentiRichiesti
+from app.models import NltService, NltDocumentiRichiesti, NltPreventivi
+from pydantic import BaseModel
+import uuid
+import httpx
+
 
 router = APIRouter(
     prefix="/nlt",
@@ -23,3 +27,50 @@ async def get_documenti_richiesti(tipo_cliente: str, db: Session = Depends(get_d
         "tipo_cliente": tipo_cliente,
         "documenti": [doc.documento for doc in documenti]
     }
+
+# 🔵 CONFIGURAZIONE SUPABASE
+SUPABASE_URL = "https://vqfloobaovtdtcuflqeu.supabase.co"
+SUPABASE_BUCKET = "nlt-preventivi"
+SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxZmxvb2Jhb3Z0ZHRjdWZscWV1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczOTUzOTUzMCwiZXhwIjoyMDU1MTE1NTMwfQ.Lq-uIgXYZiBJK4ChfF_D7i5qYBDuxMfL2jY5GGKDuVk"
+
+@router.post("/salva-preventivo")
+async def salva_preventivo(
+    file: UploadFile = File(...),
+    cliente_id: int = Form(...),
+    creato_da: int = Form(...),
+    db: Session = Depends(get_db)
+):
+    # 🔵 Genera un nome univoco per il file
+    file_extension = file.filename.split(".")[-1]
+    file_name = f"NLT_Offer_{uuid.uuid4()}.{file_extension}"
+    file_path = f"{SUPABASE_BUCKET}/{file_name}"
+
+    # 🔵 Carica il file su Supabase
+    async with httpx.AsyncClient() as client:
+        headers = {
+            "Content-Type": file.content_type,
+            "Authorization": f"Bearer {SUPABASE_API_KEY}"
+        }
+        response = await client.put(
+            f"{SUPABASE_URL}/storage/v1/object/{file_path}",
+            headers=headers,
+            content=await file.read()
+        )
+
+    if response.status_code != 200:
+        return {"success": False, "error": "Errore durante l'upload su Supabase."}
+
+    # 🔵 URL pubblico sempre valido (senza scadenza)
+    file_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_path}"
+
+    # 🔵 Salva il record nel database
+    nuovo_preventivo = NltPreventivi(
+        cliente_id=cliente_id,
+        file_url=file_url,
+        creato_da=creato_da
+    )
+    db.add(nuovo_preventivo)
+    db.commit()
+    db.refresh(nuovo_preventivo)
+
+    return {"success": True, "file_url": file_url, "preventivo_id": nuovo_preventivo.id}
