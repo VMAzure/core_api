@@ -203,7 +203,9 @@ async def get_miei_preventivi(db: Session = Depends(get_db), current_user: User 
         }
     
     except Exception as e:
-        print(f"❌ Errore in get_miei_preventivi: {str(e)}")
+        print(f"❌ ERRORE in get_miei_preventivi: {str(e)}", flush=True)
+        import traceback
+        traceback.print_exc()  # Stampa il traceback completo dell'errore
         return {"success": False, "error": str(e)}
 
 
