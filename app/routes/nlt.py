@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User
 from pydantic import BaseModel
+from jose import jwt, JWTError  # ✅ Aggiunto import corretto per decodificare il token JWT
+
 import uuid
 import httpx
 
