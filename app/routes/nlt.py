@@ -102,14 +102,22 @@ async def salva_preventivo(
 
 @router.get("/preventivi/{cliente_id}")
 async def get_preventivi_cliente(cliente_id: int, db: Session = Depends(get_db)):
+    # Recupera il cliente
+    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cliente:
+        return {"success": False, "error": "Cliente non trovato"}
+
+    # Determina il nome del cliente (Ragione Sociale o Nome + Cognome)
+    nome_cliente = cliente.ragione_sociale if cliente.ragione_sociale else f"{cliente.nome} {cliente.cognome}".strip()
+
     # Recupera tutti i preventivi associati al cliente
     preventivi = db.query(NltPreventivi).filter(NltPreventivi.cliente_id == cliente_id).all()
 
     # Se non ci sono preventivi, restituisce un array vuoto
     if not preventivi:
-        return {"success": True, "preventivi": []}
+        return {"success": True, "cliente": nome_cliente, "preventivi": []}
 
-    # Formatta i risultati in un array di dizionari
+    # Formatta i risultati in un array di dizionari, includendo i nuovi campi
     lista_preventivi = [
         {
             "id": p.id,
@@ -126,4 +134,8 @@ async def get_preventivi_cliente(cliente_id: int, db: Session = Depends(get_db))
         for p in preventivi
     ]
 
-    return {"success": True, "preventivi": lista_preventivi}
+    return {
+        "success": True,
+        "cliente": nome_cliente,  # 👈 Ora restituisce il nome o la ragione sociale
+        "preventivi": lista_preventivi
+    }
