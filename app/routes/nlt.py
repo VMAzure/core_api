@@ -37,7 +37,7 @@ SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSI
 async def salva_preventivo(
     file: UploadFile = File(...),
     cliente_id: int = Form(...),
-    creato_da: int = Form(...),
+    creato_da: int = Form(...),  # 👈 creato_da sempre presente
     marca: str = Form(...),
     modello: str = Form(...),
     durata: int = Form(...),

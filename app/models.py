@@ -182,6 +182,14 @@ class NltPreventivi(Base):
     creato_da = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # ✅ Aggiunti i nuovi campi
+    marca = Column(Text, nullable=True)
+    modello = Column(Text, nullable=True)
+    durata = Column(Integer, nullable=True)
+    km_totali = Column(Integer, nullable=True)
+    anticipo = Column(Float, nullable=True)
+    canone = Column(Float, nullable=True)
+
     # Relazioni utili (opzionali)
     cliente = relationship("Cliente")
     creatore = relationship("User", foreign_keys=[creato_da])
