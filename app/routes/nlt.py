@@ -1,11 +1,10 @@
 ﻿from fastapi import APIRouter, Depends, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import NltService, NltDocumentiRichiesti, NltPreventivi
+from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente
 from pydantic import BaseModel
 import uuid
 import httpx
-
 
 router = APIRouter(
     prefix="/nlt",
