@@ -195,3 +195,6 @@ class NltPreventivi(Base):
     # Relazioni utili (opzionali)
     cliente = relationship("Cliente")
     creatore = relationship("User", foreign_keys=[creato_da])
+
+
+

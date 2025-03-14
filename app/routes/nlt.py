@@ -1,7 +1,8 @@
-﻿from fastapi import APIRouter, Depends, UploadFile, File, Form
+﻿from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Security
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente
+from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User
 from pydantic import BaseModel
 import uuid
 import httpx
@@ -100,45 +101,101 @@ async def salva_preventivo(
     }
 
 
+security = HTTPBearer()  # Gestione token JWT
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)):
+    token = credentials.credentials
+    user = db.query(User).filter(User.token == token).first()  # Assumi che il token sia salvato nella tabella utenti
+    if not user:
+        raise HTTPException(status_code=401, detail="Token non valido")
+    return user
+
 @router.get("/preventivi/{cliente_id}")
-async def get_preventivi_cliente(cliente_id: int, db: Session = Depends(get_db)):
-    # Recupera il cliente
+async def get_preventivi_cliente(cliente_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # 🔍 Recupera il cliente
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
         return {"success": False, "error": "Cliente non trovato"}
 
-    # Determina il nome del cliente (Ragione Sociale o Nome + Cognome)
+    # 🔍 Determina il nome del cliente
     nome_cliente = cliente.ragione_sociale if cliente.ragione_sociale else f"{cliente.nome} {cliente.cognome}".strip()
 
-    # Recupera tutti i preventivi associati al cliente
-    preventivi = db.query(NltPreventivi).filter(NltPreventivi.cliente_id == cliente_id).all()
-
-    # Se non ci sono preventivi, restituisce un array vuoto
-    if not preventivi:
-        return {"success": True, "cliente": nome_cliente, "preventivi": []}
-
-    # Formatta i risultati in un array di dizionari, includendo i nuovi campi
-    lista_preventivi = [
-        {
-            "id": p.id,
-            "file_url": p.file_url,
-            "creato_da": p.creato_da,
-            "created_at": p.created_at,
-            "marca": p.marca,
-            "modello": p.modello,
-            "durata": p.durata,
-            "km_totali": p.km_totali,
-            "anticipo": p.anticipo,
-            "canone": p.canone
-        }
-        for p in preventivi
-    ]
+    # 🔹 Dealer: vede solo i suoi preventivi
+    if current_user.role == "dealer":
+        preventivi = db.query(NltPreventivi).filter(
+            (NltPreventivi.creato_da == current_user.id) & (NltPreventivi.cliente_id == cliente_id)
+        ).all()
+    
+    # 🔹 Admin: vede i suoi e quelli dei suoi dealer
+    elif current_user.role == "admin":
+        dealer_ids = db.query(User.id).filter(User.parent_id == current_user.id).subquery()
+        preventivi = db.query(NltPreventivi).filter(
+            (NltPreventivi.creato_da == current_user.id) | 
+            (NltPreventivi.creato_da.in_(dealer_ids)) & (NltPreventivi.cliente_id == cliente_id)
+        ).all()
+    
+    # 🔹 Superadmin: vede tutto per quel cliente
+    else:
+        preventivi = db.query(NltPreventivi).filter(NltPreventivi.cliente_id == cliente_id).all()
 
     return {
         "success": True,
-        "cliente": nome_cliente,  # 👈 Ora restituisce il nome o la ragione sociale
-        "preventivi": lista_preventivi
+        "cliente": nome_cliente,
+        "preventivi": [
+            {
+                "id": p.id,
+                "file_url": p.file_url,
+                "creato_da": p.creato_da,
+                "created_at": p.created_at,
+                "marca": p.marca,
+                "modello": p.modello,
+                "durata": p.durata,
+                "km_totali": p.km_totali,
+                "anticipo": p.anticipo,
+                "canone": p.canone
+            }
+            for p in preventivi
+        ]
     }
+
+@router.get("/preventivi")
+async def get_miei_preventivi(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # 🔹 Dealer: vede solo i propri preventivi
+    if current_user.role == "dealer":
+        preventivi = db.query(NltPreventivi).filter(
+            NltPreventivi.creato_da == current_user.id
+        ).all()
+    
+    # 🔹 Admin: vede i propri preventivi + quelli dei dealer associati
+    elif current_user.role == "admin":
+        dealer_ids = db.query(User.id).filter(User.parent_id == current_user.id).subquery()
+        preventivi = db.query(NltPreventivi).filter(
+            (NltPreventivi.creato_da == current_user.id) | (NltPreventivi.creato_da.in_(dealer_ids))
+        ).all()
+    
+    # 🔹 Superadmin: vede tutto
+    else:
+        preventivi = db.query(NltPreventivi).all()
+
+    return {
+        "success": True,
+        "preventivi": [
+            {
+                "id": p.id,
+                "file_url": p.file_url,
+                "creato_da": p.creato_da,
+                "created_at": p.created_at,
+                "marca": p.marca,
+                "modello": p.modello,
+                "durata": p.durata,
+                "km_totali": p.km_totali,
+                "anticipo": p.anticipo,
+                "canone": p.canone
+            }
+            for p in preventivi
+        ]
+    }
+
 
 @router.put("/nascondi-preventivo/{preventivo_id}")
 async def nascondi_preventivo(preventivo_id: str, db: Session = Depends(get_db)):
