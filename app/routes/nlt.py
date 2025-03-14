@@ -79,6 +79,7 @@ async def salva_preventivo(
         km_totali=km_totali,
         anticipo=anticipo,
         canone=canone
+        visibile=1
     )
     db.add(nuovo_preventivo)
     db.commit()
