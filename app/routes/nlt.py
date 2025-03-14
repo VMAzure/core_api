@@ -160,41 +160,51 @@ async def get_preventivi_cliente(cliente_id: int, db: Session = Depends(get_db),
 
 @router.get("/preventivi")
 async def get_miei_preventivi(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # 🔹 Dealer: vede solo i propri preventivi
-    if current_user.role == "dealer":
-        preventivi = db.query(NltPreventivi).filter(
-            NltPreventivi.creato_da == current_user.id
-        ).all()
-    
-    # 🔹 Admin: vede i propri preventivi + quelli dei dealer associati
-    elif current_user.role == "admin":
-        dealer_ids = db.query(User.id).filter(User.parent_id == current_user.id).subquery()
-        preventivi = db.query(NltPreventivi).filter(
-            (NltPreventivi.creato_da == current_user.id) | (NltPreventivi.creato_da.in_(dealer_ids))
-        ).all()
-    
-    # 🔹 Superadmin: vede tutto
-    else:
-        preventivi = db.query(NltPreventivi).all()
+    try:
+        print(f"📌 Richiesta ricevuta da user_id={current_user.id}, ruolo={current_user.role}")
 
-    return {
-        "success": True,
-        "preventivi": [
-            {
-                "id": p.id,
-                "file_url": p.file_url,
-                "creato_da": p.creato_da,
-                "created_at": p.created_at,
-                "marca": p.marca,
-                "modello": p.modello,
-                "durata": p.durata,
-                "km_totali": p.km_totali,
-                "anticipo": p.anticipo,
-                "canone": p.canone
-            }
-            for p in preventivi
-        ]
-    }
+        # 🔹 Dealer: vede solo i propri preventivi
+        if current_user.role == "dealer":
+            preventivi = db.query(NltPreventivi).filter(
+                NltPreventivi.creato_da == current_user.id
+            ).all()
+        
+        # 🔹 Admin: vede i propri preventivi + quelli dei dealer associati
+        elif current_user.role == "admin":
+            dealer_ids = db.query(User.id).filter(User.parent_id == current_user.id).subquery()
+            preventivi = db.query(NltPreventivi).filter(
+                (NltPreventivi.creato_da == current_user.id) | 
+                (NltPreventivi.creato_da.in_(dealer_ids))
+            ).all()
+        
+        # 🔹 Superadmin: vede tutto
+        else:
+            preventivi = db.query(NltPreventivi).all()
+
+        print(f"✅ {len(preventivi)} preventivi trovati per user_id={current_user.id}")
+
+        return {
+            "success": True,
+            "preventivi": [
+                {
+                    "id": p.id,
+                    "file_url": p.file_url,
+                    "creato_da": p.creato_da,
+                    "created_at": p.created_at,
+                    "marca": p.marca,
+                    "modello": p.modello,
+                    "durata": p.durata,
+                    "km_totali": p.km_totali,
+                    "anticipo": p.anticipo,
+                    "canone": p.canone
+                }
+                for p in preventivi
+            ]
+        }
+    
+    except Exception as e:
+        print(f"❌ Errore in get_miei_preventivi: {str(e)}")
+        return {"success": False, "error": str(e)}
 
 
 @router.put("/nascondi-preventivo/{preventivo_id}")
