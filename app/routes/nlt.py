@@ -5,20 +5,39 @@ from app.database import get_db
 from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User
 from pydantic import BaseModel
 from jose import jwt, JWTError  # ✅ Aggiunto import corretto per decodificare il token JWT
+from fastapi_jwt_auth import AuthJWT
 
 import uuid
 import httpx
 
 import os
 
-security = HTTPBearer()
-SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")  # Prende la chiave dal .env
-ALGORITHM = "HS256"
+class Settings:
+    authjwt_secret_key: str = "supersecretkey"
 
 router = APIRouter(
     prefix="/nlt",
     tags=["nlt"]
 )
+
+AuthJWT.load_config
+def get_config():
+    return Settings()
+
+def get_current_user(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    try:
+        Authorize.jwt_required()  # Verifica che il token sia presente
+        user_id = Authorize.get_jwt_subject()  # Ottiene l'ID utente dal token
+
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="Utente non trovato")
+
+        return user
+
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Token non valido o scaduto")
+
 
 @router.get("/services")
 async def get_nlt_services(db: Session = Depends(get_db)):
@@ -109,25 +128,7 @@ async def salva_preventivo(
     }
 
 
-security = HTTPBearer()  # Gestione token JWT
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)):
-    token = credentials.credentials
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")  # Il token deve contenere `sub` con l'ID utente
-
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Token non valido")
-
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="Utente non trovato")
-
-        return user
-
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Token non valido")
 
 @router.get("/preventivi/{cliente_id}")
 async def get_preventivi_cliente(cliente_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
