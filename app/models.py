@@ -189,6 +189,8 @@ class NltPreventivi(Base):
     km_totali = Column(Integer, nullable=True)
     anticipo = Column(Float, nullable=True)
     canone = Column(Float, nullable=True)
+    visibile = Column(Integer, default=1)  # 👈 Aggiunto campo visibile
+
 
     # Relazioni utili (opzionali)
     cliente = relationship("Cliente")
