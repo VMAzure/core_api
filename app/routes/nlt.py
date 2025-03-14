@@ -38,6 +38,12 @@ async def salva_preventivo(
     file: UploadFile = File(...),
     cliente_id: int = Form(...),
     creato_da: int = Form(...),
+    marca: str = Form(...),
+    modello: str = Form(...),
+    durata: int = Form(...),
+    km_totali: int = Form(...),
+    anticipo: float = Form(...),
+    canone: float = Form(...),
     db: Session = Depends(get_db)
 ):
     # 🔵 Genera un nome univoco per il file
@@ -67,13 +73,32 @@ async def salva_preventivo(
     nuovo_preventivo = NltPreventivi(
         cliente_id=cliente_id,
         file_url=file_url,
-        creato_da=creato_da
+        creato_da=creato_da,
+        marca=marca,
+        modello=modello,
+        durata=durata,
+        km_totali=km_totali,
+        anticipo=anticipo,
+        canone=canone
     )
     db.add(nuovo_preventivo)
     db.commit()
     db.refresh(nuovo_preventivo)
 
-    return {"success": True, "file_url": file_url, "preventivo_id": nuovo_preventivo.id}
+    return {
+        "success": True,
+        "file_url": file_url,
+        "preventivo_id": nuovo_preventivo.id,
+        "dati": {
+            "marca": nuovo_preventivo.marca,
+            "modello": nuovo_preventivo.modello,
+            "durata": nuovo_preventivo.durata,
+            "km_totali": nuovo_preventivo.km_totali,
+            "anticipo": nuovo_preventivo.anticipo,
+            "canone": nuovo_preventivo.canone
+        }
+    }
+
 
 @router.get("/preventivi/{cliente_id}")
 async def get_preventivi_cliente(cliente_id: int, db: Session = Depends(get_db)):
@@ -90,7 +115,13 @@ async def get_preventivi_cliente(cliente_id: int, db: Session = Depends(get_db))
             "id": p.id,
             "file_url": p.file_url,
             "creato_da": p.creato_da,
-            "created_at": p.created_at
+            "created_at": p.created_at,
+            "marca": p.marca,
+            "modello": p.modello,
+            "durata": p.durata,
+            "km_totali": p.km_totali,
+            "anticipo": p.anticipo,
+            "canone": p.canone
         }
         for p in preventivi
     ]
