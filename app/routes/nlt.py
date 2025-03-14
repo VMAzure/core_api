@@ -139,3 +139,17 @@ async def get_preventivi_cliente(cliente_id: int, db: Session = Depends(get_db))
         "cliente": nome_cliente,  # 👈 Ora restituisce il nome o la ragione sociale
         "preventivi": lista_preventivi
     }
+
+@router.put("/nascondi-preventivo/{preventivo_id}")
+async def nascondi_preventivo(preventivo_id: str, db: Session = Depends(get_db)):
+    # 🔍 Cerca il preventivo nel database
+    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
+
+    if not preventivo:
+        return {"success": False, "error": "Preventivo non trovato"}
+
+    # 🔄 Imposta visibile = 0
+    preventivo.visibile = 0
+    db.commit()
+
+    return {"success": True, "message": "Preventivo nascosto correttamente"}
