@@ -7,6 +7,12 @@ from pydantic import BaseModel
 import uuid
 import httpx
 
+import os
+
+security = HTTPBearer()
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")  # Prende la chiave dal .env
+ALGORITHM = "HS256"
+
 router = APIRouter(
     prefix="/nlt",
     tags=["nlt"]
@@ -105,10 +111,21 @@ security = HTTPBearer()  # Gestione token JWT
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security), db: Session = Depends(get_db)):
     token = credentials.credentials
-    user = db.query(User).filter(User.token == token).first()  # Assumi che il token sia salvato nella tabella utenti
-    if not user:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")  # Il token deve contenere `sub` con l'ID utente
+
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Token non valido")
+
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="Utente non trovato")
+
+        return user
+
+    except JWTError:
         raise HTTPException(status_code=401, detail="Token non valido")
-    return user
 
 @router.get("/preventivi/{cliente_id}")
 async def get_preventivi_cliente(cliente_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -166,20 +183,22 @@ async def get_miei_preventivi(db: Session = Depends(get_db), current_user: User 
         # 🔹 Dealer: vede solo i propri preventivi
         if current_user.role == "dealer":
             preventivi = db.query(NltPreventivi).filter(
-                NltPreventivi.creato_da == current_user.id
+                NltPreventivi.creato_da == current_user.id,
+                NltPreventivi.visibile == 1
             ).all()
         
         # 🔹 Admin: vede i propri preventivi + quelli dei dealer associati
         elif current_user.role == "admin":
             dealer_ids = db.query(User.id).filter(User.parent_id == current_user.id).subquery()
             preventivi = db.query(NltPreventivi).filter(
-                (NltPreventivi.creato_da == current_user.id) | 
-                (NltPreventivi.creato_da.in_(dealer_ids))
+                ((NltPreventivi.creato_da == current_user.id) | 
+                 (NltPreventivi.creato_da.in_(dealer_ids))),
+                NltPreventivi.visibile == 1
             ).all()
         
         # 🔹 Superadmin: vede tutto
         else:
-            preventivi = db.query(NltPreventivi).all()
+            preventivi = db.query(NltPreventivi).filter(NltPreventivi.visibile == 1).all()
 
         print(f"✅ {len(preventivi)} preventivi trovati per user_id={current_user.id}")
 
@@ -205,8 +224,9 @@ async def get_miei_preventivi(db: Session = Depends(get_db), current_user: User 
     except Exception as e:
         print(f"❌ ERRORE in get_miei_preventivi: {str(e)}", flush=True)
         import traceback
-        traceback.print_exc()  # Stampa il traceback completo dell'errore
+        traceback.print_exc()
         return {"success": False, "error": str(e)}
+
 
 
 @router.put("/nascondi-preventivo/{preventivo_id}")
