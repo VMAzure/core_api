@@ -186,42 +186,50 @@ async def get_miei_preventivi(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
-    size: int = Query(10, ge=1, le=50)
+    size: int = Query(10, ge=1, le=100),
+    search: Optional[str] = Query(None)
 ):
     offset = (page - 1) * size
 
     if current_user.role == "dealer":
-        query = db.query(NltPreventivi).filter(
+        query = db.query(NltPreventivi).join(Cliente).filter(
             NltPreventivi.creato_da == current_user.id,
             NltPreventivi.visibile == 1
         )
     elif current_user.role == "admin":
         dealer_ids = db.query(User.id).filter(User.parent_id == current_user.id).subquery()
-        query = db.query(NltPreventivi).filter(
-            ((NltPreventivi.creato_da == current_user.id) | 
+        query = db.query(NltPreventivi).join(Cliente).filter(
+            ((NltPreventivi.creato_da == current_user.id) |
              (NltPreventivi.creato_da.in_(dealer_ids))),
             NltPreventivi.visibile == 1
         )
     else:  # superadmin
-        query = db.query(NltPreventivi).filter(NltPreventivi.visibile == 1)
+        query = db.query(NltPreventivi).join(Cliente).filter(NltPreventivi.visibile == 1)
+
+    # 🔍 Aggiungi filtro ricerca
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (Cliente.nome.ilike(search_term)) |
+            (Cliente.cognome.ilike(search_term)) |
+            (Cliente.ragione_sociale.ilike(search_term))
+        )
+
+    offset = (page - 1) * size
 
     preventivi = query.order_by(NltPreventivi.created_at.desc()) \
                       .offset(offset) \
                       .limit(size) \
                       .all()
 
-    # 🎯 Modifica per aggiungere dati cliente
     risultati = []
     for p in preventivi:
-        cliente = db.query(Cliente).filter(Cliente.id == p.cliente_id).first()
+        cliente = p.cliente
         
-        if cliente:
-            if cliente.tipo_cliente == "Società":
-                nome_cliente = cliente.ragione_sociale or "NN"
-            else:
-                nome_cliente = f"{cliente.nome or ''} {cliente.cognome or ''}".strip() or "NN"
+        if cliente.tipo_cliente == "Società":
+            nome_cliente = cliente.ragione_sociale or "NN"
         else:
-            nome_cliente = "NN"
+            nome_cliente = f"{cliente.nome or ''} {cliente.cognome or ''}".strip() or "NN"
 
         risultati.append({
             "id": p.id,
@@ -239,11 +247,12 @@ async def get_miei_preventivi(
 
     return {
         "success": True,
-        "preventivi": risultati,
-        "page": page,
-        "size": size,
-        "count": len(risultati)
+            "preventivi": risultati,
+            "page": page,
+            "size": size,
+            "count": len(risultati)
     }
+
 
 
 
