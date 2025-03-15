@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User
-from pydantic import BaseModel
+from pydantic import BaseModel, BaseSettings
 from jose import jwt, JWTError  # ✅ Aggiunto import corretto per decodificare il token JWT
 from fastapi_jwt_auth import AuthJWT
 
@@ -12,17 +12,19 @@ import httpx
 
 import os
 
-class Settings:
-    authjwt_secret_key: str = "supersecretkey"
+
+class Settings(BaseSettings):
+    authjwt_secret_key: str = os.getenv("SECRET_KEY", "supersecretkey")  # ✅ Ora usa Pydantic
+
+@AuthJWT.load_config
+def get_config():
+    return Settings()
+
 
 router = APIRouter(
     prefix="/nlt",
     tags=["nlt"]
 )
-
-@AuthJWT.load_config
-def get_config():
-    return Settings()
 
 def get_current_user(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     try:
