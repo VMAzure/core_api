@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+﻿from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models import User, PurchasedServices
@@ -29,7 +29,7 @@ def days_until_renewal(Authorize: AuthJWT = Depends(), db: Session = Depends(get
     setting = db.execute(text("SELECT service_duration_minutes FROM settings")).fetchone()
     default_duration = setting.service_duration_minutes if setting else 43200  # 30 giorni di default
 
-    # Recupera il servizio acquistato pi� recente dall'utente
+    # Recupera il servizio acquistato più recente dall'utente
     purchased_service = (
         db.query(PurchasedServices)
         .filter(PurchasedServices.admin_id == user.id, PurchasedServices.status == "attivo")
@@ -48,4 +48,5 @@ def days_until_renewal(Authorize: AuthJWT = Depends(), db: Session = Depends(get
         "role": user.role,
         "days_until_renewal": remaining_days if remaining_days >= 0 else 0
     }
+
 
