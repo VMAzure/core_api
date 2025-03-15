@@ -1,4 +1,4 @@
-﻿import schedule
+﻿
 import time
 from datetime import datetime, timedelta
 from app.database import SessionLocal
