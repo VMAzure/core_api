@@ -6,10 +6,10 @@ from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente
 from pydantic import BaseModel, BaseSettings
 from jose import jwt, JWTError  # ✅ Aggiunto import corretto per decodificare il token JWT
 from fastapi_jwt_auth import AuthJWT
+from typing import Optional
 
 import uuid
 import httpx
-
 import os
 
 
