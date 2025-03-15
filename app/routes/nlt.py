@@ -27,18 +27,14 @@ router = APIRouter(
 )
 
 def get_current_user(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    try:
-        Authorize.jwt_required()  # Verifica che il token sia presente
-        user_id = Authorize.get_jwt_subject()  # Ottiene l'ID utente dal token
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
 
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="Utente non trovato")
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+    return user
 
-        return user
-
-    except Exception as e:
-        raise HTTPException(status_code=401, detail="Token non valido o scaduto")
 
 
 @router.get("/services")
@@ -133,7 +129,12 @@ async def salva_preventivo(
 
 
 @router.get("/preventivi/{cliente_id}")
-async def get_preventivi_cliente(cliente_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def get_preventivi_cliente(
+    cliente_id: int, 
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+
     # 🔍 Recupera il cliente
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
@@ -181,7 +182,11 @@ async def get_preventivi_cliente(cliente_id: int, db: Session = Depends(get_db),
     }
 
 @router.get("/preventivi")
-async def get_miei_preventivi(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def get_miei_preventivi(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+
     try:
         print(f"📌 Richiesta ricevuta da user_id={current_user.id}, ruolo={current_user.role}")
 
