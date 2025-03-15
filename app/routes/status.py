@@ -32,7 +32,7 @@ def days_until_renewal(Authorize: AuthJWT = Depends(), db: Session = Depends(get
     # Recupera il servizio acquistato più recente dall'utente
     purchased_service = (
         db.query(PurchasedServices)
-        .filter(PurchasedServices.admin_id == user.id, PurchasedServices.status == "attivo")
+        .filter(PurchasedServices.admin_id == user.id, PurchasedServices.status == "active")
         .order_by(PurchasedServices.activated_at.desc())
         .first()
     )
