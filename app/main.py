@@ -30,7 +30,7 @@ from app.tasks import run_scheduler
 from app.routes.services import service_router
 from app.routes.customers import router as customers_router
 from app.routes.nlt import router as nlt_router
-from routes import status
+from app.routes import status
 
 
 
