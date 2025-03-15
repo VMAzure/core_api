@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Security
+﻿from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Security, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.database import get_db
