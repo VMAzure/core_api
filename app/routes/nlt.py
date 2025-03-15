@@ -128,42 +128,39 @@ async def salva_preventivo(
 
 
 
-@router.get("/preventivi/{cliente_id}")
-async def get_preventivi_cliente(
-    cliente_id: int, 
+from fastapi import Query
+
+@router.get("/preventivi")
+async def get_miei_preventivi(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    size: int = Query(10, ge=1, le=50)
 ):
+    offset = (page - 1) * size
 
-    # 🔍 Recupera il cliente
-    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
-    if not cliente:
-        return {"success": False, "error": "Cliente non trovato"}
-
-    # 🔍 Determina il nome del cliente
-    nome_cliente = cliente.ragione_sociale if cliente.ragione_sociale else f"{cliente.nome} {cliente.cognome}".strip()
-
-    # 🔹 Dealer: vede solo i suoi preventivi
     if current_user.role == "dealer":
-        preventivi = db.query(NltPreventivi).filter(
-            (NltPreventivi.creato_da == current_user.id) & (NltPreventivi.cliente_id == cliente_id)
-        ).all()
-    
-    # 🔹 Admin: vede i suoi e quelli dei suoi dealer
+        query = db.query(NltPreventivi).filter(
+            NltPreventivi.creato_da == current_user.id,
+            NltPreventivi.visibile == 1
+        )
     elif current_user.role == "admin":
         dealer_ids = db.query(User.id).filter(User.parent_id == current_user.id).subquery()
-        preventivi = db.query(NltPreventivi).filter(
-            (NltPreventivi.creato_da == current_user.id) | 
-            (NltPreventivi.creato_da.in_(dealer_ids)) & (NltPreventivi.cliente_id == cliente_id)
-        ).all()
-    
-    # 🔹 Superadmin: vede tutto per quel cliente
-    else:
-        preventivi = db.query(NltPreventivi).filter(NltPreventivi.cliente_id == cliente_id).all()
+        query = db.query(NltPreventivi).filter(
+            ((NltPreventivi.creato_da == current_user.id) | 
+             (NltPreventivi.creato_da.in_(dealer_ids))),
+            NltPreventivi.visibile == 1
+        )
+    else:  # superadmin
+        query = db.query(NltPreventivi).filter(NltPreventivi.visibile == 1)
+
+    preventivi = query.order_by(NltPreventivi.created_at.desc()) \
+                      .offset(offset) \
+                      .limit(size) \
+                      .all()
 
     return {
         "success": True,
-        "cliente": nome_cliente,
         "preventivi": [
             {
                 "id": p.id,
@@ -176,10 +173,13 @@ async def get_preventivi_cliente(
                 "km_totali": p.km_totali,
                 "anticipo": p.anticipo,
                 "canone": p.canone
-            }
-            for p in preventivi
-        ]
+            } for p in preventivi
+        ],
+        "page": page,
+        "size": size,
+        "count": len(preventivi)
     }
+
 
 @router.get("/preventivi")
 async def get_miei_preventivi(
