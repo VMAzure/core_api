@@ -20,7 +20,7 @@ router = APIRouter(
     tags=["nlt"]
 )
 
-AuthJWT.load_config
+@AuthJWT.load_config
 def get_config():
     return Settings()
 
