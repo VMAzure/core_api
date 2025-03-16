@@ -50,11 +50,11 @@ print("✅ DEBUG (main.py) - SUPABASE_KEY:", os.getenv("SUPABASE_KEY"))
 app = FastAPI(title="CORE API", version="1.0")
 
 # ✅ Avvia il cron job in un thread separato all'avvio dell'app
+
 @app.on_event("startup")
 def start_cron_job():
-    thread = threading.Thread(target=run_scheduler, daemon=True)
-    thread.start()
-    print("✅ Cron job avviato!")
+    scheduler.start()
+    print("✅ Cron job APScheduler avviato!")
 
 # ✅ Configurazione dello schema di autenticazione Bearer per Swagger UI
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
