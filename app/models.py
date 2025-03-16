@@ -36,34 +36,41 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
-    role = Column(String, nullable=False)
+    role = Column(String(50), nullable=False)
 
-    nome = Column(String, nullable=False)
-    cognome = Column(String, nullable=False)
-    ragione_sociale = Column(String, nullable=True)
-    partita_iva = Column(String, unique=True, nullable=True)
-    indirizzo = Column(String, nullable=False)
-    cap = Column(String, nullable=False)
-    citta = Column(String, nullable=False)
-    codice_sdi = Column(String, nullable=True)
-    cellulare = Column(String, nullable=False)
-
+    nome = Column(String(255))
+    cognome = Column(String(255))
     credit = Column(Float, default=0.0)
+    parent_id = Column(Integer, ForeignKey("public.utenti.id"))
+    indirizzo = Column(String)
+    cap = Column(String)
+    citta = Column(String)
+    cellulare = Column(String)
+    ragione_sociale = Column(String, nullable=True)
+    codice_sdi = Column(String, nullable=True)
+    credit = Column(Float, default=0.0)
+    
+    smtp_settings = relationship(
+        "SmtpSettings",
+        uselist=False,
+        back_populates="admin",
+        cascade="all, delete-orphan"
+    )
+
     parent_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
-    logo_url = Column(String, nullable=True)  # ✅ aggiunta
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    parent = relationship("User", remote_side=[id], backref="dealers", primaryjoin="User.parent_id == User.id")
+    parent = relationship(
+        "User",
+        remote_side=[id],
+        backref="dealers",
+        primaryjoin="User.parent_id == User.id"
+    )
 
     def set_password(self, password: str):
-        """Salva la password criptata"""
         self.hashed_password = pwd_context.hash(password)
 
     def check_password(self, password: str):
-        """Verifica la password"""
         return pwd_context.verify(password, self.hashed_password)
+
 
         
 class PurchasedServices(Base):
@@ -196,5 +203,18 @@ class NltPreventivi(Base):
     cliente = relationship("Cliente")
     creatore = relationship("User", foreign_keys=[creato_da])
 
+class SmtpSettings(Base):
+    __tablename__ = "smtp_settings"
 
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, ForeignKey('utenti.id', ondelete='CASCADE'), nullable=False)
+    smtp_host = Column(String(255), nullable=False)
+    smtp_port = Column(Integer, nullable=False)
+    smtp_user = Column(String(255), nullable=False)
+    smtp_password = Column(String(255), nullable=False)
+    use_ssl = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    admin = relationship("User", back_populates="smtp_settings")
 
