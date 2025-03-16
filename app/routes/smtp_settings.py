@@ -1,10 +1,10 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from fastapi_jwt_auth import AuthJWT
-from app.database import SessionLocal
-from app.models import SmtpSettings, User
 from pydantic import BaseModel
-
+from typing import Any  # 👈 aggiungi questo
+from fastapi_jwt_auth import AuthJWT
+from app.database import get_db
+from app.models import SmtpSettings, User
 
 router = APIRouter()
 

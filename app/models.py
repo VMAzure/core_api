@@ -48,7 +48,6 @@ class User(Base):
     cellulare = Column(String)
     ragione_sociale = Column(String, nullable=True)
     codice_sdi = Column(String, nullable=True)
-    credit = Column(Float, default=0.0)
     
     smtp_settings = relationship(
         "SmtpSettings",
