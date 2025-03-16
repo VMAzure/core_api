@@ -31,6 +31,8 @@ from app.routes.services import service_router
 from app.routes.customers import router as customers_router
 from app.routes.nlt import router as nlt_router
 from app.routes import status
+from app.tasks import scheduler
+
 
 
 

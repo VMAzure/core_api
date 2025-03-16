@@ -1,18 +1,17 @@
-﻿
-import time
+﻿from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
 from app.database import SessionLocal
 from app.models import User, PurchasedServices, Services
-import logging
 from sqlalchemy import text
+import logging
 
-# Configura i log
+# Configurazione dei log
 logging.basicConfig(filename="cron_job.log", level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
 def check_and_charge_services():
+    logging.info("🚀 CRON JOB ESEGUITO (APScheduler)")
     db = SessionLocal()
 
-    # Recupera la durata globale impostata dal Super Admin
     setting = db.execute(text("SELECT service_duration_minutes FROM settings")).fetchone()
     default_duration = setting.service_duration_minutes if setting else 43200  # 30 giorni
 
@@ -30,12 +29,13 @@ def check_and_charge_services():
         if datetime.utcnow() >= expiration_time:
             if admin.credit >= service.price:
                 admin.credit -= service.price
-                purchased.activated_at = datetime.utcnow()  # Reset scadenza
+                purchased.activated_at = datetime.utcnow()
                 db.execute(
                     text("INSERT INTO logs (admin_email, event_type, message) VALUES (:email, :event, :msg)"),
                     {"email": admin.email, "event": "rinnovo", "msg": f"Servizio {service.name} rinnovato"}
                 )
                 db.commit()
+                logging.info(f"✅ Servizio {service.name} rinnovato per {admin.email}")
             else:
                 purchased.status = "sospeso"
                 db.execute(
@@ -43,12 +43,11 @@ def check_and_charge_services():
                     {"email": admin.email, "event": "sospensione", "msg": f"Servizio {service.name} sospeso"}
                 )
                 db.commit()
+                logging.warning(f"⚠️ Servizio {service.name} sospeso per credito insufficiente ({admin.email})")
 
     db.close()
 
-# ✅ Definizione corretta di run_scheduler
-def run_scheduler():
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
-
+# Avvio dello scheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(check_and_charge_services, 'interval', minutes=1)  # Esegue ogni minuto
+scheduler.start()
