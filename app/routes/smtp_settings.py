@@ -23,7 +23,7 @@ async def set_smtp_settings(
     Authorize.jwt_required()
     current_user_id = Authorize.get_jwt_subject()
 
-    current_user = db.query(User).filter(User.id == current_user_id).first()
+    current_user = db.query(User).filter(User.email == current_user_id).first()
 
     if not current_user or current_user.role != 'admin':
         raise HTTPException(status_code=403, detail="Non autorizzato")
