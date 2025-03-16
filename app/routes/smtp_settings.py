@@ -1,10 +1,10 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Any  # 👈 aggiungi questo
-from fastapi_jwt_auth import AuthJWT
+﻿from sqlalchemy.orm import Session
+from fastapi import Depends, APIRouter, HTTPException
+from typing import Any
 from app.database import get_db
 from app.models import SmtpSettings, User
+from pydantic import BaseModel
+from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter()
 
@@ -18,15 +18,14 @@ class SMTPSettingsSchema(BaseModel):
 @router.post("/smtp-settings")
 async def set_smtp_settings(
     settings: SMTPSettingsSchema,
-    Authorize: AuthJWT = Depends(),
-    db: Session = Depends(SessionLocal)
+    Authorize: Any = Depends(),
+    db: Session = Depends(get_db)
 ):
     Authorize.jwt_required()
     current_user_id = Authorize.get_jwt_subject()
-    
     current_user = db.query(User).filter(User.id == current_user_id).first()
 
-    if not current_user or current_user.role != 'admin':
+    if current_user.role != 'admin':
         raise HTTPException(status_code=403, detail="Non autorizzato")
 
     existing_settings = db.query(SmtpSettings).filter(SmtpSettings.admin_id == current_user.id).first()
