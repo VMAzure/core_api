@@ -199,61 +199,88 @@ class PurchaseServiceRequest(BaseModel):
 
 @marketplace_router.post("/purchase-service")
 async def purchase_service(
-    request: PurchaseServiceRequest,  # ✅ Ora FastAPI leggerà "service_id" dal JSON
+    request: PurchaseServiceRequest,
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
     """
-    Permette a un Admin di acquistare un servizio, verificando il credito disponibile.
+    Permette a un Admin di acquistare o riattivare un servizio, verificando il credito disponibile.
     """
 
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
-    # ✅ Recuperiamo l'utente (Admin)
+    # Recuperiamo l'utente (Admin)
     user = db.query(User).filter(User.email == user_email).first()
     if not user or user.role != "admin":
         raise HTTPException(status_code=403, detail="Accesso negato: solo gli Admin possono acquistare servizi.")
 
-    # ✅ Recuperiamo il servizio richiesto
+    # Recuperiamo il servizio richiesto
     service = db.query(Services).filter(Services.id == request.service_id).first()
     if not service:
         raise HTTPException(status_code=404, detail="Servizio non trovato.")
 
-    # ✅ Controlliamo se il servizio è già attivo per l'Admin
     existing_purchase = db.query(PurchasedServices).filter(
         PurchasedServices.admin_id == user.id,
-        PurchasedServices.service_id == service.id
+        PurchasedServices.service_id == request.service_id
     ).first()
 
     if existing_purchase:
-        raise HTTPException(status_code=400, detail="Hai già acquistato questo servizio.")
+        if existing_purchase.status == "sospeso":
+            # Se il servizio è sospeso, controlla credito e riattiva
+            if user.credit < service.price:
+                raise HTTPException(status_code=402, detail="Credito insufficiente per riattivare il servizio.")
 
-    # ✅ Controlliamo il credito dell'Admin
+            user.credit -= service.price
+            existing_purchase.status = "active"
+            existing_purchase.activated_at = datetime.utcnow()  # Riattivazione servizio
+
+            transaction = CreditTransaction(
+                admin_id=user.id,
+                amount=service.price,
+                transaction_type="USE"
+            )
+
+            db.add(transaction)
+            db.commit()
+
+            return {
+                "message": "Servizio riattivato con successo!",
+                "service_id": service.id,
+                "remaining_credit": user.credit
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Hai già acquistato questo servizio.")
+
+    # Se il servizio non è mai stato acquistato, procedi con nuovo acquisto
     if user.credit < service.price:
         raise HTTPException(status_code=402, detail="Credito insufficiente per acquistare il servizio.")
 
     try:
-        # 🔹 Sottraiamo il costo dal credito dell'Admin
         user.credit -= service.price
-        db.commit()
 
-        # 🔹 Registriamo la transazione nei log di credito
         transaction = CreditTransaction(
-        admin_id=user.id,
-        amount=service.price,  # ✅ Inseriamo il valore positivo
-        transaction_type="USE"  # ✅ Cambiamo "Acquisto servizio" con "USE"
-)
+            admin_id=user.id,
+            amount=service.price,
+            transaction_type="USE"
+        )
+
+        new_purchase = PurchasedServices(
+            admin_id=user.id,
+            service_id=service.id,
+            status="active",
+            activated_at=datetime.utcnow()
+        )
 
         db.add(transaction)
-        db.commit()
-
-        # 🔹 Salviamo l'attivazione del servizio
-        new_purchase = PurchasedServices(admin_id=user.id, service_id=service.id, status="active")
         db.add(new_purchase)
         db.commit()
 
-        return {"message": "Servizio acquistato con successo!", "service_id": service.id, "remaining_credit": user.credit}
+        return {
+            "message": "Servizio acquistato con successo!",
+            "service_id": service.id,
+            "remaining_credit": user.credit
+        }
 
     except Exception as e:
         db.rollback()
