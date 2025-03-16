@@ -5,6 +5,7 @@ from app.models import User, PurchasedServices, Services  # aggiunto Services
 from fastapi_jwt_auth import AuthJWT
 from datetime import datetime, timedelta
 from sqlalchemy import text
+from math import ceil
 
 router = APIRouter()
 
@@ -14,7 +15,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
 
 @router.get("/days-until-renewal")
 def days_until_renewal(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
@@ -48,8 +48,10 @@ def days_until_renewal(Authorize: AuthJWT = Depends(), db: Session = Depends(get
     services_info = []
     for purchased, service in purchased_services:
         expiration_time = purchased.activated_at + timedelta(minutes=default_duration)
-        remaining_days = (expiration_time - datetime.utcnow()).days
-        remaining_days = remaining_days if remaining_days >= 0 else 0
+        
+        remaining_timedelta = expiration_time - datetime.utcnow()
+        remaining_days = ceil(remaining_timedelta.total_seconds() / (24 * 3600))
+        remaining_days = max(remaining_days, 0)
 
         services_info.append({
             "service_name": service.name,
@@ -62,5 +64,6 @@ def days_until_renewal(Authorize: AuthJWT = Depends(), db: Session = Depends(get
         "role": user.role,
         "services": services_info
     }
+
 
 
