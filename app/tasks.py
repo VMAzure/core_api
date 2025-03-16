@@ -47,7 +47,6 @@ def check_and_charge_services():
 
     db.close()
 
-# Avvio dello scheduler
+# Creazione scheduler (NON avviarlo qui, lo avviamo in main.py)
 scheduler = BackgroundScheduler()
-scheduler.add_job(check_and_charge_services, 'interval', minutes=1)  # Esegue ogni minuto
-scheduler.start()
+scheduler.add_job(check_and_charge_services, 'interval', minutes=1)
