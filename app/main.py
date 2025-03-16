@@ -26,7 +26,6 @@ from app.routes.marketplace import marketplace_router  # 🔹 Importato DOPO dot
 from app.routes.logs import logs_router
 from app import models
 import threading
-from app.tasks import run_scheduler
 from app.routes.services import service_router
 from app.routes.customers import router as customers_router
 from app.routes.nlt import router as nlt_router
