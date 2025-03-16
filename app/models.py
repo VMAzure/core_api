@@ -56,6 +56,8 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     parent = relationship("User", remote_side=[id], backref="dealers", primaryjoin="User.parent_id == User.id")
+    smtp_settings = relationship("SmtpSettings", uselist=False, back_populates="admin", cascade="all, delete-orphan")
+
 
     def set_password(self, password: str):
         """Salva la password criptata"""
@@ -195,6 +197,22 @@ class NltPreventivi(Base):
     # Relazioni utili (opzionali)
     cliente = relationship("Cliente")
     creatore = relationship("User", foreign_keys=[creato_da])
+
+class SmtpSettings(Base):
+    __tablename__ = "smtp_settings"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, ForeignKey('public.utenti.id', ondelete='CASCADE'), nullable=False)
+    smtp_host = Column(String(255), nullable=False)
+    smtp_port = Column(Integer, nullable=False)
+    smtp_user = Column(String(255), nullable=False)
+    smtp_password = Column(String(255), nullable=False)
+    use_ssl = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    admin = relationship("User", back_populates="smtp_settings")
 
 
 
