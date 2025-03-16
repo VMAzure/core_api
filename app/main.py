@@ -31,7 +31,8 @@ from app.routes.customers import router as customers_router
 from app.routes.nlt import router as nlt_router
 from app.routes import status
 from app.tasks import scheduler
-from routes.smtp_settings import router as smtp_router
+from app.routes.smtp_settings import router as smtp_router
+
 
 
 

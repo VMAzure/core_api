@@ -1,8 +1,10 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from fastapi_jwt_auth import AuthJWT
+from app.database import SessionLocal
+from app.models import SmtpSettings, User
 from pydantic import BaseModel
-from dependencies import get_db, get_current_user
-from models import SmtpSettings, User
+
 
 router = APIRouter()
 
@@ -16,23 +18,26 @@ class SMTPSettingsSchema(BaseModel):
 @router.post("/smtp-settings")
 async def set_smtp_settings(
     settings: SMTPSettingsSchema,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(SessionLocal)
 ):
-    if current_user.role != 'admin':
+    Authorize.jwt_required()
+    current_user_id = Authorize.get_jwt_subject()
+    
+    current_user = db.query(User).filter(User.id == current_user_id).first()
+
+    if not current_user or current_user.role != 'admin':
         raise HTTPException(status_code=403, detail="Non autorizzato")
 
     existing_settings = db.query(SmtpSettings).filter(SmtpSettings.admin_id == current_user.id).first()
 
     if existing_settings:
-        # 🔄 Aggiorna impostazioni esistenti
         existing_settings.smtp_host = settings.smtp_host
         existing_settings.smtp_port = settings.smtp_port
         existing_settings.use_ssl = settings.use_ssl
         existing_settings.smtp_user = settings.smtp_user
         existing_settings.smtp_password = settings.smtp_password
     else:
-        # ✨ Crea nuove impostazioni
         existing_settings = SmtpSettings(
             admin_id=current_user.id,
             smtp_host=settings.smtp_host,
@@ -46,3 +51,4 @@ async def set_smtp_settings(
     db.commit()
 
     return {"success": True, "message": "Impostazioni SMTP salvate con successo."}
+
