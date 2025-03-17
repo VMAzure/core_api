@@ -214,5 +214,50 @@ class SmtpSettings(Base):
 
     admin = relationship("User", back_populates="smtp_settings")
 
+class SiteAdminSettings(Base):
+    __tablename__ = "site_admin_settings"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False)
+    primary_color = Column(String(7))
+    secondary_color = Column(String(7))
+    tertiary_color = Column(String(7))
+    font_family = Column(String(255))
+    favicon_url = Column(String(255))
+    custom_css = Column(Text)
+    custom_js = Column(Text)
+    dark_mode_enabled = Column(Boolean, default=False)
+    menu_style = Column(String(50))
+    footer_text = Column(Text)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    admin = relationship("User", backref="site_settings")
+
+
+class SitePages(Base):
+    __tablename__ = "site_pages"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False)
+    page_name = Column(String(100))
+    page_url = Column(String(255), unique=True)
+    is_active = Column(Boolean, default=True)
+    sort_order = Column(Integer, default=0)
+    parent_page_id = Column(Integer, ForeignKey("public.site_pages.id", ondelete="SET NULL"), nullable=True)
+    seo_title = Column(String(150))
+    seo_description = Column(String(160))
+    seo_keywords = Column(String(255))
+    meta_robots = Column(String(50), default="index, follow")
+    canonical_url = Column(String(255))
+    json_ld_schema = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    parent_page = relationship("SiteAdminPages", remote_side=[id], backref="sub_pages")
+
+
 
 
