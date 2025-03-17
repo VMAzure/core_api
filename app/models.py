@@ -256,7 +256,8 @@ class SitePages(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    parent_page = relationship("SiteAdminPages", remote_side=[id], backref="sub_pages")
+    parent_page = relationship("SitePages", remote_side=[id], backref="sub_pages")
+
 
 
 
