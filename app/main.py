@@ -32,6 +32,7 @@ from app.routes.nlt import router as nlt_router
 from app.routes import status
 from app.tasks import scheduler
 from app.routes.smtp_settings import router as smtp_router
+from app.routes.site_settings import router as site_settings_router
 
 
 
@@ -120,6 +121,8 @@ app.include_router(customers_router, prefix="/customers", tags=["Customers"])
 app.include_router(nlt_router, prefix="")
 app.include_router(status.router, prefix="/api")
 app.include_router(smtp_router, prefix="/api")
+app.include_router(site_settings.router, prefix="/api")
+
 
 
 

@@ -76,3 +76,38 @@ class ClienteResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+# Schema per impostazioni sito admin
+class SiteAdminSettingsSchema(BaseModel):
+    admin_id: int
+    primary_color: Optional[str]
+    secondary_color: Optional[str]
+    tertiary_color: Optional[str]
+    font_family: Optional[str]
+    favicon_url: Optional[str]
+    custom_css: Optional[str]
+    custom_js: Optional[str]
+    dark_mode_enabled: Optional[bool]
+    menu_style: Optional[str]
+    footer_text: Optional[str]
+
+    class Config:
+        orm_mode = True
+
+# Schema per configurazione SEO pagine sito
+class SitePageSchema(BaseModel):
+    admin_id: int
+    page_name: str
+    page_url: str
+    is_active: Optional[bool] = True
+    sort_order: Optional[int] = 0
+    parent_page_id: Optional[int] = None
+    seo_title: Optional[str] = None
+    seo_description: Optional[str] = None
+    seo_keywords: Optional[str] = None
+    meta_robots: Optional[str] = "index, follow"
+    canonical_url: Optional[str] = None
+    json_ld_schema: Optional[str] = None
+
+    class Config:
+        orm_mode = True
