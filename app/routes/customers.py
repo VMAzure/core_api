@@ -30,12 +30,16 @@ def get_clienti(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
         ).all()
 
     elif user.role == "dealer":
-        clienti = db.query(Cliente).filter(Cliente.dealer_id == user.id).all()
+        if user.shared_customers:
+            clienti = db.query(Cliente).filter(Cliente.admin_id == user.parent_id).all()
+        else:
+            clienti = db.query(Cliente).filter(Cliente.dealer_id == user.id).all()
 
     else:
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
 
     return clienti
+
 
 
 # Richiesta per verifica cliente
