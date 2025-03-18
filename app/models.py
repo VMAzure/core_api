@@ -51,6 +51,8 @@ class User(Base):
     credit = Column(Float, default=0.0)
     parent_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
     logo_url = Column(String, nullable=True)  # ✅ aggiunta
+    shared_customers = Column(Boolean, default=False, nullable=False)
+
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
