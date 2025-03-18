@@ -93,21 +93,25 @@ async def add_service(
     # ✅ Caricamento dell'immagine su Supabase
     try:
         file_name = f"services/{file.filename}"
-        file_content = await file.read()  # ✅ Convertiamo il file in `bytes`
-        
-        response = supabase.storage.from_("services").upload(file_name, file_content, {"content-type": file.content_type})
+        # 🚩 Qui non devi rileggere il file (l'hai già fatto prima)
+        response = supabase.storage.from_("services").upload(
+            file_name, file_content, {"content-type": file.content_type}
+        )
 
-        # ✅ Estrarre il contenuto della risposta
-        response_data = response.json()  # Convertiamo la risposta in JSON
-
+        # 🚩 Rimuovi response.json() perché Supabase non restituisce JSON
         if response.status_code != 200:
-            raise HTTPException(status_code=500, detail=f"Errore nel caricamento dell'immagine: {response_data}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Errore nel caricamento dell'immagine: {response.content}"
+            )
 
-        image_url = f"{SUPABASE_URL}/storage/v1/object/public/services/services/{file.filename}"
+        # 🚩 Fix del percorso (rimosso doppio /services/)
+        image_url = f"{SUPABASE_URL}/storage/v1/object/public/services/{file.filename}"
 
     except Exception as e:
         logger.error(f"❌ ERRORE: Impossibile caricare l'immagine su Supabase: {e}")
         raise HTTPException(status_code=500, detail=f"Errore nel caricamento dell'immagine: {str(e)}")
+
 
     # ✅ Salvataggio del servizio nel database con gestione del rollback
     try:
