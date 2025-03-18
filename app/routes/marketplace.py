@@ -105,8 +105,8 @@ async def add_service(
             file_name, file_content, {"content-type": file.content_type}
         )
 
-        # ✅ Imposta direttamente l'URL finale
-        image_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_name}"
+        # ✅ Imposta correttamente l'URL finale con services/services/
+        image_url = f"{SUPABASE_URL}/storage/v1/object/public/services/{file_name}"
 
     except Exception as e:
         logger.error(f"❌ ERRORE: Impossibile caricare l'immagine su Supabase: {e}")
