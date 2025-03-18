@@ -12,6 +12,8 @@ import logging
 import os
 from dotenv import load_dotenv
 
+
+
 # ✅ Carichiamo dotenv SOLO se non siamo in produzione
 if os.getenv("ENV") != "production":
     load_dotenv()
@@ -90,25 +92,29 @@ async def add_service(
         raise HTTPException(status_code=400, detail="File troppo grande! Dimensione massima: 5MB.")
 
     # ✅ Caricamento su Supabase usando file_content
+    import uuid  # assicurati che ci sia
+
+    # ✅ Caricamento su Supabase usando file_content con nome univoco
     try:
-        file_name = f"services/{file.filename}"
+        file_name = f"services/{uuid.uuid4()}_{file.filename}"
 
         response = supabase.storage.from_("services").upload(
             file_name, file_content, {"content-type": file.content_type}
         )
 
-        # 🚩 Controlla se c'è stato un errore con response
-        if not response or not response.get('Key'):
+        # ✅ Controlla correttamente la risposta
+        if not hasattr(response, 'Key') or not response.Key:
             raise HTTPException(
                 status_code=500,
-                detail=f"Errore Supabase durante l'upload dell'immagine: {response}"
+                detail=f"Errore Supabase durante l'upload: {response}"
             )
 
-        image_url = f"{SUPABASE_URL}/storage/v1/object/public/services/{file.filename}"
+        image_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_name}"
 
     except Exception as e:
         logger.error(f"❌ ERRORE: Impossibile caricare l'immagine su Supabase: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 
@@ -192,10 +198,6 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
         raise HTTPException(status_code=403, detail="Ruolo non valido")
 
     return result
-
-
-
-
 
 
 class PurchaseServiceRequest(BaseModel):
