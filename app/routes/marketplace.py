@@ -77,40 +77,38 @@ async def add_service(
         raise HTTPException(status_code=403, detail="Accesso negato")
 
     # ✅ Controlliamo il tipo di file per evitare estensioni non valide
+    # ✅ Controlliamo il tipo di file
     allowed_extensions = {"png", "jpg", "jpeg", "webp"}
     file_extension = file.filename.split(".")[-1].lower()
     if file_extension not in allowed_extensions:
-        raise HTTPException(status_code=400, detail="Formato file non valido! Usa PNG, JPG, JPEG, WEBP.")
+        raise HTTPException(status_code=400, detail="Formato file non valido!")
 
-    # ✅ Controlliamo la dimensione del file (max 5MB)
-    file_size = await file.read()
-    if len(file_size) > 5 * 1024 * 1024:
+    # ✅ Leggi UNA sola volta il contenuto del file
+    file_content = await file.read()
+
+    if len(file_content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File troppo grande! Dimensione massima: 5MB.")
 
-    # ✅ Resettiamo il puntatore del file per poterlo riutilizzare
-    file.file.seek(0)
-
-    # ✅ Caricamento dell'immagine su Supabase
+    # ✅ Caricamento su Supabase usando file_content
     try:
         file_name = f"services/{file.filename}"
-        # 🚩 Qui non devi rileggere il file (l'hai già fatto prima)
+    
         response = supabase.storage.from_("services").upload(
             file_name, file_content, {"content-type": file.content_type}
         )
 
-        # 🚩 Rimuovi response.json() perché Supabase non restituisce JSON
         if response.status_code != 200:
             raise HTTPException(
                 status_code=500,
-                detail=f"Errore nel caricamento dell'immagine: {response.content}"
+                detail=f"Errore Supabase: {response.content}"
             )
 
-        # 🚩 Fix del percorso (rimosso doppio /services/)
         image_url = f"{SUPABASE_URL}/storage/v1/object/public/services/{file.filename}"
 
     except Exception as e:
         logger.error(f"❌ ERRORE: Impossibile caricare l'immagine su Supabase: {e}")
-        raise HTTPException(status_code=500, detail=f"Errore nel caricamento dell'immagine: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
     # ✅ Salvataggio del servizio nel database con gestione del rollback
