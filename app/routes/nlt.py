@@ -143,20 +143,33 @@ async def get_preventivi_cliente(
     # 🔍 Determina il nome del cliente
     nome_cliente = cliente.ragione_sociale if cliente.ragione_sociale else f"{cliente.nome} {cliente.cognome}".strip()
 
-    # 🔹 Dealer: vede solo i suoi preventivi
+    # 🔹 Dealer: logica aggiornata
     if current_user.role == "dealer":
-        preventivi = db.query(NltPreventivi).filter(
-            (NltPreventivi.creato_da == current_user.id) & (NltPreventivi.cliente_id == cliente_id)
-        ).all()
-    
+        if current_user.shared_customers:
+            team_ids = db.query(User.id).filter(
+                (User.parent_id == current_user.parent_id) | 
+                (User.id == current_user.parent_id)
+            ).subquery()
+
+            preventivi = db.query(NltPreventivi).filter(
+                NltPreventivi.creato_da.in_(team_ids),
+                NltPreventivi.cliente_id == cliente_id
+            ).all()
+        else:
+            preventivi = db.query(NltPreventivi).filter(
+                NltPreventivi.creato_da == current_user.id,
+                NltPreventivi.cliente_id == cliente_id
+            ).all()
+
     # 🔹 Admin: vede i suoi e quelli dei suoi dealer
     elif current_user.role == "admin":
         dealer_ids = db.query(User.id).filter(User.parent_id == current_user.id).subquery()
         preventivi = db.query(NltPreventivi).filter(
-            (NltPreventivi.creato_da == current_user.id) | 
-            (NltPreventivi.creato_da.in_(dealer_ids)) & (NltPreventivi.cliente_id == cliente_id)
+            ((NltPreventivi.creato_da == current_user.id) | 
+             (NltPreventivi.creato_da.in_(dealer_ids))) &
+             (NltPreventivi.cliente_id == cliente_id)
         ).all()
-    
+
     # 🔹 Superadmin: vede tutto per quel cliente
     else:
         preventivi = db.query(NltPreventivi).filter(NltPreventivi.cliente_id == cliente_id).all()
@@ -181,6 +194,7 @@ async def get_preventivi_cliente(
         ]
     }
 
+
 @router.get("/preventivi")
 async def get_miei_preventivi(
     current_user: User = Depends(get_current_user),
@@ -192,10 +206,24 @@ async def get_miei_preventivi(
     offset = (page - 1) * size
 
     if current_user.role == "dealer":
-        query = db.query(NltPreventivi).join(Cliente).filter(
-            NltPreventivi.creato_da == current_user.id,
-            NltPreventivi.visibile == 1
-        )
+        if current_user.shared_customers:
+            # dealer operatore: vede preventivi di Admin e altri dealer del team
+            team_ids = db.query(User.id).filter(
+                (User.parent_id == current_user.parent_id) |
+                (User.id == current_user.parent_id)  # include anche l'admin
+            ).subquery()
+
+            query = db.query(NltPreventivi).join(Cliente).filter(
+                NltPreventivi.creato_da.in_(team_ids),
+                NltPreventivi.visibile == 1
+            )
+        else:
+            # dealer normale: vede solo i propri
+            query = db.query(NltPreventivi).join(Cliente).filter(
+                NltPreventivi.creato_da == current_user.id,
+                NltPreventivi.visibile == 1
+            )
+
     elif current_user.role == "admin":
         dealer_ids = db.query(User.id).filter(User.parent_id == current_user.id).subquery()
         query = db.query(NltPreventivi).join(Cliente).filter(
@@ -203,10 +231,11 @@ async def get_miei_preventivi(
              (NltPreventivi.creato_da.in_(dealer_ids))),
             NltPreventivi.visibile == 1
         )
+
     else:  # superadmin
         query = db.query(NltPreventivi).join(Cliente).filter(NltPreventivi.visibile == 1)
 
-    # 🔍 Aggiungi filtro ricerca
+    # 🔍 Filtro ricerca
     if search:
         search_term = f"%{search}%"
         query = query.filter(
@@ -214,8 +243,6 @@ async def get_miei_preventivi(
             (Cliente.cognome.ilike(search_term)) |
             (Cliente.ragione_sociale.ilike(search_term))
         )
-
-    offset = (page - 1) * size
 
     preventivi = query.order_by(NltPreventivi.created_at.desc()) \
                       .offset(offset) \
@@ -247,10 +274,10 @@ async def get_miei_preventivi(
 
     return {
         "success": True,
-            "preventivi": risultati,
-            "page": page,
-            "size": size,
-            "count": len(risultati)
+        "preventivi": risultati,
+        "page": page,
+        "size": size,
+        "count": len(risultati)
     }
 
 
