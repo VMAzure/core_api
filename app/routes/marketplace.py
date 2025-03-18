@@ -95,6 +95,9 @@ async def add_service(
     import uuid  # assicurati che ci sia
 
     # ✅ Caricamento su Supabase usando file_content con nome univoco
+    import uuid  # se non già presente in cima al file
+
+    # ✅ Caricamento definitivo su Supabase
     try:
         file_name = f"services/{uuid.uuid4()}_{file.filename}"
 
@@ -102,18 +105,13 @@ async def add_service(
             file_name, file_content, {"content-type": file.content_type}
         )
 
-        # ✅ Controlla correttamente la risposta
-        if not hasattr(response, 'Key') or not response.Key:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Errore Supabase durante l'upload: {response}"
-            )
-
+        # ✅ Imposta direttamente l'URL finale
         image_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_name}"
 
     except Exception as e:
         logger.error(f"❌ ERRORE: Impossibile caricare l'immagine su Supabase: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 
