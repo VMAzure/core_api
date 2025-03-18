@@ -92,15 +92,16 @@ async def add_service(
     # ✅ Caricamento su Supabase usando file_content
     try:
         file_name = f"services/{file.filename}"
-    
+
         response = supabase.storage.from_("services").upload(
             file_name, file_content, {"content-type": file.content_type}
         )
 
-        if response.status_code != 200:
+        # 🚩 Controlla se c'è stato un errore con response
+        if not response or not response.get('Key'):
             raise HTTPException(
                 status_code=500,
-                detail=f"Errore Supabase: {response.content}"
+                detail=f"Errore Supabase durante l'upload dell'immagine: {response}"
             )
 
         image_url = f"{SUPABASE_URL}/storage/v1/object/public/services/{file.filename}"
