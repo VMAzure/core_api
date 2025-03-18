@@ -166,7 +166,7 @@ class DealerCreateRequest(BaseModel):
 @router.post("/dealer")
 def create_dealer(
     dealer_data: DealerCreateRequest,
-    Authorize: AuthJWT = Depends(),  # 🔥 Sostituiamo get_current_user con AuthJWT
+    Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
     # ✅ Verifica del token JWT
@@ -190,6 +190,19 @@ def create_dealer(
     if db.query(User).filter(User.email == dealer_data.email).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email già in uso")
 
+    # 🔐 Controllo partita IVA di un altro Admin
+    existing_admin = db.query(User).filter(
+        User.partita_iva == dealer_data.partita_iva,
+        User.role == "admin",
+        User.id != admin_user.id
+    ).first()
+
+    if existing_admin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Non puoi utilizzare la partita IVA di un altro Admin."
+        )
+
     # ✅ Hash della password
     hashed_password = pwd_context.hash(dealer_data.password)
 
@@ -208,7 +221,8 @@ def create_dealer(
         partita_iva=dealer_data.partita_iva,
         codice_sdi=dealer_data.codice_sdi,
         credit=0.0,
-        parent_id=admin_user.id
+        parent_id=admin_user.id,
+        shared_customers=(dealer_data.partita_iva == admin_user.partita_iva)  # 🔥 Automatico
     )
 
     # ✅ Aggiornamento credito Admin
