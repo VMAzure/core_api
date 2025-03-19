@@ -9,52 +9,59 @@ from app.models import User  # ✅ Import del modello User se necessario
 
 router = APIRouter()
 
+
+
 # Configurazioni API Motornet
-MOTORN_API_BASE_URL = "https://webservice.motornet.it/api/v3_0/rest"
-MOTORN_AUTH_URL = f"{MOTORN_API_BASE_URL}/auth/token"
-MOTORN_MARCHE_URL = f"{MOTORN_API_BASE_URL}/public/usato/auto/marche"
+MOTORN_AUTH_URL = "https://webservice.motornet.it/auth/realms/webservices/protocol/openid-connect/token"
+MOTORN_MARCHE_URL = "https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/marche"
+
 
 # Credenziali API Motornet
-MOTORN_CLIENT_ID = "IL_TUO_CLIENT_ID"
-MOTORN_CLIENT_SECRET = "IL_TUO_CLIENT_SECRET"
+MOTORN_CLIENT_ID = "azure447"
+MOTORN_CLIENT_SECRET = "azwsn557"
 
 def get_motornet_token():
     """Ottiene il token di accesso da Motornet"""
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+
     payload = {
         "grant_type": "password",
         "client_id": "webservice",
-        "username": "azure447",
-        "password": "azwsn557"
+        "username": MOTORN_CLIENT_ID,
+        "password": MOTORN_CLIENT_SECRET
     }
 
-    response = requests.post(MOTORN_AUTH_URL, data=payload)
+    response = requests.post(MOTORN_AUTH_URL, headers=headers, data=payload)
+
     print(f"🔍 DEBUG: Status Code Motornet = {response.status_code}")
-    print(f"🔍 DEBUG: Risposta Motornet = {response.text}")  
+    print(f"🔍 DEBUG: Risposta Motornet = {response.text}")  # 🔹 Stampiamo la risposta per debug
 
     if response.status_code == 200:
         return response.json().get("access_token")
     
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero del token")
 
-
-
 @router.get("/marche", tags=["Motornet"])
 async def get_marche(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """Recupera la lista delle marche da Motornet solo per utenti autenticati"""
-    Authorize.jwt_required()  # 🔹 Verifica il token JWT
-    user_email = Authorize.get_jwt_subject()  # 🔹 Ottiene l'email dell'utente autenticato
+    Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
+    user_email = Authorize.get_jwt_subject()
 
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    token = get_motornet_token()
+    token = get_motornet_token()  # 🔹 Otteniamo il token da Motornet
 
     headers = {
         "Authorization": f"Bearer {token}"
     }
 
     response = requests.get(MOTORN_MARCHE_URL, headers=headers, params={"libro": "false"})
+
+    print(f"🔍 DEBUG: Risposta Motornet Marche: {response.text}")  # 🔹 Stampa il JSON ricevuto
 
     if response.status_code == 200:
         data = response.json()
@@ -72,4 +79,3 @@ async def get_marche(Authorize: AuthJWT = Depends(), db: Session = Depends(get_d
         return marche_pulite
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero delle marche")
-
