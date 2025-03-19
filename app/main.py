@@ -33,7 +33,7 @@ from app.routes import status
 from app.tasks import scheduler
 from app.routes.smtp_settings import router as smtp_router
 from app.routes.site_settings import router as site_settings_router
-from app.routes.motornet import router as motornet_router  
+from app.routes.motornet import motornet_router  
 
 
 
