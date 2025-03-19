@@ -29,7 +29,7 @@ def get_motornet_token():
     
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero del token")
 
-@motornet_router.get("/marche", tags=["Motornet"])
+@router.get("/marche", tags=["Motornet"])
 async def get_marche(user=Depends(get_current_user)):  # 🔹 Richiede autenticazione con token di CoreAPI
     """Recupera la lista delle marche da Motornet solo per utenti autenticati"""
     token = get_motornet_token()
