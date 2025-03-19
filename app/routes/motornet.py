@@ -59,7 +59,7 @@ async def get_marche(Authorize: AuthJWT = Depends(), db: Session = Depends(get_d
         "Authorization": f"Bearer {token}"
     }
 
-    response = requests.get(MOTORN_MARCHE_URL, headers=headers, params={"libro": "false"})
+    response = requests.get(MOTORN_MARCHE_URL, headers=headers)
 
     print(f"🔍 DEBUG: Risposta Motornet Marche: {response.text}")  # 🔹 Stampa il JSON ricevuto
 
