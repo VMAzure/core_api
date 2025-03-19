@@ -174,17 +174,14 @@ async def get_allestimenti(codice_marca: str, codice_modello: str, Authorize: Au
         allestimenti_puliti = [
     {
         "codice_univoco": versione.get("codiceMotornetUnivoco"),
-        "versione": versione.get("nome"),  # 🔹 Corretto: Il nome dell'allestimento è in `nome`
-        "prezzo_vendita": versione.get("prezzoVendita", None),  # 🔹 Se `prezzoVendita` non esiste, restituiamo None
-        "tipo": versione.get("tipo", None),  # 🔹 Se `tipo` non esiste, restituiamo None
-        "porte": versione.get("porte", None),  # 🔹 Se `porte` non esiste, restituiamo None
-        "inizio_produzione": versione.get("inizioProduzione"),
-        "fine_produzione": versione.get("fineProduzione"),
-        "marca": versione["marca"]["nome"] if versione.get("marca") else None  # 🔹 Aggiunta anche la marca
+        "versione": versione.get("nome"),  # 🔹 Nome dell'allestimento
+        "inizio_produzione": versione.get("inizioProduzione"),  # 🔹 Data di inizio produzione
+        "fine_produzione": versione.get("fineProduzione"),  # 🔹 Data di fine produzione
+        "marca": versione["marca"]["nome"] if versione.get("marca") else None  # 🔹 Nome della marca
     }
     for versione in data.get("versioni", [])
+]
 
-        ]
 
         return allestimenti_puliti
 
