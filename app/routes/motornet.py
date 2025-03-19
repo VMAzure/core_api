@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.routes.auth import get_current_user
 from app.database import get_db  # ✅ Import corretto per il DB
 from app.models import User  # ✅ Import del modello User se necessario
+from datetime import datetime
+
 
 
 router = APIRouter()
@@ -214,6 +216,54 @@ async def get_dettagli_auto(codice_motornet: str, Authorize: AuthJWT = Depends()
         return data  # 🔹 Restituiamo tutti i dati ricevuti senza modificarli
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero dei dettagli del veicolo")
+
+
+@router.get("/valutazione/{codice_motornet}/{anno_immatricolazione}/{mese_immatricolazione}", tags=["Motornet"])
+async def get_valutazione_auto(
+    codice_motornet: str,
+    anno_immatricolazione: int,
+    mese_immatricolazione: int,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """Recupera la quotazione base e il deprezzamento di un veicolo rispetto alla data di immatricolazione"""
+    Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    token = get_motornet_token()  # 🔹 Otteniamo il token da Motornet prima della richiesta
+
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    # 📌 Impostiamo automaticamente la data di valutazione a OGGI
+    oggi = datetime.today()
+    anno_valutazione = oggi.year
+    mese_valutazione = oggi.month
+
+    motornet_url = (
+        f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/valutazione/deprezzamento"
+        f"?codice_motornet_uni={codice_motornet}"
+        f"&anno_immatricolazione={anno_immatricolazione}"
+        f"&mese_immatricolazione={mese_immatricolazione}"
+        f"&anno_valutazione={anno_valutazione}"
+        f"&mese_valutazione={mese_valutazione}"
+    )
+
+    response = requests.get(motornet_url, headers=headers)
+
+    print(f"🔍 DEBUG: Risposta Motornet Valutazione: {response.text}")  # 🔹 Stampa la risposta ricevuta
+
+    if response.status_code == 200:
+        data = response.json()
+        return data  # 🔹 Restituiamo l'intero JSON senza modificarlo
+
+    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero della valutazione")
+
 
 
 
