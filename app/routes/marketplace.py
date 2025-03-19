@@ -112,10 +112,6 @@ async def add_service(
         logger.error(f"❌ ERRORE: Impossibile caricare l'immagine su Supabase: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
-
-
-
     # ✅ Salvataggio del servizio nel database con gestione del rollback
     try:
         new_service = Services(name=name, description=description, price=price, image_url=image_url)
