@@ -203,7 +203,7 @@ async def get_dettagli_auto(codice_motornet: str, Authorize: AuthJWT = Depends()
         "Authorization": f"Bearer {token}"
     }
 
-    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/motornet-univoco?codice_motornet_uni={codice_motornet}"
+    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/dettaglio?codice_motornet_uni={codice_motornet}"
 
     response = requests.get(motornet_url, headers=headers)
 
@@ -211,10 +211,9 @@ async def get_dettagli_auto(codice_motornet: str, Authorize: AuthJWT = Depends()
 
     if response.status_code == 200:
         data = response.json()
-        return data  # 🔹 Restituiamo l'intero JSON senza filtrarne alcuna parte
+        return data  # 🔹 Restituiamo tutti i dati ricevuti senza modificarli
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero dei dettagli del veicolo")
-
 
 
 
