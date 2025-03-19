@@ -39,9 +39,10 @@ def get_motornet_token():
     }
 
     payload = {
-        "grant_type": "client_credentials",
-        "client_id": MOTORN_CLIENT_ID,
-        "client_secret": MOTORN_CLIENT_SECRET
+        "grant_type": "password",
+        "client_id": "webservice",
+        "username": MOTORN_CLIENT_ID,
+        "password": MOTORN_CLIENT_SECRET
     }
 
     response = requests.post(MOTORN_AUTH_URL, headers=headers, data=payload)
