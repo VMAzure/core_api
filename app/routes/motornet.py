@@ -83,7 +83,7 @@ async def get_marche(Authorize: AuthJWT = Depends(), db: Session = Depends(get_d
 @router.get("/modelli/{codice_marca}", tags=["Motornet"])
 async def get_modelli(codice_marca: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """Recupera la lista dei modelli per una marca specifica"""
-    Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
+    Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
     user = db.query(User).filter(User.email == user_email).first()
@@ -100,7 +100,8 @@ async def get_modelli(codice_marca: str, Authorize: AuthJWT = Depends(), db: Ses
 
     response = requests.get(motornet_url, headers=headers)
 
-    print(f"🔍 DEBUG: Risposta Motornet Modelli: {response.text}")  # 🔹 Stampa la risposta ricevuta
+    print(f"🔍 DEBUG: Risposta completa di Motornet:")
+    print(response.text)  # 🔹 Stampiamo il JSON completo per analizzarlo
 
     if response.status_code == 200:
         data = response.json()
@@ -111,10 +112,11 @@ async def get_modelli(codice_marca: str, Authorize: AuthJWT = Depends(), db: Ses
                 "codice": modello.get("codice"),
                 "descrizione": modello.get("descrizione")
             }
-            for modello in data.get("modelli", [])
+            for modello in data.get("modelli", [])  # 🔹 Verifichiamo se "modelli" esiste
         ]
 
         return modelli_puliti
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero dei modelli")
+
 
