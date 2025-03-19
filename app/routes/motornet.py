@@ -1,4 +1,5 @@
 ﻿from fastapi import APIRouter, HTTPException, Depends
+from fastapi_jwt_auth import AuthJWT
 import requests
 from app.routes.auth import get_current_user 
 
@@ -29,9 +30,18 @@ def get_motornet_token():
     
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero del token")
 
+
+
 @router.get("/marche", tags=["Motornet"])
-async def get_marche(user=Depends(get_current_user)):  # 🔹 Richiede autenticazione con token di CoreAPI
+async def get_marche(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """Recupera la lista delle marche da Motornet solo per utenti autenticati"""
+    Authorize.jwt_required()  # 🔹 Verifica il token JWT
+    user_email = Authorize.get_jwt_subject()  # 🔹 Ottiene l'email dell'utente autenticato
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
     token = get_motornet_token()
 
     headers = {
@@ -56,3 +66,4 @@ async def get_marche(user=Depends(get_current_user)):  # 🔹 Richiede autentica
         return marche_pulite
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero delle marche")
+
