@@ -28,6 +28,8 @@ def get_motornet_token():
     }
 
     response = requests.post(MOTORN_AUTH_URL, data=payload)
+    print(f"🔍 DEBUG: Status Code Motornet = {response.status_code}")
+    print(f"🔍 DEBUG: Risposta Motornet = {response.text}")  
 
     if response.status_code == 200:
         return response.json().get("access_token")
