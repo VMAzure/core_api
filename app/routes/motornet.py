@@ -79,3 +79,41 @@ async def get_marche(Authorize: AuthJWT = Depends(), db: Session = Depends(get_d
         return marche_pulite
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero delle marche")
+
+@router.get("/modelli/{codice_marca}", tags=["Motornet"])
+async def get_modelli(codice_marca: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    """Recupera la lista dei modelli per una marca specifica"""
+    Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    token = get_motornet_token()  # 🔹 Otteniamo il token da Motornet
+
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/marca/modelli?codice_marca={codice_marca}"
+
+    response = requests.get(motornet_url, headers=headers)
+
+    print(f"🔍 DEBUG: Risposta Motornet Modelli: {response.text}")  # 🔹 Stampa la risposta ricevuta
+
+    if response.status_code == 200:
+        data = response.json()
+
+        # Estraggo solo i dati utili
+        modelli_puliti = [
+            {
+                "codice": modello.get("codice"),
+                "descrizione": modello.get("descrizione")
+            }
+            for modello in data.get("modelli", [])
+        ]
+
+        return modelli_puliti
+
+    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero dei modelli")
