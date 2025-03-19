@@ -108,12 +108,13 @@ async def get_modelli(codice_marca: str, Authorize: AuthJWT = Depends(), db: Ses
 
         # Estraggo solo i dati utili
         modelli_puliti = [
-            {
-                "codice": modello.get("codice"),
-                "descrizione": modello.get("descrizione")
-            }
-            for modello in data.get("modelli", [])  # 🔹 Verifichiamo se "modelli" esiste
-        ]
+    {
+        "codice": modello["gammaModello"]["codice"] if modello.get("gammaModello") else None,
+        "descrizione": modello["gammaModello"]["descrizione"] if modello.get("gammaModello") else None
+    }
+    for modello in data.get("modelli", [])
+]
+
 
         return modelli_puliti
 
