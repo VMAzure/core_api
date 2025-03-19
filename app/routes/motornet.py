@@ -90,7 +90,7 @@ async def get_modelli(codice_marca: str, Authorize: AuthJWT = Depends(), db: Ses
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    token = get_motornet_token()  # 🔹 Otteniamo il token da Motornet
+    token = get_motornet_token()  # 🔹 Otteniamo il token da Motornet prima della richiesta
 
     headers = {
         "Authorization": f"Bearer {token}"
@@ -117,3 +117,4 @@ async def get_modelli(codice_marca: str, Authorize: AuthJWT = Depends(), db: Ses
         return modelli_puliti
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero dei modelli")
+
