@@ -20,28 +20,45 @@ MOTORN_MARCHE_URL = "https://webservice.motornet.it/api/v3_0/rest/public/usato/a
 MOTORN_CLIENT_ID = "azure447"
 MOTORN_CLIENT_SECRET = "azwsn557"
 
+import time
+
+cached_token = None
+token_expiry = 0
+
 def get_motornet_token():
-    """Ottiene il token di accesso da Motornet"""
+    """Ottiene e memorizza il token di accesso da Motornet per evitare richieste ripetute"""
+    global cached_token, token_expiry
+
+    # Se abbiamo un token valido, lo riutilizziamo
+    if cached_token and time.time() < token_expiry:
+        print("🔍 DEBUG: Riutilizzo token esistente")
+        return cached_token
+
     headers = {
         "Content-Type": "application/x-www-form-urlencoded"
     }
 
     payload = {
-        "grant_type": "password",
-        "client_id": "webservice",
-        "username": MOTORN_CLIENT_ID,
-        "password": MOTORN_CLIENT_SECRET
+        "grant_type": "client_credentials",
+        "client_id": MOTORN_CLIENT_ID,
+        "client_secret": MOTORN_CLIENT_SECRET
     }
 
     response = requests.post(MOTORN_AUTH_URL, headers=headers, data=payload)
 
-    print(f"🔍 DEBUG: Status Code Motornet = {response.status_code}")
-    print(f"🔍 DEBUG: Risposta Motornet = {response.text}")  # 🔹 Stampiamo la risposta per debug
+    print(f"🔍 DEBUG: Status Code Token Motornet = {response.status_code}")
 
     if response.status_code == 200:
-        return response.json().get("access_token")
+        token_data = response.json()
+        cached_token = token_data.get("access_token")
+        token_expiry = time.time() + token_data.get("expires_in", 300) - 10  # Riduciamo 10 sec per sicurezza
+
+        print(f"🔍 DEBUG: Nuovo token salvato: {cached_token}")
+        return cached_token
     
+    print(f"❌ DEBUG: Errore nel recupero del token: {response.text}")
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero del token")
+
 
 @router.get("/marche", tags=["Motornet"])
 async def get_marche(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
