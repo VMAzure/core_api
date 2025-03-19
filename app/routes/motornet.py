@@ -1,6 +1,6 @@
 ﻿from fastapi import APIRouter, HTTPException, Depends
 import requests
-from auth import get_current_user  # 🔹 Importiamo la funzione per verificare il token CoreAPI
+from app.routes.auth import get_current_user 
 
 motornet_router = APIRouter()
 
