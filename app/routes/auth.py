@@ -23,7 +23,6 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 300
-print(f"🔍 DEBUG: SECRET_KEY usata per firmare: {SECRET_KEY}")
 
 
 # OAuth2 per gestione token
