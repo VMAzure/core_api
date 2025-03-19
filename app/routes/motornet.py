@@ -110,10 +110,17 @@ async def get_modelli(codice_marca: str, Authorize: AuthJWT = Depends(), db: Ses
         modelli_puliti = [
     {
         "codice": modello["gammaModello"]["codice"] if modello.get("gammaModello") else None,
-        "descrizione": modello["gammaModello"]["descrizione"] if modello.get("gammaModello") else None
+        "descrizione": modello["gammaModello"]["descrizione"] if modello.get("gammaModello") else None,
+        "inizio_produzione": modello.get("inizioProduzione"),
+        "fine_produzione": modello.get("fineProduzione"),
+        "gruppo_storico": modello["gruppoStorico"]["descrizione"] if modello.get("gruppoStorico") else None,
+        "serie_gamma": modello["serieGamma"]["descrizione"] if modello.get("serieGamma") else None,
+        "codice_desc_modello": modello["codDescModello"]["codice"] if modello.get("codDescModello") else None,
+        "descrizione_dettagliata": modello["codDescModello"]["descrizione"] if modello.get("codDescModello") else None
     }
     for modello in data.get("modelli", [])
 ]
+
 
 
         return modelli_puliti
