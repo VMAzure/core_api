@@ -44,6 +44,7 @@ from app.routes.motornet import router as motornet_router
 
 
 
+
 # ✅ Configuriamo il logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
 logger = logging.getLogger("uvicorn")
@@ -130,6 +131,8 @@ app.include_router(status.router, prefix="/api")
 app.include_router(smtp_router, prefix="/api")
 app.include_router(site_settings_router, prefix="/api")
 app.include_router(motornet_router, prefix="/api/motornet")
+app.include_router(motornet_router, prefix="/api/motornet", tags=["Motornet"])
+
 
 
 
