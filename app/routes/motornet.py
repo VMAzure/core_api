@@ -1,7 +1,11 @@
 ﻿from fastapi import APIRouter, HTTPException, Depends
-from fastapi_jwt_auth import AuthJWT
 import requests
-from app.routes.auth import get_current_user 
+from fastapi_jwt_auth import AuthJWT
+from sqlalchemy.orm import Session
+from app.routes.auth import get_current_user
+from app.database import get_db  # ✅ Import corretto per il DB
+from app.models import User  # ✅ Import del modello User se necessario
+
 
 router = APIRouter()
 
