@@ -127,4 +127,48 @@ async def get_modelli(codice_marca: str, Authorize: AuthJWT = Depends(), db: Ses
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero dei modelli")
 
+@router.get("/allestimenti/{codice_marca}/{codice_modello}", tags=["Motornet"])
+async def get_allestimenti(codice_marca: str, codice_modello: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    """Recupera la lista degli allestimenti per un modello specifico"""
+    Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    token = get_motornet_token()  # 🔹 Otteniamo il token da Motornet prima della richiesta
+
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/modello/versioni?codice_modello={codice_modello}&codice_marca={codice_marca}"
+
+    response = requests.get(motornet_url, headers=headers)
+
+    print(f"🔍 DEBUG: Risposta Motornet Allestimenti: {response.text}")  # 🔹 Stampa la risposta ricevuta
+
+    if response.status_code == 200:
+        data = response.json()
+
+        # Estraggo solo i dati utili
+        allestimenti_puliti = [
+            {
+                "codice_univoco": versione.get("codiceMotornetUnivoco"),
+                "versione": versione.get("versione"),
+                "prezzo_vendita": versione.get("prezzoVendita"),
+                "tipo": versione.get("tipo"),
+                "porte": versione.get("porte"),
+                "inizio_produzione": versione.get("inizioProduzione"),
+                "fine_produzione": versione.get("fineProduzione")
+            }
+            for versione in data.get("versioni", [])
+        ]
+
+        return allestimenti_puliti
+
+    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero degli allestimenti")
+
+
 
