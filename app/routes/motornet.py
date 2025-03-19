@@ -2,7 +2,7 @@
 import requests
 from app.routes.auth import get_current_user 
 
-motornet_router = APIRouter()
+router = APIRouter()
 
 # Configurazioni API Motornet
 MOTORN_API_BASE_URL = "https://webservice.motornet.it/api/v3_0/rest"
