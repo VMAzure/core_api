@@ -302,7 +302,7 @@ async def get_marche_per_anno(anno: int, Authorize: AuthJWT = Depends(), db: Ses
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero delle marche per l'anno specificato")
 
- @router.get("/accessori/{codice_motornet}/{anno}/{mese}", tags=["Motornet"])
+@router.get("/accessori/{codice_motornet}/{anno}/{mese}", tags=["Motornet"])
 async def get_accessori_auto(
     codice_motornet: str,
     anno: int,
