@@ -130,7 +130,8 @@ app.include_router(nlt_router, prefix="")
 app.include_router(status.router, prefix="/api")
 app.include_router(smtp_router, prefix="/api")
 app.include_router(site_settings_router, prefix="/api")
-app.include_router(motornet_router, prefix="/api/motornet")
+app.include_router(motornet_router, prefix="/api/usato/motornet", tags=["Motornet Usato"])
+
 
 
 
