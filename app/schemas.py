@@ -1,7 +1,8 @@
 ﻿# schemas.py
 from pydantic import BaseModel, EmailStr, root_validator 
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
+
 
 
 class UserBase(BaseModel):
@@ -111,3 +112,18 @@ class SitePageSchema(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class AutoUsataCreate(BaseModel):
+    targa: str
+    anno_immatricolazione: int
+    data_passaggio_proprieta: Optional[date]
+    km_certificati: int
+    data_ultimo_intervento: Optional[date]
+    descrizione_ultimo_intervento: Optional[str]
+    cronologia_tagliandi: bool
+    doppie_chiavi: bool
+    codice_motornet: str
+    colore: Optional[str]
+    prezzo_costo: float
+    prezzo_vendita: float
