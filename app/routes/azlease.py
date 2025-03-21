@@ -396,4 +396,3 @@ async def get_dettagli_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: S
     "immagini": [img.foto for img in immagini],
     "danni": [{"foto": d.foto, "valore_perizia": d.valore_perizia, "descrizione": d.descrizione} for d in danni]
 }
-
