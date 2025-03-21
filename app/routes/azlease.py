@@ -2,7 +2,8 @@
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db
-from app.models import User, AZUsatoInsertRequest, AutoUsataCreate
+from app.models import User, AZUsatoInsertRequest
+from app.schemas import AutoUsataCreate
 import uuid
 from datetime import datetime
 
