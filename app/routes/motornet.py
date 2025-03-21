@@ -189,17 +189,18 @@ async def get_allestimenti(codice_marca: str, codice_modello: str, Authorize: Au
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero degli allestimenti")
 
+import httpx
+
 @router.get("/dettagli/{codice_motornet}", tags=["Motornet"])
 async def get_dettagli_auto(codice_motornet: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    """Recupera tutti i dettagli di un'auto specifica tramite il codice Motornet univoco"""
-    Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
+    Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    token = get_motornet_token()  # 🔹 Otteniamo il token da Motornet prima della richiesta
+    token = get_motornet_token()
 
     headers = {
         "Authorization": f"Bearer {token}"
@@ -207,15 +208,16 @@ async def get_dettagli_auto(codice_motornet: str, Authorize: AuthJWT = Depends()
 
     motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/dettaglio?codice_motornet_uni={codice_motornet}"
 
-    response = requests.get(motornet_url, headers=headers)
+    async with httpx.AsyncClient() as client:
+        response = await client.get(motornet_url, headers=headers)
 
-    print(f"🔍 DEBUG: Risposta Motornet Dettagli Auto: {response.text}")  # 🔹 Stampa la risposta ricevuta
+    print(f"🔍 DEBUG: Risposta Motornet Dettagli Auto: {response.text}")
 
     if response.status_code == 200:
-        data = response.json()
-        return data  # 🔹 Restituiamo tutti i dati ricevuti senza modificarli
+        return response.json()
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero dei dettagli del veicolo")
+
 
 
 @router.get("/valutazione/{codice_motornet}/{anno_immatricolazione}/{mese_immatricolazione}", tags=["Motornet"])
