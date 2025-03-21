@@ -27,6 +27,7 @@ async def inserisci_auto_usata(
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
 
     # 🔁 Determina admin_id e dealer_id in base al ruolo
+    # 🔁 Determina admin_id e dealer_id in base al ruolo
     dealer_id = None
     admin_id = None
 
@@ -35,9 +36,6 @@ async def inserisci_auto_usata(
         admin_id = str(user.parent_id)
     else:  # admin o superadmin
         admin_id = str(user.id)
-
-    # 1️⃣ Inserisci in AZLease_UsatoIN
-    from sqlalchemy import text
 
     # 1️⃣ Inserisci in AZLease_UsatoIN
     usatoin_id = uuid.uuid4()
@@ -50,7 +48,7 @@ async def inserisci_auto_usata(
         )
     """), {
         "id": str(usatoin_id),
-        "dealer_id": dealer_id,
+        "dealer_id": dealer_id if dealer_id else None,  # Gestisci il None in modo esplicito
         "admin_id": admin_id,
         "inserimento": datetime.utcnow(),
         "modifica": datetime.utcnow(),
@@ -58,32 +56,6 @@ async def inserisci_auto_usata(
         "vendita": payload.prezzo_vendita
     })
 
-    # 2️⃣ Inserisci in AZLease_UsatoAuto
-    auto_id = uuid.uuid4()
-    db.execute(text("""
-        INSERT INTO azlease_usatoauto (
-            id, targa, anno_immatricolazione, data_passaggio_proprieta, km_certificati,
-            data_ultimo_intervento, descrizione_ultimo_intervento, cronologia_tagliandi, doppie_chiavi,
-            codice_motornet, colore, id_usatoin
-        ) VALUES (
-            :id, :targa, :anno, :passaggio, :km,
-            :intervento_data, :intervento_desc, :tagliandi, :chiavi,
-            :codice, :colore, :usatoin_id
-        )
-    """), {
-        "id": str(auto_id),
-        "targa": payload.targa,
-        "anno": payload.anno_immatricolazione,
-        "passaggio": payload.data_passaggio_proprieta,
-        "km": payload.km_certificati,
-        "intervento_data": payload.data_ultimo_intervento,
-        "intervento_desc": payload.descrizione_ultimo_intervento,
-        "tagliandi": payload.cronologia_tagliandi,
-        "chiavi": payload.doppie_chiavi,
-        "codice": payload.codice_motornet,
-        "colore": payload.colore,
-        "usatoin_id": str(usatoin_id)
-    })
 
     db.commit()
 
