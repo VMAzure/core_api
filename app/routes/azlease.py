@@ -429,14 +429,22 @@ async def aggiorna_stato_auto_usata(
             UPDATE azlease_usatoin
             SET opzionato_da = :user_id, opzionato_il = :data
             WHERE id = :id_usatoin
-        """), {"user_id": str(user.id), "data": now, "id_usatoin": id_usatoin})
+        """), {
+            "user_id": str(uuid.UUID(str(user.id))),
+            "data": now,
+            "id_usatoin": id_usatoin
+        })
 
     elif azione == "vendita":
         db.execute(text("""
             UPDATE azlease_usatoin
             SET venduto_da = :user_id, venduto_il = :data
             WHERE id = :id_usatoin
-        """), {"user_id": str(user.id), "data": now, "id_usatoin": id_usatoin})
+        """), {
+            "user_id": str(uuid.UUID(str(user.id))),
+            "data": now,
+            "id_usatoin": id_usatoin
+        })
 
     elif azione == "elimina":
         db.execute(text("""
@@ -447,6 +455,7 @@ async def aggiorna_stato_auto_usata(
 
     else:
         raise HTTPException(status_code=400, detail="Azione non valida. Usa: opzione, vendita, elimina")
+
 
     db.commit()
 
