@@ -34,6 +34,8 @@ from app.tasks import scheduler
 from app.routes.smtp_settings import router as smtp_router
 from app.routes.site_settings import router as site_settings_router
 from app.routes.motornet import router as motornet_router
+from app.routes.azlease import router as azlease_router
+
 
 
 
@@ -131,6 +133,9 @@ app.include_router(status.router, prefix="/api")
 app.include_router(smtp_router, prefix="/api")
 app.include_router(site_settings_router, prefix="/api")
 app.include_router(motornet_router, prefix="/api/usato/motornet")
+app.include_router(azlease_router, prefix="/api/azlease", tags=["AZLease"])
+
+
 
 
 
