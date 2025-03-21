@@ -7,6 +7,8 @@ from app.schemas import AutoUsataCreate
 import uuid
 from datetime import datetime
 from sqlalchemy import text
+import requests
+
 
 router = APIRouter()
 
@@ -81,6 +83,54 @@ async def inserisci_auto_usata(
         "colore": payload.colore,
         "usatoin_id": str(usatoin_id)  # Assicurati che usatoin_id sia passato come stringa, se richiesto dal database
     })
+
+     # 🌐 Richiesta API esterna per i dettagli auto
+    url = f"https://coreapi-production-ca29.up.railway.app/api/usato/motornet/dettagli/{payload.codice_motornet}"
+    response = requests.get(url)
+
+    if response.status_code != 200:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="Errore recupero dettagli auto da Motornet.")
+
+    dettagli = response.json()
+
+    dettagli_id = uuid.uuid4()
+
+    # ✅ Inserimento dettagli in AZLease_UsatoAutoDetails
+    insert_query = text("""
+        INSERT INTO azlease_usatoautodetails (
+            id, auto_id, codice_motornet, codice_modello, modello, allestimento, immagine,
+            codice_costruttore, codice_motore, data_listino, prezzo_listino, prezzo_accessori,
+            marca_nome, marca_acronimo, gamma_codice, gamma_descrizione, gruppo_storico,
+            serie_gamma, categoria, segmento, tipo, tipo_motore, descrizione_motore, euro,
+            cilindrata, cavalli_fiscali, hp, kw, emissioni_co2, consumo_urbano, consumo_extraurbano,
+            consumo_medio, accelerazione, velocita_max, descrizione_marce, cambio, trazione, passo,
+            porte, posti, altezza, larghezza, lunghezza, bagagliaio, pneumatici_anteriori,
+            pneumatici_posteriori, coppia, numero_giri, cilindri, valvole, peso, peso_vuoto,
+            massa_p_carico, portata, tipo_guida, neo_patentati, alimentazione, architettura,
+            ricarica_standard, ricarica_veloce, sospensioni_pneumatiche, emissioni_urbe,
+            emissioni_extraurb, created_at
+        ) VALUES (
+            :id, :auto_id, :codice_motornet, :codice_modello, :modello, :allestimento, :immagine,
+            :codice_costruttore, :codice_motore, :data_listino, :prezzo_listino, :prezzo_accessori,
+            :marca_nome, :marca_acronimo, :gamma_codice, :gamma_descrizione, :gruppo_storico,
+            :serie_gamma, :categoria, :segmento, :tipo, :tipo_motore, :descrizione_motore, :euro,
+            :cilindrata, :cavalli_fiscali, :hp, :kw, :emissioni_co2, :consumo_urbano, :consumo_extraurbano,
+            :consumo_medio, :accelerazione, :velocita_max, :descrizione_marce, :cambio, :trazione, :passo,
+            :porte, :posti, :altezza, :larghezza, :lunghezza, :bagagliaio, :pneumatici_anteriori,
+            :pneumatici_posteriori, :coppia, :numero_giri, :cilindri, :valvole, :peso, :peso_vuoto,
+            :massa_p_carico, :portata, :tipo_guida, :neo_patentati, :alimentazione, :architettura,
+            :ricarica_standard, :ricarica_veloce, :sospensioni_pneumatiche, :emissioni_urbe,
+            :emissioni_extraurb, :created_at
+        )
+    """)
+
+    dettagli["id"] = str(dettagli_id)
+    dettagli["auto_id"] = str(auto_id)
+    dettagli["created_at"] = datetime.utcnow()
+
+    # 🚩 Esegui inserimento dettagli
+    db.execute(insert_query, dettagli)
 
     db.commit()
 
