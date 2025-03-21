@@ -38,19 +38,6 @@ from app.routes.azlease import router as azlease_router
 from app.schemas import AutoUsataCreate
 
 
-app.openapi = custom_openapi
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://corewebapp-azcore.up.railway.app",
-        "https://cigpdfgenerator-production.up.railway.app",
-        "http://localhost"
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"]
-)
 
 # ✅ Configuriamo il logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
@@ -109,6 +96,23 @@ def custom_openapi():
     openapi_schema["security"] = [{"BearerAuth": []}]
     app.openapi_schema = openapi_schema
     return app.openapi_schema
+
+app.openapi = custom_openapi
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://corewebapp-azcore.up.railway.app",
+        "https://cigpdfgenerator-production.up.railway.app",
+        "https://localhost:7125",  # 👈 questo è il punto chiave
+        "http://localhost:7125",   # 👈 aggiungilo anche se usi http
+        "http://localhost",        # per sicurezza
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"]
+)
+
 
 
 # ✅ Inclusione delle route (senza prefisso duplicato)
