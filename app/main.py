@@ -103,7 +103,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://corewebapp-azcore.up.railway.app",
-        "https://cigpdfgenerator-production.up.railway.app"
+        "https://cigpdfgenerator-production.up.railway.app",
+        "http://localhost",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
