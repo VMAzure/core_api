@@ -23,23 +23,39 @@ async def inserisci_auto_usata(
 
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
-    if user.role != "dealer":
-        raise HTTPException(status_code=403, detail="Solo i dealer possono inserire veicoli")
+    if user.role not in ["dealer", "admin", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Ruolo non autorizzato per questa operazione")
+
+    # Determina admin_id e dealer_id dinamicamente
+    dealer_id = None
+    admin_id = None
+
+    if user.role == "dealer":
+        dealer_id = user.id
+        admin_id = user.parent_id
+    elif user.role in ["admin", "superadmin"]:
+        admin_id = user.id
+
 
     # 1️⃣ Inserisci in AZLease_UsatoIN
     usatoin_id = uuid.uuid4()
     db.execute("""
-        INSERT INTO azlease_usatoin (id, dealer_id, admin_id, data_inserimento, data_ultima_modifica, prezzo_costo, prezzo_vendita)
-        VALUES (:id, :dealer_id, :admin_id, :inserimento, :modifica, :costo, :vendita)
-    """, {
-        "id": str(usatoin_id),
-        "dealer_id": str(user.id),
-        "admin_id": str(user.parent_id),
-        "inserimento": datetime.utcnow(),
-        "modifica": datetime.utcnow(),
-        "costo": payload.prezzo_costo,
-        "vendita": payload.prezzo_vendita
-    })
+    INSERT INTO azlease_usatoin (
+        id, dealer_id, admin_id, data_inserimento, data_ultima_modifica, prezzo_costo, prezzo_vendita
+    )
+    VALUES (
+        :id, :dealer_id, :admin_id, :inserimento, :modifica, :costo, :vendita
+    )
+""", {
+    "id": str(usatoin_id),
+    "dealer_id": str(dealer_id) if dealer_id else None,
+    "admin_id": str(admin_id),
+    "inserimento": datetime.utcnow(),
+    "modifica": datetime.utcnow(),
+    "costo": payload.prezzo_costo,
+    "vendita": payload.prezzo_vendita
+})
+
 
     # 2️⃣ Inserisci in AZLease_UsatoAuto
     auto_id = uuid.uuid4()
