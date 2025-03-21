@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+ï»¿from fastapi import APIRouter, Depends, HTTPException
 from fastapi_jwt_auth import AuthJWT
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -8,7 +8,7 @@ router = APIRouter()
 
 @router.get("/ping", tags=["AZLease"])
 async def ping_azlease(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    """Ping protetto per verificare se il modulo azlease è attivo"""
+    """Ping protetto per verificare se il modulo azlease Ã¨ attivo"""
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
@@ -16,4 +16,4 @@ async def ping_azlease(Authorize: AuthJWT = Depends(), db: Session = Depends(get
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    return {"message": "AZLease è attivo!", "utente": user.email}
+    return {"message": "AZLease Ã¨ attivo!", "utente": user.email}
