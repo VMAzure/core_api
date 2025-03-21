@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, date
 from passlib.context import CryptContext
 from app.database import Base  # Manteniamo solo Base senza importare engine
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, List
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
@@ -259,6 +259,10 @@ class SitePages(Base):
 
     parent_page = relationship("SitePages", remote_side=[id], backref="sub_pages")
 
+class Danno(BaseModel):
+    foto: str
+    valore_perizia: float
+    descrizione: str
  
 
 class AZUsatoInsertRequest(BaseModel):
@@ -274,6 +278,9 @@ class AZUsatoInsertRequest(BaseModel):
     colore: Optional[str]
     prezzo_costo: float
     prezzo_vendita: float
+    immagini: List[str]  # URL immagini auto
+    danni: List[Danno]   # Lista danni
+
 
 
 

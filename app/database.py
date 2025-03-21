@@ -2,6 +2,7 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
+from supabase import create_client
 
 # Otteniamo DATABASE_URL dal file di configurazione
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -18,6 +19,11 @@ Base = declarative_base()
 
 # Creiamo una session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Configurazione Supabase Client
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Importiamo i modelli per assicurarci che siano registrati prima della creazione delle tabelle
 from app import models

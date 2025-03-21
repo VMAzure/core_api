@@ -1,7 +1,7 @@
-﻿from fastapi import Depends, HTTPException, APIRouter
+﻿from fastapi import Depends, HTTPException, APIRouter, UploadFile, File, status
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
-from app.database import get_db
+from app.database import get_db, supabase_client, SUPABASE_URL
 from app.models import User, AZUsatoInsertRequest
 from app.schemas import AutoUsataCreate
 import uuid
@@ -9,8 +9,6 @@ from datetime import datetime
 from sqlalchemy import text
 import requests
 import httpx
-
-
 
 router = APIRouter()
 
@@ -210,3 +208,56 @@ async def inserisci_auto_usata(
         "id_auto": str(auto_id),
         "id_inserimento": str(usatoin_id)
     }
+
+@router.post("/foto-usato", tags=["AZLease"])
+async def upload_foto_usato(
+    auto_id: str,
+    file: UploadFile = File(...),
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utente non autorizzato")
+
+    if file.content_type not in ["image/png", "image/jpeg", "image/jpg"]:
+        raise HTTPException(status_code=400, detail="Formato immagine non supportato")
+
+    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    file_name = f"auto-usate/{auto_id}_{timestamp}_{file.filename}"
+
+    try:
+        content = await file.read()
+
+        # Upload su Supabase bucket "auto-usate"
+        supabase_client.storage.from_("auto-usate").upload(
+            file_name,
+            content,
+            {"content-type": file.content_type}
+        )
+
+        # URL pubblico
+        image_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_name}"
+
+        # Inserisci URL nella tabella AZLease_UsatoIMG
+        img_id = str(uuid.uuid4())
+        db.execute(text("""
+            INSERT INTO azlease_usatoimg (id, auto_id, foto)
+            VALUES (:id, :auto_id, :foto)
+        """), {
+            "id": img_id,
+            "auto_id": auto_id,
+            "foto": image_url
+        })
+
+        db.commit()
+
+        return {"message": "Immagine caricata con successo", "image_url": image_url}
+
+    except Exception as e:
+        print(f"❌ Errore durante l'upload su Supabase: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
