@@ -319,3 +319,4 @@ async def upload_foto_usato(
             print(f"❌ Errore durante upload della perizia su Supabase: {e}")
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+
