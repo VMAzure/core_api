@@ -1,13 +1,12 @@
 from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func, Boolean
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, date
 from passlib.context import CryptContext
 from app.database import Base  # Manteniamo solo Base senza importare engine
 from typing import TYPE_CHECKING, Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
-
 
 
 if TYPE_CHECKING:
@@ -259,6 +258,23 @@ class SitePages(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     parent_page = relationship("SitePages", remote_side=[id], backref="sub_pages")
+
+ 
+
+class AutoUsataInput(BaseModel):
+    targa: str
+    anno_immatricolazione: int
+    data_passaggio_proprieta: Optional[date]
+    km_certificati: Optional[int]
+    data_ultimo_intervento: Optional[date]
+    descrizione_ultimo_intervento: Optional[str]
+    cronologia_tagliandi: Optional[bool] = False
+    doppie_chiavi: Optional[bool] = False
+    codice_motornet: Optional[str]
+    colore: Optional[str]
+    prezzo_costo: Optional[float]
+    prezzo_vendita: Optional[float]
+
 
 
 
