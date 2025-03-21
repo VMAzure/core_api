@@ -378,8 +378,8 @@ async def get_dettagli_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: S
     """), {"auto_id": auto_id}).fetchall()
 
     return {
-        "auto": dict(auto) if auto else {},
-        "dettagli": dict(dettagli) if dettagli else {},
+        "auto": dict(auto._mapping) if auto else {},
+        "dettagli": dict(dettagli._mapping) if dettagli else {},
         "immagini": [img.foto for img in immagini],
         "danni": [{"foto": d.foto, "valore_perizia": d.valore_perizia, "descrizione": d.descrizione} for d in danni]
     }
