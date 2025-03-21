@@ -35,6 +35,8 @@ from app.routes.smtp_settings import router as smtp_router
 from app.routes.site_settings import router as site_settings_router
 from app.routes.motornet import router as motornet_router
 from app.routes.azlease import router as azlease_router
+from app.schemas import AutoUsataCreate
+
 
 
 # ✅ Configuriamo il logging
