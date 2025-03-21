@@ -54,7 +54,12 @@ async def inserisci_auto_usata(
         "inserimento": datetime.utcnow(),
         "modifica": datetime.utcnow(),
         "costo": payload.prezzo_costo,
-        "vendita": payload.prezzo_vendita
+        "vendita": payload.prezzo_vendita,
+        "opzionato_da": payload.opzionato_da,
+        "opzionato_il": payload.opzionato_il,
+        "venduto_da": payload.venduto_da,
+        "venduto_il": payload.venduto_il,
+        "visibile": payload.visibile
     })
 
     # 2️⃣ Inserisci in AZLease_UsatoAuto
@@ -362,6 +367,13 @@ async def get_dettagli_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: S
     if not auto:
         raise HTTPException(status_code=404, detail="Auto non trovata")
 
+    # 5️⃣ Recupera TUTTI i dati da azlease_usatoin
+    inserimento = db.execute(text("""
+        SELECT * FROM azlease_usatoin
+        WHERE id = (SELECT id_usatoin FROM azlease_usatoauto WHERE id = :auto_id)
+    """), {"auto_id": auto_id}).fetchone()
+
+
     # 2️⃣ Recupera i dettagli tecnici
     dettagli = db.execute(text("""
         SELECT * FROM azlease_usatoautodetails WHERE auto_id = :auto_id
@@ -378,8 +390,10 @@ async def get_dettagli_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: S
     """), {"auto_id": auto_id}).fetchall()
 
     return {
-        "auto": dict(auto._mapping) if auto else {},
-        "dettagli": dict(dettagli._mapping) if dettagli else {},
-        "immagini": [img.foto for img in immagini],
-        "danni": [{"foto": d.foto, "valore_perizia": d.valore_perizia, "descrizione": d.descrizione} for d in danni]
-    }
+    "inserimento": dict(inserimento._mapping) if inserimento else {},
+    "auto": dict(auto._mapping) if auto else {},
+    "dettagli": dict(dettagli._mapping) if dettagli else {},
+    "immagini": [img.foto for img in immagini],
+    "danni": [{"foto": d.foto, "valore_perizia": d.valore_perizia, "descrizione": d.descrizione} for d in danni]
+}
+

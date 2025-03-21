@@ -280,7 +280,11 @@ class AZUsatoInsertRequest(BaseModel):
     prezzo_vendita: float
     immagini: Optional[List[str]] = []
     danni: Optional[List[Danno]] = []
-
+    opzionato_da: Optional[str] = None
+    opzionato_il: Optional[str] = None
+    venduto_da: Optional[str] = None
+    venduto_il: Optional[str] = None
+    visibile: Optional[bool] = True
 
 
 
