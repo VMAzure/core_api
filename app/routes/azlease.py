@@ -27,15 +27,18 @@ async def inserisci_auto_usata(
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
 
     # 🔁 Determina admin_id e dealer_id in base al ruolo
-    # 🔁 Determina admin_id e dealer_id in base al ruolo
+    # Determina admin_id e dealer_id in base al ruolo
     dealer_id = None
     admin_id = None
 
     if user.role == "dealer":
-        dealer_id = str(user.id)
-        admin_id = str(user.parent_id)
+        dealer_id = str(user.id)  # Assicurati che questo sia un UUID
+        admin_id = str(user.parent_id)  # Qui user.parent_id dovrebbe essere un UUID, ma lo convertirò in str per coerenza
     else:  # admin o superadmin
         admin_id = str(user.id)
+
+    # Aggiungi una conversione esplicita in UUID
+    admin_id = uuid.UUID(admin_id)  # Converti admin_id in UUID, se necessario
 
     # 1️⃣ Inserisci in AZLease_UsatoIN
     usatoin_id = uuid.uuid4()
@@ -49,12 +52,13 @@ async def inserisci_auto_usata(
     """), {
         "id": str(usatoin_id),
         "dealer_id": dealer_id if dealer_id else None,  # Gestisci il None in modo esplicito
-        "admin_id": admin_id,
+        "admin_id": admin_id,  # Ora admin_id è un UUID
         "inserimento": datetime.utcnow(),
         "modifica": datetime.utcnow(),
         "costo": payload.prezzo_costo,
         "vendita": payload.prezzo_vendita
     })
+
 
 
     db.commit()
