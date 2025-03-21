@@ -320,3 +320,66 @@ async def upload_perizia_usato(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
 
+
+@router.get("/foto-usato/{auto_id}", tags=["AZLease"])
+async def get_foto_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    """Restituisce la lista di immagini associate a un'auto."""
+    Authorize.jwt_required()
+
+    immagini = db.execute(text("""
+        SELECT id, foto FROM azlease_usatoimg WHERE auto_id = :auto_id
+    """), {"auto_id": auto_id}).fetchall()
+
+    return {"auto_id": auto_id, "immagini": [{"id": img.id, "foto_url": img.foto} for img in immagini]}
+
+@router.get("/perizie-usato/{auto_id}", tags=["AZLease"])
+async def get_perizie_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    """Restituisce la lista di danni associati a un'auto."""
+    Authorize.jwt_required()
+
+    danni = db.execute(text("""
+        SELECT id, foto, valore_perizia, descrizione FROM azlease_usatodanni WHERE auto_id = :auto_id
+    """), {"auto_id": auto_id}).fetchall()
+
+    return {
+        "auto_id": auto_id,
+        "danni": [
+            {"id": d.id, "foto_url": d.foto, "valore_perizia": d.valore_perizia, "descrizione": d.descrizione}
+            for d in danni
+        ]
+    }
+
+@router.get("/dettagli-usato/{auto_id}", tags=["AZLease"])
+async def get_dettagli_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    """Restituisce tutti i dettagli completi di un'auto usata."""
+    Authorize.jwt_required()
+
+    # 1️⃣ Recupera i dati dell'auto
+    auto = db.execute(text("""
+        SELECT * FROM azlease_usatoauto WHERE id = :auto_id
+    """), {"auto_id": auto_id}).fetchone()
+
+    if not auto:
+        raise HTTPException(status_code=404, detail="Auto non trovata")
+
+    # 2️⃣ Recupera i dettagli tecnici
+    dettagli = db.execute(text("""
+        SELECT * FROM azlease_usatoautodetails WHERE auto_id = :auto_id
+    """), {"auto_id": auto_id}).fetchone()
+
+    # 3️⃣ Recupera le immagini
+    immagini = db.execute(text("""
+        SELECT foto FROM azlease_usatoimg WHERE auto_id = :auto_id
+    """), {"auto_id": auto_id}).fetchall()
+
+    # 4️⃣ Recupera i danni
+    danni = db.execute(text("""
+        SELECT foto, valore_perizia, descrizione FROM azlease_usatodanni WHERE auto_id = :auto_id
+    """), {"auto_id": auto_id}).fetchall()
+
+    return {
+        "auto": dict(auto) if auto else {},
+        "dettagli": dict(dettagli) if dettagli else {},
+        "immagini": [img.foto for img in immagini],
+        "danni": [{"foto": d.foto, "valore_perizia": d.valore_perizia, "descrizione": d.descrizione} for d in danni]
+    }
