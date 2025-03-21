@@ -1,4 +1,4 @@
-﻿from fastapi import Depends, HTTPException, APIRouter, UploadFile, File, status
+﻿from fastapi import Depends, HTTPException, APIRouter, UploadFile, File, status, Body
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db, supabase_client, SUPABASE_URL
@@ -396,3 +396,58 @@ async def get_dettagli_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: S
     "immagini": [img.foto for img in immagini],
     "danni": [{"foto": d.foto, "valore_perizia": d.valore_perizia, "descrizione": d.descrizione} for d in danni]
 }
+
+@router.put("/stato-usato/{id_auto}", tags=["AZLease"])
+async def aggiorna_stato_auto_usata(
+    id_auto: str,
+    payload: dict = Body(...),
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    azione = payload.get("azione")
+
+    # Recupera ID inserimento (usatoin) collegato a quest'auto
+    result = db.execute(text("""
+        SELECT id_usatoin FROM azlease_usatoauto WHERE id = :auto_id
+    """), {"auto_id": id_auto}).fetchone()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Auto non trovata")
+
+    id_usatoin = result.id_usatoin
+    now = datetime.utcnow()
+
+    if azione == "opzione":
+        db.execute(text("""
+            UPDATE azlease_usatoin
+            SET opzionato_da = :user_id, opzionato_il = :data
+            WHERE id = :id_usatoin
+        """), {"user_id": str(user.id), "data": now, "id_usatoin": id_usatoin})
+
+    elif azione == "vendita":
+        db.execute(text("""
+            UPDATE azlease_usatoin
+            SET venduto_da = :user_id, venduto_il = :data
+            WHERE id = :id_usatoin
+        """), {"user_id": str(user.id), "data": now, "id_usatoin": id_usatoin})
+
+    elif azione == "elimina":
+        db.execute(text("""
+            UPDATE azlease_usatoin
+            SET visibile = false
+            WHERE id = :id_usatoin
+        """), {"id_usatoin": id_usatoin})
+
+    else:
+        raise HTTPException(status_code=400, detail="Azione non valida. Usa: opzione, vendita, elimina")
+
+    db.commit()
+
+    return {"message": f"Stato aggiornato con successo ({azione})"}
