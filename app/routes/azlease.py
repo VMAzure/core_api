@@ -1,11 +1,10 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import Depends, HTTPException, APIRouter
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db
 from app.models import User, AZUsatoInsertRequest, AutoUsataCreate
 import uuid
 from datetime import datetime
-
 
 
 router = APIRouter()
