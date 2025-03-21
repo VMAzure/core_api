@@ -261,19 +261,19 @@ class SitePages(Base):
 
  
 
-class AutoUsataInput(BaseModel):
+class AZUsatoInsertRequest(BaseModel):
     targa: str
     anno_immatricolazione: int
     data_passaggio_proprieta: Optional[date]
-    km_certificati: Optional[int]
+    km_certificati: int
     data_ultimo_intervento: Optional[date]
     descrizione_ultimo_intervento: Optional[str]
-    cronologia_tagliandi: Optional[bool] = False
-    doppie_chiavi: Optional[bool] = False
-    codice_motornet: Optional[str]
+    cronologia_tagliandi: bool
+    doppie_chiavi: bool
+    codice_motornet: str
     colore: Optional[str]
-    prezzo_costo: Optional[float]
-    prezzo_vendita: Optional[float]
+    prezzo_costo: float
+    prezzo_vendita: float
 
 
 
