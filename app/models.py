@@ -278,8 +278,8 @@ class AZUsatoInsertRequest(BaseModel):
     colore: Optional[str]
     prezzo_costo: float
     prezzo_vendita: float
-    immagini: List[str]  # URL immagini auto
-    danni: List[Danno]   # Lista danni
+    immagini: Optional[List[str]] = []
+    danni: Optional[List[Danno]] = []
 
 
 
