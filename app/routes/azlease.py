@@ -261,3 +261,61 @@ async def upload_foto_usato(
         print(f"❌ Errore durante l'upload su Supabase: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+
+
+    @router.post("/perizie-usato", tags=["AZLease"])
+    async def upload_perizia_usato(
+        auto_id: str,
+        valore_perizia: float,
+        descrizione: str,
+        file: UploadFile = File(...),
+        Authorize: AuthJWT = Depends(),
+        db: Session = Depends(get_db)
+    ):
+        Authorize.jwt_required()
+        user_email = Authorize.get_jwt_subject()
+
+        user = db.query(User).filter(User.email == user_email).first()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utente non autorizzato")
+
+        if file.content_type not in ["image/png", "image/jpeg", "image/jpg"]:
+            raise HTTPException(status_code=400, detail="Formato immagine non supportato")
+
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        file_name = f"auto-usate/danni/{auto_id}_{timestamp}_{file.filename}"
+
+        try:
+            content = await file.read()
+
+            # Upload foto danno in Supabase bucket "auto-usate"
+            supabase_client.storage.from_("auto-usate").upload(
+                file_name,
+                content,
+                {"content-type": file.content_type}
+            )
+
+            # URL pubblico dell'immagine
+            image_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_name}"
+
+            # Inserimento dati nella tabella AZLease_UsatoDANNI
+            danno_id = str(uuid.uuid4())
+            db.execute(text("""
+                INSERT INTO azlease_usatodanni (id, auto_id, foto, valore_perizia, descrizione)
+                VALUES (:id, :auto_id, :foto, :valore_perizia, :descrizione)
+            """), {
+                "id": danno_id,
+                "auto_id": auto_id,
+                "foto": image_url,
+                "valore_perizia": valore_perizia,
+                "descrizione": descrizione
+            })
+
+            db.commit()
+
+            return {"message": "Perizia inserita con successo", "danno_id": danno_id, "foto_url": image_url}
+
+        except Exception as e:
+            print(f"❌ Errore durante upload della perizia su Supabase: {e}")
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
