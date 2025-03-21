@@ -6,6 +6,8 @@ from app.models import User, AZUsatoInsertRequest
 from app.schemas import AutoUsataCreate
 import uuid
 from datetime import datetime
+from sqlalchemy import text
+
 
 
 router = APIRouter()
