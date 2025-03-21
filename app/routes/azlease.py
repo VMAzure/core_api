@@ -8,6 +8,8 @@ import uuid
 from datetime import datetime
 from sqlalchemy import text
 import requests
+import httpx
+
 
 
 router = APIRouter()
@@ -85,53 +87,122 @@ async def inserisci_auto_usata(
     })
 
      # 🌐 Richiesta API esterna per i dettagli auto
+    token_jwt = Authorize._token  # Ottieni il token JWT corrente
+
+    headers = {
+        "Authorization": f"Bearer {token_jwt}"
+    }
+
     url = f"https://coreapi-production-ca29.up.railway.app/api/usato/motornet/dettagli/{payload.codice_motornet}"
-    response = requests.get(url)
+
+    # Usa httpx per chiamata asincrona
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers, timeout=30)
 
     if response.status_code != 200:
         db.rollback()
         raise HTTPException(status_code=404, detail="Errore recupero dettagli auto da Motornet.")
 
-    dettagli = response.json()
+    data = response.json()
 
-    dettagli_id = uuid.uuid4()
-
-    # ✅ Inserimento dettagli in AZLease_UsatoAutoDetails
     insert_query = text("""
-        INSERT INTO azlease_usatoautodetails (
-            id, auto_id, codice_motornet, codice_modello, modello, allestimento, immagine,
-            codice_costruttore, codice_motore, data_listino, prezzo_listino, prezzo_accessori,
-            marca_nome, marca_acronimo, gamma_codice, gamma_descrizione, gruppo_storico,
-            serie_gamma, categoria, segmento, tipo, tipo_motore, descrizione_motore, euro,
-            cilindrata, cavalli_fiscali, hp, kw, emissioni_co2, consumo_urbano, consumo_extraurbano,
-            consumo_medio, accelerazione, velocita_max, descrizione_marce, cambio, trazione, passo,
-            porte, posti, altezza, larghezza, lunghezza, bagagliaio, pneumatici_anteriori,
-            pneumatici_posteriori, coppia, numero_giri, cilindri, valvole, peso, peso_vuoto,
-            massa_p_carico, portata, tipo_guida, neo_patentati, alimentazione, architettura,
-            ricarica_standard, ricarica_veloce, sospensioni_pneumatiche, emissioni_urbe,
-            emissioni_extraurb, created_at
-        ) VALUES (
-            :id, :auto_id, :codice_motornet, :codice_modello, :modello, :allestimento, :immagine,
-            :codice_costruttore, :codice_motore, :data_listino, :prezzo_listino, :prezzo_accessori,
-            :marca_nome, :marca_acronimo, :gamma_codice, :gamma_descrizione, :gruppo_storico,
-            :serie_gamma, :categoria, :segmento, :tipo, :tipo_motore, :descrizione_motore, :euro,
-            :cilindrata, :cavalli_fiscali, :hp, :kw, :emissioni_co2, :consumo_urbano, :consumo_extraurbano,
-            :consumo_medio, :accelerazione, :velocita_max, :descrizione_marce, :cambio, :trazione, :passo,
-            :porte, :posti, :altezza, :larghezza, :lunghezza, :bagagliaio, :pneumatici_anteriori,
-            :pneumatici_posteriori, :coppia, :numero_giri, :cilindri, :valvole, :peso, :peso_vuoto,
-            :massa_p_carico, :portata, :tipo_guida, :neo_patentati, :alimentazione, :architettura,
-            :ricarica_standard, :ricarica_veloce, :sospensioni_pneumatiche, :emissioni_urbe,
-            :emissioni_extraurb, :created_at
-        )
-    """)
+    INSERT INTO azlease_usatoautodetails (
+        id, auto_id, codice_motornet, codice_modello, modello, allestimento, immagine,
+        codice_costruttore, codice_motore, data_listino, prezzo_listino, prezzo_accessori,
+        marca_nome, marca_acronimo, gamma_codice, gamma_descrizione, gruppo_storico,
+        serie_gamma, categoria, segmento, tipo, tipo_motore, descrizione_motore, euro,
+        cilindrata, cavalli_fiscali, hp, kw, emissioni_co2, consumo_urbano, consumo_extraurbano,
+        consumo_medio, accelerazione, velocita_max, descrizione_marce, cambio, trazione, passo,
+        porte, posti, altezza, larghezza, lunghezza, bagagliaio, pneumatici_anteriori,
+        pneumatici_posteriori, coppia, numero_giri, cilindri, valvole, peso, peso_vuoto,
+        massa_p_carico, portata, tipo_guida, neo_patentati, alimentazione, architettura,
+        ricarica_standard, ricarica_veloce, sospensioni_pneumatiche, emissioni_urbe,
+        emissioni_extraurb, created_at
+    ) VALUES (
+        :id, :auto_id, :codice_motornet, :codice_modello, :modello, :allestimento, :immagine,
+        :codice_costruttore, :codice_motore, :data_listino, :prezzo_listino, :prezzo_accessori,
+        :marca_nome, :marca_acronimo, :gamma_codice, :gamma_descrizione, :gruppo_storico,
+        :serie_gamma, :categoria, :segmento, :tipo, :tipo_motore, :descrizione_motore, :euro,
+        :cilindrata, :cavalli_fiscali, :hp, :kw, :emissioni_co2, :consumo_urbano, :consumo_extraurbano,
+        :consumo_medio, :accelerazione, :velocita_max, :descrizione_marce, :cambio, :trazione, :passo,
+        :porte, :posti, :altezza, :larghezza, :lunghezza, :bagagliaio, :pneumatici_anteriori,
+        :pneumatici_posteriori, :coppia, :numero_giri, :cilindri, :valvole, :peso, :peso_vuoto,
+        :massa_p_carico, :portata, :tipo_guida, :neo_patentati, :alimentazione, :architettura,
+        :ricarica_standard, :ricarica_veloce, :sospensioni_pneumatiche, :emissioni_urbe,
+        :emissioni_extraurb, :created_at
+    )
+""")
 
-    dettagli["id"] = str(dettagli_id)
-    dettagli["auto_id"] = str(auto_id)
-    dettagli["created_at"] = datetime.utcnow()
 
-    # 🚩 Esegui inserimento dettagli
-    db.execute(insert_query, dettagli)
+    # Flattening del JSON
+    insert_values = {
+        "id": str(uuid.uuid4()),
+        "auto_id": str(auto_id),
+        "codice_motornet": data["modello"].get("codiceMotornetUnivoco"),
+        "codice_modello": data["modello"]["codDescModello"].get("codice"),
+        "modello": data["modello"].get("modello"),
+        "allestimento": data["modello"].get("allestimento"),
+        "immagine": data["modello"].get("immagine"),
+        "codice_costruttore": data["modello"].get("codiceCostruttore"),
+        "codice_motore": data["modello"].get("codiceMotore"),
+        "data_listino": data["modello"].get("dataListino"),
+        "prezzo_listino": data["modello"].get("prezzoListino"),
+        "prezzo_accessori": data["modello"].get("prezzoAccessori"),
+        "marca_nome": data["modello"]["marca"].get("nome"),
+        "marca_acronimo": data["modello"]["marca"].get("acronimo"),
+        "gamma_codice": data["modello"]["gammaModello"].get("codice"),
+        "gamma_descrizione": data["modello"]["gammaModello"].get("descrizione"),
+        "gruppo_storico": data["modello"]["gruppoStorico"].get("descrizione"),
+        "serie_gamma": data["modello"]["serieGamma"].get("descrizione"),
+        "categoria": data["modello"]["categoria"].get("descrizione"),
+        "segmento": data["modello"]["segmento"].get("descrizione"),
+        "tipo": data["modello"]["tipo"].get("descrizione"),
+        "tipo_motore": data["modello"].get("tipoMotore"),
+        "descrizione_motore": data["modello"].get("descrizioneMotore"),
+        "euro": data["modello"].get("euro"),
+        "cilindrata": data["modello"].get("cilindrata"),
+        "cavalli_fiscali": data["modello"].get("cavalliFiscali"),
+        "hp": data["modello"].get("hp"),
+        "kw": data["modello"].get("kw"),
+        "emissioni_co2": data["modello"].get("emissioniCo2"),
+        "consumo_urbano": data["modello"].get("consumoUrbano"),
+        "consumo_extraurbano": data["modello"].get("consumoExtraurbano"),
+        "consumo_medio": data["modello"].get("consumoMedio"),
+        "accelerazione": data["modello"].get("accelerazione"),
+        "velocita_max": data["modello"].get("velocita"),
+        "descrizione_marce": data["modello"].get("descrizioneMarce"),
+        "cambio": data["modello"]["cambio"].get("descrizione"),
+        "trazione": data["modello"]["trazione"].get("descrizione"),
+        "passo": data["modello"].get("passo"),
+        "porte": data["modello"].get("porte"),
+        "posti": data["modello"].get("posti"),
+        "altezza": data["modello"].get("altezza"),
+        "larghezza": data["modello"].get("larghezza"),
+        "lunghezza": data["modello"].get("lunghezza"),
+        "bagagliaio": data["modello"].get("bagagliaio"),
+        "pneumatici_anteriori": data["modello"].get("pneumaticiAnteriori"),
+        "pneumatici_posteriori": data["modello"].get("pneumaticiPosteriori"),
+        "coppia": data["modello"].get("coppia"),
+        "numero_giri": data["modello"].get("numeroGiri"),
+        "cilindri": data["modello"].get("cilindri"),
+        "valvole": data["modello"].get("valvole"),
+        "peso": data["modello"].get("peso"),
+        "peso_vuoto": data["modello"].get("pesoVuoto"),
+        "massa_p_carico": data["modello"].get("massaPCarico"),
+        "portata": data["modello"].get("portata"),
+        "tipo_guida": data["modello"].get("tipoGuida"),
+        "neo_patentati": data["modello"].get("neoPatentati"),
+        "alimentazione": data["modello"]["alimentazione"].get("descrizione"),
+        "architettura": data["modello"]["architettura"].get("descrizione"),
+        "ricarica_standard": data["modello"].get("ricaricaStandard"),
+        "ricarica_veloce": data["modello"].get("ricaricaVeloce"),
+        "sospensioni_pneumatiche": bool(data["modello"].get("sospPneum")),
+        "emissioni_urbe": data["modello"].get("emissUrbe"),
+        "emissioni_extraurb": data["modello"].get("emissExtraurb"),
+        "created_at": datetime.utcnow()
+    }
 
+    db.execute(insert_query, insert_values)
     db.commit()
 
     return {
