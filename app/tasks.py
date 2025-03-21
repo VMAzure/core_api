@@ -45,6 +45,37 @@ def check_and_charge_services():
                 db.commit()
                 logging.warning(f"⚠️ Servizio {service.name} sospeso per credito insufficiente ({admin.email})")
 
+        # 🔁 Controllo scadenza opzioni auto usate
+    durata_opzione = timedelta(hours=168)  # ⏳ durata opzione in ore
+
+    auto_opzionate = db.execute(text("""
+        SELECT id, opzionato_da, opzionato_il FROM azlease_usatoin
+        WHERE opzionato_da IS NOT NULL AND opzionato_il IS NOT NULL AND visibile = true
+    """)).fetchall()
+
+    for auto in auto_opzionate:
+        scadenza = auto.opzionato_il + durata_opzione
+
+        if datetime.utcnow() >= scadenza:
+            db.execute(text("""
+                UPDATE azlease_usatoin
+                SET opzionato_da = NULL, opzionato_il = NULL
+                WHERE id = :id
+            """), {"id": auto.id})
+
+            db.execute(text("""
+                INSERT INTO logs (admin_email, event_type, message)
+                VALUES (:email, :event, :msg)
+            """), {
+                "email": "sistema",  # o eventualmente un lookup su opzionato_da
+                "event": "scadenza_opzione",
+                "msg": f"Opzione scaduta automaticamente per auto ID {auto.id}"
+            })
+
+            db.commit()
+            logging.info(f"⏳ Opzione scaduta per auto ID {auto.id}")
+
+
     db.close()
 
 # Creazione scheduler (NON avviarlo qui, lo avviamo in main.py)
