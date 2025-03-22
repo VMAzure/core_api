@@ -99,18 +99,27 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
+#app.add_middleware(
+#    CORSMiddleware,
+#    allow_origins=[
+#       "https://corewebapp-azcore.up.railway.app",
+#       "https://cigpdfgenerator-production.up.railway.app",
+#       "https://localhost:7125",  
+#       "http://localhost:7125",   
+#       "http://localhost",        
+#    ],
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://corewebapp-azcore.up.railway.app",
-        "https://cigpdfgenerator-production.up.railway.app",
-        "https://localhost:7125",  # 👈 questo è il punto chiave
-        "http://localhost:7125",   # 👈 aggiungilo anche se usi http
-        "http://localhost",        # per sicurezza
-    ],
+    allow_origins=["*"],  
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"]
+    allow_methods=["*"],
+    allow_headers=["*"]
+  
+
+#   allow_credentials=True,
+#     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+#     allow_headers=["Authorization", "Content-Type"]
 )
 
 
