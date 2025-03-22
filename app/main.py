@@ -2,6 +2,7 @@
 import os
 import logging
 import traceback
+from sqlalchemy import false
 import uvicorn
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, File, UploadFile, Form
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -112,9 +113,9 @@ app.openapi = custom_openapi
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
   
 
 #   allow_credentials=True,
