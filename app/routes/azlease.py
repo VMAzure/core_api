@@ -9,6 +9,7 @@ from datetime import datetime
 from sqlalchemy import text
 import requests
 import httpx
+from typing import Optional
 
 router = APIRouter()
 
@@ -460,3 +461,31 @@ async def aggiorna_stato_auto_usata(
     db.commit()
 
     return {"message": f"Stato aggiornato con successo ({azione})"}
+
+
+targa: Optional[str] = None
+
+@router.get("/usato", tags=["AZLease"])
+async def get_id_auto_usata(targa: Optional[str] = None, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    Authorize.jwt_required()
+
+    if targa:
+        result = db.execute(text("""
+            SELECT a.id FROM azlease_usatoauto a
+            JOIN azlease_usatoin i ON a.id_usatoin = i.id
+            WHERE a.targa = :targa AND i.visibile = true
+        """), {"targa": targa}).fetchone()
+
+        if not result:
+            raise HTTPException(status_code=404, detail="Auto non trovata o non visibile")
+
+        return {"id_auto": result.id}
+
+    else:
+        result = db.execute(text("""
+            SELECT a.id FROM azlease_usatoauto a
+            JOIN azlease_usatoin i ON a.id_usatoin = i.id
+            WHERE i.visibile = true
+        """)).fetchall()
+
+        return {"id_auto": [r.id for r in result]}
