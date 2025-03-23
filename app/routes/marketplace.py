@@ -66,6 +66,7 @@ async def add_service(
     description: str = Form(...),
     price: float = Form(...),
     file: UploadFile = File(...),
+     page_url: str = Form(...), 
     open_in_new_tab: bool = Form(True),  # ✅ Campo aggiunto
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
@@ -107,6 +108,7 @@ async def add_service(
             description=description,
             price=price,
             image_url=image_url,
+             page_url=page_url,
             open_in_new_tab=open_in_new_tab  # ✅ Salviamo nel DB
         )
         db.add(new_service)
