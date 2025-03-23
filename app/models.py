@@ -23,6 +23,7 @@ class Services(Base):
     price = Column(Float, nullable=False)
     image_url = Column(Text, nullable=True)
     page_url = Column(String, nullable=True)  # ✅ Aggiunto il campo per la pagina del servizio
+    open_in_new_tab = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
