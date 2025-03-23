@@ -64,6 +64,7 @@ async def add_service(
     description: str = Form(...),
     price: float = Form(...),
     file: UploadFile = File(...),
+    open_in_new_tab: bool = Form(True),  # ✅ Campo aggiunto
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -78,53 +79,48 @@ async def add_service(
     if not user or user.role != 'superadmin':
         raise HTTPException(status_code=403, detail="Accesso negato")
 
-    # ✅ Controlliamo il tipo di file per evitare estensioni non valide
-    # ✅ Controlliamo il tipo di file
     allowed_extensions = {"png", "jpg", "jpeg", "webp"}
     file_extension = file.filename.split(".")[-1].lower()
     if file_extension not in allowed_extensions:
         raise HTTPException(status_code=400, detail="Formato file non valido!")
 
-    # ✅ Leggi UNA sola volta il contenuto del file
     file_content = await file.read()
-
     if len(file_content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File troppo grande! Dimensione massima: 5MB.")
 
-    # ✅ Caricamento su Supabase usando file_content
-    import uuid  # assicurati che ci sia
-
-    # ✅ Caricamento su Supabase usando file_content con nome univoco
-    import uuid  # se non già presente in cima al file
-
-    # ✅ Caricamento definitivo su Supabase
     try:
         file_name = f"services/{uuid.uuid4()}_{file.filename}"
-
         response = supabase.storage.from_("services").upload(
             file_name, file_content, {"content-type": file.content_type}
         )
-
-        # ✅ Imposta correttamente l'URL finale con services/services/
         image_url = f"{SUPABASE_URL}/storage/v1/object/public/services/{file_name}"
 
     except Exception as e:
         logger.error(f"❌ ERRORE: Impossibile caricare l'immagine su Supabase: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-    # ✅ Salvataggio del servizio nel database con gestione del rollback
     try:
-        new_service = Services(name=name, description=description, price=price, image_url=image_url)
+        new_service = Services(
+            name=name,
+            description=description,
+            price=price,
+            image_url=image_url,
+            open_in_new_tab=open_in_new_tab  # ✅ Salviamo nel DB
+        )
         db.add(new_service)
         db.commit()
         db.refresh(new_service)
+
     except Exception as e:
-        db.rollback()  # ✅ Rollback in caso di errore
+        db.rollback()
         logger.error(f"❌ ERRORE: Impossibile salvare il servizio nel database: {e}")
         raise HTTPException(status_code=500, detail="Errore nel salvataggio del servizio.")
 
-    return {"message": "Servizio aggiunto con successo", "service_id": new_service.id, "image_url": image_url}
-
+    return {
+        "message": "Servizio aggiunto con successo",
+        "service_id": new_service.id,
+        "image_url": image_url
+    }
 
 
 @marketplace_router.get("/service-list", response_model=list)
@@ -153,6 +149,7 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
             "price": service.price,
             "image_url": service.image_url,
             "page_url": service.page_url,
+            "open_in_new_tab": service.open_in_new_tab, 
             "is_active": True
         } for service in services]
 
@@ -169,6 +166,7 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
             "price": service.price,
             "image_url": service.image_url,
             "page_url": service.page_url if service.page_url else "#",
+            "open_in_new_tab": service.open_in_new_tab, 
             "is_active": service.id in purchased_services
         } for service in services]
 
@@ -185,6 +183,7 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
             "price": service.price,
             "image_url": service.image_url,
             "page_url": service.page_url if service.page_url else "#",
+            "open_in_new_tab": service.open_in_new_tab, 
             "is_active": True
         } for service in purchased_services]
 
