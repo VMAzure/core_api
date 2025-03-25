@@ -113,7 +113,8 @@ app.openapi = custom_openapi
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:7026",  # 👉 la tua app in locale
+        "http://localhost:7026",
+        "https://localhost:7026",# 👉 la tua app in locale
         "https://corewebapp-azcore.up.railway.app",  # 👉 dominio pubblico
         "https://cigpdfgenerator-production.up.railway.app",
         "https://cig.up.railway.app/",
