@@ -454,6 +454,15 @@ async def aggiorna_stato_auto_usata(
             WHERE id = :id_usatoin
         """), {"id_usatoin": id_usatoin})
 
+    # 🔧 AGGIUNGI QUESTO:
+    elif azione == "visibile":
+        db.execute(text("""
+            UPDATE azlease_usatoin
+            SET visibile = true
+            WHERE id = :id_usatoin
+        """), {"id_usatoin": id_usatoin})
+
+
     else:
         raise HTTPException(status_code=400, detail="Azione non valida. Usa: opzione, vendita, elimina")
 
