@@ -113,14 +113,13 @@ app.openapi = custom_openapi
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-    "http://localhost:7026",
-    "https://corewebapp-azcore.up.railway.app"
-],
-allow_credentials=True,
-    allow_credentials=False,
+        "http://localhost:7026",  # 👉 la tua app in locale
+        "https://corewebapp-azcore.up.railway.app"  # 👉 dominio pubblico
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
-)  
+)
 #   allow_credentials=True,
 #     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 #     allow_headers=["Authorization", "Content-Type"]
