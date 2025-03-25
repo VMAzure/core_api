@@ -43,10 +43,10 @@ async def inserisci_auto_usata(
     usatoin_id = uuid.uuid4()
     db.execute(text("""
         INSERT INTO azlease_usatoin (
-            id, dealer_id, admin_id, data_inserimento, data_ultima_modifica, prezzo_costo, prezzo_vendita
+            id, dealer_id, admin_id, data_inserimento, data_ultima_modifica, prezzo_costo, prezzo_vendita, visibile
         )
         VALUES (
-            :id, :dealer_id, :admin_id, :inserimento, :modifica, :costo, :vendita
+            :id, :dealer_id, :admin_id, :inserimento, :modifica, :costo, :vendita, :visibile
         )
     """), {
         "id": str(usatoin_id),
