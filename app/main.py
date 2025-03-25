@@ -148,10 +148,6 @@ app.include_router(motornet_router, prefix="/api/usato/motornet")
 app.include_router(azlease_router, prefix="/api/azlease")
 app.include_router(openapi_router, prefix="/api")
 
-
-
-
-
 @app.get("/")
 def read_root():
     return {"message": "Welcome to CORE API"}
