@@ -1,19 +1,21 @@
 ﻿from fastapi import APIRouter, HTTPException
 import httpx
+import os
+
 
 router = APIRouter()
 
 @router.get("/openapi/azienda/{piva}", tags=["OpenAPI"])
 async def get_dati_azienda(piva: str):
     try:
-        # 🔐 Richiesta token
-        token_url = "https://test.openapi.it/token"
+        # 🔐 1. Richiesta token (produzione)
+        token_url = "https://oauth.openapi.it/token"
         headers_token = {
             "Content-Type": "application/json",
-            "x-api-key": "zp5xfxj9wcw4zf4cgz6odoxpbln6umlz"
+            "x-api-key": os.getenv("OPENAPI_API_KEY")
         }
         body_token = {
-            "scopes": ["GET:test.company.openapi.com/IT-start/*"],
+            "scopes": ["GET:company.openapi.com/IT-start/*"],
             "ttl": 900
         }
 
@@ -26,18 +28,18 @@ async def get_dati_azienda(piva: str):
 
             token = token_data["token"]
 
-            # 🔍 Richiesta dati azienda
-            azienda_url = f"https://test.company.openapi.com/IT-start/{piva}"
+            # 🔍 2. Richiesta dati azienda
+            azienda_url = f"https://company.openapi.com/IT-start/{piva}"
             headers_azienda = {
                 "Content-Type": "application/json",
-                "x-api-key": "zp5xfxj9wcw4zf4cgz6odoxpbln6umlz",
+                "x-api-key": os.getenv("OPENAPI_API_KEY"),
                 "Authorization": f"Bearer {token}"
             }
 
             azienda_resp = await client.get(azienda_url, headers=headers_azienda)
 
             if azienda_resp.status_code != 200:
-                raise HTTPException(status_code=azienda_resp.status_code, detail="Errore recupero dati aziendali")
+                raise HTTPException(status_code=azienda_resp.status_code, detail="Errore dati aziendali")
 
             return azienda_resp.json()
 
