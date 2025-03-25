@@ -2,29 +2,30 @@
 import httpx
 import os
 
-
 router = APIRouter()
 
 @router.get("/openapi/azienda/{piva}", tags=["OpenAPI"])
 async def get_dati_azienda(piva: str):
     try:
-        # 🔐 1. Richiesta token (produzione)
+        # 🔐 1. Richiesta token (Basic Auth)
         token_url = "https://oauth.openapi.it/token"
-        headers_token = {
-            "Content-Type": "application/json",
-            "x-api-key": os.getenv("OPENAPI_API_KEY")
-        }
+        auth = (os.getenv("OPENAPI_USERNAME"), os.getenv("OPENAPI_API_KEY"))
         body_token = {
-            "scopes": ["GET:company.openapi.com/IT-start/*"],
-            "ttl": 900
+            "scopes": [
+                "GET:comparabili.openapi.it/tassonomie",
+                "GET:imprese.openapi.it/*",
+                "*:*.openapi.it/*"
+            ],
+            "ttl": 900,
+            "expire": 0
         }
 
         async with httpx.AsyncClient() as client:
-            token_resp = await client.post(token_url, headers=headers_token, json=body_token)
+            token_resp = await client.post(token_url, auth=auth, json=body_token)
             token_data = token_resp.json()
 
-            if not token_resp.status_code == 200 or not token_data.get("token"):
-                raise HTTPException(status_code=500, detail="Errore nel recupero token")
+            if token_resp.status_code != 200 or not token_data.get("token"):
+                raise HTTPException(status_code=500, detail=f"Errore nel recupero token: {token_data}")
 
             token = token_data["token"]
 
@@ -32,7 +33,6 @@ async def get_dati_azienda(piva: str):
             azienda_url = f"https://company.openapi.com/IT-start/{piva}"
             headers_azienda = {
                 "Content-Type": "application/json",
-                "x-api-key": os.getenv("OPENAPI_API_KEY"),
                 "Authorization": f"Bearer {token}"
             }
 
@@ -44,4 +44,4 @@ async def get_dati_azienda(piva: str):
             return azienda_resp.json()
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
