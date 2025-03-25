@@ -114,9 +114,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:7026",  # 👉 la tua app in locale
-        "https://corewebapp-azcore.up.railway.app"  # 👉 dominio pubblico
-        "https://cigpdfgenerator-production.up.railway.app"
-        "https://cig.up.railway.app/"
+        "https://corewebapp-azcore.up.railway.app",  # 👉 dominio pubblico
+        "https://cigpdfgenerator-production.up.railway.app",
+        "https://cig.up.railway.app/",
     ],
     allow_credentials=True,
     allow_methods=["*"],
