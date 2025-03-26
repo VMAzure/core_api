@@ -76,8 +76,6 @@ class Settings(BaseSettings):
 def get_config():
     return Settings()
 
-
-
 @app.exception_handler(AuthJWTException)
 def authjwt_exception_handler(request, exc):
     return JSONResponse(
