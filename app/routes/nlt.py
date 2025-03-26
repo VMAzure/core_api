@@ -216,35 +216,36 @@ async def get_miei_preventivi(
 
     if current_user.role == "dealer":
         if current_user.shared_customers:
-            # dealer operatore: vede preventivi di Admin e altri dealer del team
             team_ids = db.query(User.id).filter(
                 (User.parent_id == current_user.parent_id) |
-                (User.id == current_user.parent_id)  # include anche l'admin
-            ).subquery()
+                (User.id == current_user.parent_id)
+            ).all()
+
+            team_ids_list = [id for (id,) in team_ids]
 
             query = db.query(NltPreventivi).join(Cliente).filter(
-                NltPreventivi.creato_da.in_(team_ids),
+                NltPreventivi.creato_da.in_(team_ids_list),
                 NltPreventivi.visibile == 1
             )
         else:
-            # dealer normale: vede solo i propri
             query = db.query(NltPreventivi).join(Cliente).filter(
                 NltPreventivi.creato_da == current_user.id,
                 NltPreventivi.visibile == 1
             )
 
     elif current_user.role == "admin":
-        dealer_ids = db.query(User.id).filter(User.parent_id == current_user.id).subquery()
+        dealer_ids = db.query(User.id).filter(User.parent_id == current_user.id).all()
+        dealer_ids_list = [id for (id,) in dealer_ids]
+        dealer_ids_list.append(current_user.id)
+
         query = db.query(NltPreventivi).join(Cliente).filter(
-            ((NltPreventivi.creato_da == current_user.id) |
-             (NltPreventivi.creato_da.in_(dealer_ids))),
+            NltPreventivi.creato_da.in_(dealer_ids_list),
             NltPreventivi.visibile == 1
         )
 
     else:  # superadmin
         query = db.query(NltPreventivi).join(Cliente).filter(NltPreventivi.visibile == 1)
 
-    # 🔍 Filtro ricerca
     if search:
         search_term = f"%{search}%"
         query = query.filter(
@@ -261,7 +262,7 @@ async def get_miei_preventivi(
     risultati = []
     for p in preventivi:
         cliente = p.cliente
-    
+
         if cliente.tipo_cliente == "Società":
             nome_cliente = cliente.ragione_sociale or "NN"
         else:
@@ -283,11 +284,12 @@ async def get_miei_preventivi(
             "anticipo": p.anticipo,
             "canone": p.canone,
             "cliente": nome_cliente,
-            "preventivo_assegnato_a": p.preventivo_assegnato_a,  # ✅ aggiunto
-            "note": p.note,                                      # ✅ aggiunto
-            "player": p.player                                   # ✅ aggiunto
+            "preventivo_assegnato_a": p.preventivo_assegnato_a,
+            "note": p.note,
+            "player": p.player
         })
-        return {"preventivi": risultati}
+
+    return {"preventivi": risultati}
 
 
 @router.put("/nascondi-preventivo/{preventivo_id}")
