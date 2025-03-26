@@ -540,43 +540,16 @@ def change_password(
 
 @router.get("/dealers-assegnabili")
 async def get_dealers_assegnabili(
-
-    current_user: User = Depends(get_current_user),
+    Authorize: AuthJWT = Depends(),  # Aggiunto questo
     db: Session = Depends(get_db)
 ):
-    if current_user.role == "admin":
-        dealers = db.query(User).filter(
-            User.parent_id == current_user.id,
-            User.role == "dealer"
-        ).all()
+    Authorize.jwt_required()  # ✅ Aggiunto esplicitamente questo
+    user_email = Authorize.get_jwt_subject()
+    current_user = db.query(User).filter(User.email == user_email).first()
 
-    elif current_user.role == "dealer":
-        dealers = db.query(User).filter(
-            User.parent_id == current_user.parent_id,
-            User.role == "dealer",
-            User.id != current_user.id  # escludiamo sé stessi
-        ).all()
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    else:
-        # Se superadmin o altri ruoli, restituiamo vuoto (oppure puoi definire altra logica)
-        dealers = []
-
-    risultato = [{
-        "id": dealer.id,
-        "nome_completo": f"{dealer.nome} {dealer.cognome}".strip(),
-        "email": dealer.email
-    } for dealer in dealers]
-
-    return {
-        "success": True,
-        "dealers": risultato
-    }
-
-@router.get("/test-dealers-assegnabili")
-async def get_dealers_assegnabili(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
     if current_user.role == "admin":
         dealers = db.query(User).filter(
             User.parent_id == current_user.id,
