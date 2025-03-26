@@ -62,21 +62,24 @@ SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSI
 async def salva_preventivo(
     file: UploadFile = File(...),
     cliente_id: int = Form(...),
-    creato_da: int = Form(...),  # 👈 creato_da sempre presente
+    creato_da: int = Form(...),
     marca: str = Form(...),
     modello: str = Form(...),
     durata: int = Form(...),
     km_totali: int = Form(...),
     anticipo: float = Form(...),
     canone: float = Form(...),
+    preventivo_assegnato_a: Optional[int] = Form(None),  # ✅ nuovo campo
+    note: Optional[str] = Form(None),                    # ✅ nuovo campo
+    player: Optional[str] = Form(None),                  # ✅ nuovo campo
     db: Session = Depends(get_db)
 ):
-    # 🔵 Genera un nome univoco per il file
+    # Genera nome file univoco
     file_extension = file.filename.split(".")[-1]
     file_name = f"NLT_Offer_{uuid.uuid4()}.{file_extension}"
     file_path = f"{SUPABASE_BUCKET}/{file_name}"
 
-    # 🔵 Carica il file su Supabase
+    # Carica file su Supabase
     async with httpx.AsyncClient() as client:
         headers = {
             "Content-Type": file.content_type,
@@ -91,10 +94,9 @@ async def salva_preventivo(
     if response.status_code != 200:
         return {"success": False, "error": "Errore durante l'upload su Supabase."}
 
-    # 🔵 URL pubblico sempre valido (senza scadenza)
     file_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_path}"
 
-    # 🔵 Salva il record nel database
+    # ✅ Modifica qui: aggiungi i nuovi campi
     nuovo_preventivo = NltPreventivi(
         cliente_id=cliente_id,
         file_url=file_url,
@@ -105,7 +107,10 @@ async def salva_preventivo(
         km_totali=km_totali,
         anticipo=anticipo,
         canone=canone,
-        visibile=1
+        visibile=1,
+        preventivo_assegnato_a=preventivo_assegnato_a,
+        note=note,
+        player=player
     )
     db.add(nuovo_preventivo)
     db.commit()
@@ -121,9 +126,13 @@ async def salva_preventivo(
             "durata": nuovo_preventivo.durata,
             "km_totali": nuovo_preventivo.km_totali,
             "anticipo": nuovo_preventivo.anticipo,
-            "canone": nuovo_preventivo.canone
+            "canone": nuovo_preventivo.canone,
+            "preventivo_assegnato_a": preventivo_assegnato_a,
+            "note": note,
+            "player": player
         }
     }
+
 
 
 
@@ -250,35 +259,34 @@ async def get_miei_preventivi(
                       .all()
 
     risultati = []
-    for p in preventivi:
-        cliente = p.cliente
-        
-        if cliente.tipo_cliente == "Società":
-            nome_cliente = cliente.ragione_sociale or "NN"
-        else:
-            nome_cliente = f"{cliente.nome or ''} {cliente.cognome or ''}".strip() or "NN"
+for p in preventivi:
+    cliente = p.cliente
+    
+    if cliente.tipo_cliente == "Società":
+        nome_cliente = cliente.ragione_sociale or "NN"
+    else:
+        nome_cliente = f"{cliente.nome or ''} {cliente.cognome or ''}".strip() or "NN"
 
-        risultati.append({
-            "id": p.id,
-            "file_url": p.file_url,
-            "creato_da": p.creato_da,
-            "created_at": p.created_at,
-            "marca": p.marca,
-            "modello": p.modello,
-            "durata": p.durata,
-            "km_totali": p.km_totali,
-            "anticipo": p.anticipo,
-            "canone": p.canone,
-            "cliente": nome_cliente
-        })
+    dealer = db.query(User).filter(User.id == p.creato_da).first()
+    nome_dealer = f"{dealer.nome} {dealer.cognome}".strip() if dealer else "NN"
 
-    return {
-        "success": True,
-        "preventivi": risultati,
-        "page": page,
-        "size": size,
-        "count": len(risultati)
-    }
+    risultati.append({
+        "id": p.id,
+        "file_url": p.file_url,
+        "creato_da": p.creato_da,
+        "dealer_nome": nome_dealer,
+        "created_at": p.created_at,
+        "marca": p.marca,
+        "modello": p.modello,
+        "durata": p.durata,
+        "km_totali": p.km_totali,
+        "anticipo": p.anticipo,
+        "canone": p.canone,
+        "cliente": nome_cliente,
+        "preventivo_assegnato_a": p.preventivo_assegnato_a,  # ✅ aggiunto
+        "note": p.note,                                      # ✅ aggiunto
+        "player": p.player                                   # ✅ aggiunto
+    })
 
 
 
@@ -296,3 +304,29 @@ async def nascondi_preventivo(preventivo_id: str, db: Session = Depends(get_db))
     db.commit()
 
     return {"success": True, "message": "Preventivo nascosto correttamente"}
+
+@router.put("/aggiorna-preventivo/{preventivo_id}")
+async def aggiorna_preventivo(
+    preventivo_id: str,
+    preventivo_assegnato_a: Optional[int] = Form(None),
+    note: Optional[str] = Form(None),
+    player: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
+    if not preventivo:
+        raise HTTPException(status_code=404, detail="Preventivo non trovato")
+
+    # Aggiorna solo se fornito
+    if preventivo_assegnato_a is not None:
+        preventivo.preventivo_assegnato_a = preventivo_assegnato_a
+    if note is not None:
+        preventivo.note = note
+    if player is not None:
+        preventivo.player = player
+
+    db.commit()
+    db.refresh(preventivo)
+
+    return {"success": True, "message": "Preventivo aggiornato con successo"}
+
