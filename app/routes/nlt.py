@@ -259,34 +259,34 @@ async def get_miei_preventivi(
                       .all()
 
     risultati = []
-for p in preventivi:
-    cliente = p.cliente
+    for p in preventivi:
+        cliente = p.cliente
     
-    if cliente.tipo_cliente == "Società":
-        nome_cliente = cliente.ragione_sociale or "NN"
-    else:
-        nome_cliente = f"{cliente.nome or ''} {cliente.cognome or ''}".strip() or "NN"
+        if cliente.tipo_cliente == "Società":
+            nome_cliente = cliente.ragione_sociale or "NN"
+        else:
+            nome_cliente = f"{cliente.nome or ''} {cliente.cognome or ''}".strip() or "NN"
 
-    dealer = db.query(User).filter(User.id == p.creato_da).first()
-    nome_dealer = f"{dealer.nome} {dealer.cognome}".strip() if dealer else "NN"
+        dealer = db.query(User).filter(User.id == p.creato_da).first()
+        nome_dealer = f"{dealer.nome} {dealer.cognome}".strip() if dealer else "NN"
 
-    risultati.append({
-        "id": p.id,
-        "file_url": p.file_url,
-        "creato_da": p.creato_da,
-        "dealer_nome": nome_dealer,
-        "created_at": p.created_at,
-        "marca": p.marca,
-        "modello": p.modello,
-        "durata": p.durata,
-        "km_totali": p.km_totali,
-        "anticipo": p.anticipo,
-        "canone": p.canone,
-        "cliente": nome_cliente,
-        "preventivo_assegnato_a": p.preventivo_assegnato_a,  # ✅ aggiunto
-        "note": p.note,                                      # ✅ aggiunto
-        "player": p.player                                   # ✅ aggiunto
-    })
+        risultati.append({
+            "id": p.id,
+            "file_url": p.file_url,
+            "creato_da": p.creato_da,
+            "dealer_nome": nome_dealer,
+            "created_at": p.created_at,
+            "marca": p.marca,
+            "modello": p.modello,
+            "durata": p.durata,
+            "km_totali": p.km_totali,
+            "anticipo": p.anticipo,
+            "canone": p.canone,
+            "cliente": nome_cliente,
+            "preventivo_assegnato_a": p.preventivo_assegnato_a,  # ✅ aggiunto
+            "note": p.note,                                      # ✅ aggiunto
+            "player": p.player                                   # ✅ aggiunto
+        })
 
 
 
@@ -304,29 +304,3 @@ async def nascondi_preventivo(preventivo_id: str, db: Session = Depends(get_db))
     db.commit()
 
     return {"success": True, "message": "Preventivo nascosto correttamente"}
-
-@router.put("/aggiorna-preventivo/{preventivo_id}")
-async def aggiorna_preventivo(
-    preventivo_id: str,
-    preventivo_assegnato_a: Optional[int] = Form(None),
-    note: Optional[str] = Form(None),
-    player: Optional[str] = Form(None),
-    db: Session = Depends(get_db)
-):
-    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
-    if not preventivo:
-        raise HTTPException(status_code=404, detail="Preventivo non trovato")
-
-    # Aggiorna solo se fornito
-    if preventivo_assegnato_a is not None:
-        preventivo.preventivo_assegnato_a = preventivo_assegnato_a
-    if note is not None:
-        preventivo.note = note
-    if player is not None:
-        preventivo.player = player
-
-    db.commit()
-    db.refresh(preventivo)
-
-    return {"success": True, "message": "Preventivo aggiornato con successo"}
-
