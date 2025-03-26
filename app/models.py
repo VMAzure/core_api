@@ -194,9 +194,9 @@ class NltPreventivi(Base):
     anticipo = Column(Float, nullable=True)
     canone = Column(Float, nullable=True)
     visibile = Column(Integer, default=1)  # 👈 Aggiunto campo visibile
-
-
-    # Relazioni utili (opzionali)
+    preventivo_assegnato_a = Column(Integer, nullable=True)
+    note = Column(String, nullable=True)
+    player = Column(String, nullable=True)
     cliente = relationship("Cliente")
     creatore = relationship("User", foreign_keys=[creato_da])
 
