@@ -288,9 +288,6 @@ async def get_miei_preventivi(
             "player": p.player                                   # ✅ aggiunto
         })
 
-
-
-
 @router.put("/nascondi-preventivo/{preventivo_id}")
 async def nascondi_preventivo(preventivo_id: str, db: Session = Depends(get_db)):
     # 🔍 Cerca il preventivo nel database
@@ -304,3 +301,29 @@ async def nascondi_preventivo(preventivo_id: str, db: Session = Depends(get_db))
     db.commit()
 
     return {"success": True, "message": "Preventivo nascosto correttamente"}
+
+@router.put("/aggiorna-preventivo/{preventivo_id}")
+async def aggiorna_preventivo(
+    preventivo_id: str,
+    preventivo_assegnato_a: Optional[int] = Form(None),
+    note: Optional[str] = Form(None),
+    player: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
+    if not preventivo:
+        raise HTTPException(status_code=404, detail="Preventivo non trovato")
+
+    # Aggiorna solo se fornito
+    if preventivo_assegnato_a is not None:
+        preventivo.preventivo_assegnato_a = preventivo_assegnato_a
+    if note is not None:
+        preventivo.note = note
+    if player is not None:
+        preventivo.player = player
+
+    db.commit()
+    db.refresh(preventivo)
+
+    return {"success": True, "message": "Preventivo aggiornato con successo"}
+
