@@ -270,6 +270,9 @@ async def get_miei_preventivi(
 
         dealer = db.query(User).filter(User.id == p.creato_da).first()
         nome_dealer = f"{dealer.nome} {dealer.cognome}".strip() if dealer else "NN"
+        # Dentro al ciclo che genera i risultati:
+        dealer_assegnato = db.query(User).filter(User.id == p.preventivo_assegnato_a).first()
+        nome_assegnato = f"{dealer_assegnato.nome} {dealer_assegnato.cognome}".strip() if dealer_assegnato else "Non assegnato"
 
         risultati.append({
             "id": p.id,
@@ -285,6 +288,7 @@ async def get_miei_preventivi(
             "canone": p.canone,
             "cliente": nome_cliente,
             "preventivo_assegnato_a": p.preventivo_assegnato_a,
+            "preventivo_assegnato_nome": nome_assegnato,  # ✅ Aggiunto nome assegnato
             "note": p.note,
             "player": p.player
         })
