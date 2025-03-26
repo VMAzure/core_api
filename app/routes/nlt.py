@@ -287,6 +287,8 @@ async def get_miei_preventivi(
             "note": p.note,                                      # ✅ aggiunto
             "player": p.player                                   # ✅ aggiunto
         })
+        return {"preventivi": risultati}
+
 
 @router.put("/nascondi-preventivo/{preventivo_id}")
 async def nascondi_preventivo(preventivo_id: str, db: Session = Depends(get_db)):
