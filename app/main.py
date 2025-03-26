@@ -13,6 +13,8 @@ from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from pydantic import BaseSettings
 from dotenv import load_dotenv  # ✅ Importiamo dotenv PRIMA di qualsiasi import dipendente dalle variabili
+from fastapi.responses import JSONResponse
+
 
 # ✅ Carichiamo le variabili d'ambiente PRIMA di qualsiasi import di moduli che le usano
 load_dotenv()
@@ -75,9 +77,15 @@ def get_config():
     return Settings()
 
 # 🔹 Handler per errori JWT
+@from fastapi.responses import JSONResponse
+
 @app.exception_handler(AuthJWTException)
 def authjwt_exception_handler(request, exc):
-    return HTTPException(status_code=exc.status_code, detail=exc.message)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.message}
+    )
+
 
 # ✅ Personalizzazione OpenAPI
 def custom_openapi():
