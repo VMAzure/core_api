@@ -76,8 +76,7 @@ class Settings(BaseSettings):
 def get_config():
     return Settings()
 
-# 🔹 Handler per errori JWT
-@from fastapi.responses import JSONResponse
+
 
 @app.exception_handler(AuthJWTException)
 def authjwt_exception_handler(request, exc):
