@@ -151,7 +151,7 @@ app.include_router(site_settings_router, prefix="/api")
 app.include_router(motornet_router, prefix="/api/usato/motornet")
 app.include_router(azlease_router, prefix="/api/azlease")
 app.include_router(openapi_router, prefix="/api")
-app.include_router(pdf_router, prefix="/pdf")
+app.include_router(pdf_router, prefix="/pdf",tags=["PDF"])
 
 
 @app.get("/")
