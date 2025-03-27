@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+ï»¿from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
@@ -94,8 +94,8 @@ async def genera_offerta(offer: OfferPdfPage1, Authorize: AuthJWT = Depends()):
             <table>
                 <tr><td>Durata</td><td>{offer.DatiEconomici.Durata} mesi</td></tr>
                 <tr><td>Km Totali</td><td>{offer.DatiEconomici.KmTotali}</td></tr>
-                <tr><td>Anticipo</td><td>{offer.DatiEconomici.Anticipo:.2f} €</td></tr>
-                <tr><td>Canone Mensile</td><td>{offer.DatiEconomici.Canone:.2f} €</td></tr>
+                <tr><td>Anticipo</td><td>{offer.DatiEconomici.Anticipo:.2f} â‚¬</td></tr>
+                <tr><td>Canone Mensile</td><td>{offer.DatiEconomici.Canone:.2f} â‚¬</td></tr>
             </table>
 
             <h2>Servizi Inclusi</h2>
