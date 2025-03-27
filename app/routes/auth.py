@@ -1,7 +1,7 @@
 ﻿from fastapi import APIRouter, HTTPException, Depends, status, Security
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
-from app.models import User
+from app.models import User, PurchasedServices, Services
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -73,48 +73,62 @@ def get_current_user(token: str = Security(oauth2_scheme), db: Session = Depends
 # Endpoint di login
 @router.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db), Authorize: AuthJWT = Depends()):
-    print(f"🔍 DEBUG: Tentativo di login con username={form_data.username}, password={form_data.password}")
-
     user = db.query(User).filter(User.email == form_data.username).first()
     
-    if not user:
-        print("❌ DEBUG: Utente non trovato!")
+    if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenziali non valide")
     
-    if not verify_password(form_data.password, user.hashed_password):
-        print(f"❌ DEBUG: Password errata! Inserita: {form_data.password}, Attesa: {user.hashed_password}")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenziali non valide")
-    
-    print(f"✅ DEBUG: Utente autenticato: {user.email}, ruolo: {user.role}, credito: {user.credit}")
+    # Recupera i servizi attivi
+    active_services = db.query(Services.name).join(PurchasedServices).filter(
+        PurchasedServices.admin_id == user.id,
+        PurchasedServices.status == "active"
+    ).all()
 
-    # 🔹 Usa `AuthJWT` per generare il token invece di una funzione separata
+    active_service_names = [service.name for service in active_services]
+
+    # Genera token con active_services
     access_token = Authorize.create_access_token(
-    subject=user.email, 
-    user_claims={"role": user.role, "credit": user.credit},
-    expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-)
-
-    
-    print(f"🔑 DEBUG: Token generato: {access_token}")
+        subject=user.email, 
+        user_claims={
+            "role": user.role, 
+            "credit": user.credit,
+            "active_services": active_service_names
+        },
+        expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     
     return {"access_token": access_token, "token_type": "bearer"}
 
+
 @router.post('/refresh-token')
-def refresh_token(Authorize: AuthJWT = Depends()):
+def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()  # verifica token attuale
 
     current_user_email = Authorize.get_jwt_subject()
-    user_claims = Authorize.get_raw_jwt()
 
+    # Recupera nuovamente l'utente
+    user = db.query(User).filter(User.email == current_user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+
+    # Recupera i servizi attivi aggiornati
+    active_services = db.query(Services.name).join(PurchasedServices).filter(
+        PurchasedServices.admin_id == user.id,
+        PurchasedServices.status == "active"
+    ).all()
+
+    active_service_names = [service.name for service in active_services]
+
+    # Genera nuovo token JWT aggiornato
     new_token = Authorize.create_access_token(
         subject=current_user_email,
         user_claims={
-            "role": user_claims["role"],
-            "credit": user_claims["credit"]
+            "role": user.role,
+            "credit": user.credit,
+            "active_services": active_service_names
         },
         expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
     return {"access_token": new_token}
-
-
