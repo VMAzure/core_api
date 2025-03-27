@@ -350,7 +350,7 @@ async def get_preventivo_completo(preventivo_id: str, dealerId: Optional[int] = 
     preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
     if not preventivo:
         raise HTTPException(status_code=404, detail="Preventivo non trovato")
-
+ 
     cliente = db.query(Cliente).filter(Cliente.id == preventivo.cliente_id).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
