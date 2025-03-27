@@ -337,7 +337,16 @@ async def aggiorna_preventivo(
 
 
 @router.get("/preventivo-completo/{preventivo_id}")
-async def get_preventivo_completo(preventivo_id: str, db: Session = Depends(get_db)):
+async def get_preventivo_completo(preventivo_id: str, dealerId: Optional[int] = None, db: Session = Depends(get_db)):
+    
+    dealer_id = dealerId or preventivo.preventivo_assegnato_a
+    if not dealer_id:
+        raise HTTPException(status_code=400, detail="Dealer non assegnato")
+
+    dealer = db.query(User).filter(User.id == dealer_id).first()
+    if not dealer:
+        raise HTTPException(status_code=404, detail="Dealer non trovato")
+
     preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
     if not preventivo:
         raise HTTPException(status_code=404, detail="Preventivo non trovato")
