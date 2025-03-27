@@ -364,10 +364,17 @@ async def get_preventivo_completo(preventivo_id: str, dealerId: Optional[int] = 
         raise HTTPException(status_code=404, detail="Dealer assegnato non trovato")
 
     # 🔁 Recupera i documenti richiesti (chiamata interna all’API)
-    from fastapi.testclient import TestClient
-    client = TestClient(router)
-    response = client.get(f"/nlt/documenti-richiesti/{cliente.tipo_cliente}")
-    documenti = response.json().get("documenti", []) if response.status_code == 200 else []
+    import httpx
+
+
+
+    async with httpx.AsyncClient() as client:
+        res = await client.get(f"https://coreapi-production-ca29.up.railway.app/nlt/documenti-richiesti/{cliente.tipo_cliente}")
+        if res.status_code == 200:
+            documenti = res.json().get("documenti", [])
+        else:
+            documenti = []
+
 
     return {
         "CustomerFirstName": cliente.nome,
