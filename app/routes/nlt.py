@@ -6,7 +6,7 @@ from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente
 from pydantic import BaseModel, BaseSettings
 from jose import jwt, JWTError  # ✅ Aggiunto import corretto per decodificare il token JWT
 from fastapi_jwt_auth import AuthJWT
-from typing import Optional
+from typing import List, Optional
 
 import uuid
 import httpx
@@ -334,4 +334,89 @@ async def aggiorna_preventivo(
     db.refresh(preventivo)
 
     return {"success": True, "message": "Preventivo aggiornato con successo"}
+
+
+@router.get("/preventivo-completo/{preventivo_id}")
+async def get_preventivo_completo(preventivo_id: str, db: Session = Depends(get_db)):
+    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
+    if not preventivo:
+        raise HTTPException(status_code=404, detail="Preventivo non trovato")
+
+    cliente = db.query(Cliente).filter(Cliente.id == preventivo.cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+
+    admin = db.query(User).filter(User.id == preventivo.creato_da).first()
+    if not admin:
+        raise HTTPException(status_code=404, detail="Admin non trovato")
+
+    dealer = db.query(User).filter(User.id == preventivo.preventivo_assegnato_a).first()
+    if not dealer:
+        raise HTTPException(status_code=404, detail="Dealer assegnato non trovato")
+
+    # 🔁 Recupera i documenti richiesti (chiamata interna all’API)
+    from fastapi.testclient import TestClient
+    client = TestClient(router)
+    response = client.get(f"/nlt/documenti-richiesti/{cliente.tipo_cliente}")
+    documenti = response.json().get("documenti", []) if response.status_code == 200 else []
+
+    return {
+        "CustomerFirstName": cliente.nome,
+        "CustomerLastName": cliente.cognome,
+        "CustomerCompanyName": cliente.ragione_sociale,
+        "TipoCliente": cliente.tipo_cliente,
+        "NoteAuto": preventivo.note,
+        "Player": preventivo.player,
+        "DocumentiNecessari": documenti,
+
+        "Auto": {
+            "Marca": preventivo.marca,
+            "Modello": preventivo.modello,
+            "Versione": None,
+            "Variante": None,
+            "DescrizioneVersione": None,
+            "Note": preventivo.note
+        },
+
+        "DatiEconomici": {
+            "Durata": preventivo.durata,
+            "KmTotali": preventivo.km_totali,
+            "Anticipo": preventivo.anticipo,
+            "Canone": preventivo.canone
+        },
+
+        "AdminInfo": {
+            "Id": admin.id,
+            "Email": admin.email,
+            "FirstName": admin.nome,
+            "LastName": admin.cognome,
+            "CompanyName": admin.ragione_sociale,
+            "VatNumber": admin.partita_iva,
+            "Address": admin.indirizzo,
+            "PostalCode": admin.cap,
+            "City": admin.citta,
+            "SDICode": admin.codice_sdi,
+            "MobilePhone": admin.cellulare,
+            "LogoUrl": admin.logo_url
+        },
+
+        "DealerInfo": {
+            "Id": dealer.id,
+            "Email": dealer.email,
+            "FirstName": dealer.nome,
+            "LastName": dealer.cognome,
+            "CompanyName": dealer.ragione_sociale,
+            "VatNumber": dealer.partita_iva,
+            "Address": dealer.indirizzo,
+            "PostalCode": dealer.cap,
+            "City": dealer.citta,
+            "SDICode": dealer.codice_sdi,
+            "MobilePhone": dealer.cellulare,
+            "LogoUrl": dealer.logo_url
+        },
+
+        "CarMainImageUrl": "",
+        "CarImages": []
+    }
+
 
