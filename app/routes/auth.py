@@ -84,18 +84,24 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         PurchasedServices.status == "active"
     ).all()
 
-    active_service_names = [service.name for service in active_services]
+    active_service_infos = [
+    {
+        "name": service.name,
+        "page_url": service.page_url or "#"
+    }
+    for service in active_services
+]
 
     # Genera token con active_services
     access_token = Authorize.create_access_token(
-        subject=user.email, 
+        subject=user.email,
         user_claims={
-            "role": user.role, 
+            "role": user.role,
             "credit": user.credit,
-            "active_services": active_service_names
+            "active_services": active_service_infos
         },
         expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
+)
     
     return {"access_token": access_token, "token_type": "bearer"}
 
