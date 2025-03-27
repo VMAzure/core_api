@@ -79,7 +79,9 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenziali non valide")
     
     # Recupera i servizi attivi
-    active_services = db.query(Services.name).join(PurchasedServices).filter(
+    active_services = db.query(Services).join(
+        PurchasedServices, PurchasedServices.service_id == Services.id
+    ).filter(
         PurchasedServices.admin_id == user.id,
         PurchasedServices.status == "active"
     ).all()
@@ -119,12 +121,20 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
         raise HTTPException(status_code=404, detail="Utente non trovato")
 
     # Recupera i servizi attivi aggiornati
-    active_services = db.query(Services.name).join(PurchasedServices).filter(
+    active_services = db.query(Services).join(
+        PurchasedServices, PurchasedServices.service_id == Services.id
+    ).filter(
         PurchasedServices.admin_id == user.id,
         PurchasedServices.status == "active"
     ).all()
 
-    active_service_names = [service.name for service in active_services]
+    active_service_infos = [
+        {
+            "name": service.name,
+            "page_url": service.page_url or "#"
+        }
+        for service in active_services
+    ]
 
     # Genera nuovo token JWT aggiornato
     new_token = Authorize.create_access_token(
