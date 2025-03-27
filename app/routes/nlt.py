@@ -424,6 +424,7 @@ async def get_preventivo_completo(preventivo_id: str, dealerId: Optional[int] = 
             "LogoUrl": dealer.logo_url
         },
 
+
         "CarMainImageUrl": "",
         "CarImages": []
     }
