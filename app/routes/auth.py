@@ -69,7 +69,6 @@ def get_current_user(token: str = Security(oauth2_scheme), db: Session = Depends
 
     return {"user": user, "role": user.role, "credit": user.credit}
 
-    
 # Endpoint di login
 @router.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db), Authorize: AuthJWT = Depends()):
@@ -78,11 +77,12 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenziali non valide")
 
-    # Recupera i servizi attivi in base al ruolo
     if user.role == "admin":
         admin_id = user.id
-    elif user.role == "dealer" and user.parent_id is not None:
+        admin_user = user
+    elif user.role == "dealer" and user.parent_id:
         admin_id = user.parent_id
+        admin_user = db.query(User).filter(User.id == admin_id).first()
     else:
         raise HTTPException(status_code=400, detail="Ruolo utente non valido o admin non assegnato")
 
@@ -94,20 +94,20 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     ).all()
 
     active_service_infos = [
-        {
-            "name": service.name,
-            "page_url": service.page_url or "#"
-        }
+        {"name": service.name, "page_url": service.page_url or "#"}
         for service in active_services
     ]
 
-    # Genera token con active_services
     access_token = Authorize.create_access_token(
         subject=user.email,
         user_claims={
             "role": user.role,
             "credit": user.credit,
-            "active_services": active_service_infos
+            "active_services": active_service_infos,
+            "admin_info": {
+                "email": admin_user.email,
+                "logo_url": admin_user.logo_url or ""
+            }
         },
         expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
