@@ -77,22 +77,29 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenziali non valide")
-    
-    # Recupera i servizi attivi
+
+    # Recupera i servizi attivi in base al ruolo
+    if user.role == "admin":
+        admin_id = user.id
+    elif user.role == "dealer" and user.parent_id is not None:
+        admin_id = user.parent_id
+    else:
+        raise HTTPException(status_code=400, detail="Ruolo utente non valido o admin non assegnato")
+
     active_services = db.query(Services).join(
         PurchasedServices, PurchasedServices.service_id == Services.id
     ).filter(
-        PurchasedServices.admin_id == user.id,
+        PurchasedServices.admin_id == admin_id,
         PurchasedServices.status == "active"
     ).all()
 
     active_service_infos = [
-    {
-        "name": service.name,
-        "page_url": service.page_url or "#"
-    }
-    for service in active_services
-]
+        {
+            "name": service.name,
+            "page_url": service.page_url or "#"
+        }
+        for service in active_services
+    ]
 
     # Genera token con active_services
     access_token = Authorize.create_access_token(
@@ -103,9 +110,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             "active_services": active_service_infos
         },
         expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-)
-    
+    )
+
     return {"access_token": access_token, "token_type": "bearer"}
+
 
 
 @router.post('/refresh-token')
