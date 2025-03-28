@@ -569,7 +569,15 @@ async def get_dealers_assegnabili(
     risultato = [{
         "id": dealer.id,
         "nome_completo": f"{dealer.nome} {dealer.cognome}".strip(),
-        "email": dealer.email
+        "email": dealer.email,
+        "ragione_sociale": dealer.ragione_sociale,
+        "partita_iva": dealer.partita_iva,
+        "indirizzo": dealer.indirizzo,
+        "cap": dealer.cap,
+        "citta": dealer.citta,
+        "codice_sdi": dealer.codice_sdi,
+        "cellulare": dealer.cellulare,
+        "logo_url": dealer.logo_url
     } for dealer in dealers]
 
     return {
