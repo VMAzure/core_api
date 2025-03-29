@@ -1,4 +1,4 @@
-﻿from fastapi import Depends, HTTPException, APIRouter, UploadFile, File, status, Body
+﻿from fastapi import Depends, HTTPException, APIRouter, UploadFile, File, status, Body, Form
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db, supabase_client, SUPABASE_URL
@@ -278,9 +278,9 @@ async def upload_foto_usato(
 
 @router.post("/perizie-usato", tags=["AZLease"])
 async def upload_perizia_usato(
-    auto_id: str,
-    valore_perizia: float,
-    descrizione: str,
+    auto_id: str = Form(...),
+    valore_perizia: float = Form(...),
+    descrizione: str = Form(...),
     file: UploadFile = File(...),
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
