@@ -521,3 +521,74 @@ async def get_id_auto_anche_non_visibili(targa: str, Authorize: AuthJWT = Depend
 
     return {"id_auto": result.id}
 
+@router.get("/lista-auto", tags=["AZLease"])
+async def lista_auto_usate(
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    # 🔎 Costruzione filtro per user_ids da includere
+    user_ids = []
+
+    if user.role == "superadmin":
+        filtro = ""
+    elif user.role == "admin":
+        dealer_ids = db.execute(text("SELECT id FROM utenti WHERE parent_id = :admin_id"), {
+            "admin_id": user.id
+        }).fetchall()
+        ids = [str(user.id)] + [str(d.id) for d in dealer_ids]
+        filtro = f"AND i.admin_id IN ({','.join(ids)})"
+    elif user.role == "dealer":
+        dealer_ids = db.execute(text("""
+            SELECT id FROM utenti 
+            WHERE parent_id = :admin_id OR id = :admin_id
+        """), {"admin_id": user.parent_id}).fetchall()
+        ids = [str(user.id), str(user.parent_id)] + [str(d.id) for d in dealer_ids]
+        filtro = f"AND i.admin_id IN ({','.join(set(ids))})"
+    else:
+        raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
+
+    # 🔧 Query principale
+    query = f"""
+        SELECT 
+            a.id AS id_auto,
+            d.marca_nome AS marca,
+            d.allestimento,
+            a.km_certificati,
+            a.colore,
+            i.visibile,
+            i.data_inserimento,
+            a.anno_immatricolazione,
+            u_admin.nome || ' ' || u_admin.cognome AS admin,
+            u_dealer.nome || ' ' || u_dealer.cognome AS dealer,
+            i.prezzo_vendita,
+            COALESCE(SUM(dn.valore_perizia), 0) AS valore_perizia,
+            EXISTS (
+                SELECT 1 FROM azlease_usatoimg img WHERE img.auto_id = a.id
+            ) AS foto,
+            EXISTS (
+                SELECT 1 FROM azlease_usatodanni pd WHERE pd.auto_id = a.id
+            ) AS perizie
+        FROM azlease_usatoauto a
+        JOIN azlease_usatoin i ON i.id = a.id_usatoin
+        LEFT JOIN azlease_usatoautodetails d ON d.auto_id = a.id
+        LEFT JOIN utenti u_admin ON u_admin.id = i.admin_id
+        LEFT JOIN utenti u_dealer ON u_dealer.id = i.dealer_id
+        LEFT JOIN azlease_usatodanni dn ON dn.auto_id = a.id
+        WHERE 1=1 {filtro}
+        GROUP BY a.id, d.marca_nome, d.allestimento, a.km_certificati, a.colore, i.visibile, 
+                 i.data_inserimento, a.anno_immatricolazione, u_admin.nome, u_admin.cognome, 
+                 u_dealer.nome, u_dealer.cognome, i.prezzo_vendita
+        ORDER BY i.data_inserimento DESC
+    """
+
+    risultati = db.execute(text(query)).fetchall()
+
+    return [dict(r._mapping) for r in risultati]
+
