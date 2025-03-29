@@ -34,10 +34,10 @@ async def inserisci_auto_usata(
     admin_id = None
 
     if user.role == "dealer":
-        dealer_id = str(user.id)
-        admin_id = str(user.parent_id)
-    else:  # admin o superadmin
-        admin_id = str(user.id)
+        dealer_id = user.id  # int
+        admin_id = user.parent_id
+    else:
+        admin_id = user.id
 
     # 1️⃣ Inserisci in AZLease_UsatoIN
     usatoin_id = uuid.uuid4()
@@ -50,8 +50,8 @@ async def inserisci_auto_usata(
         )
     """), {
         "id": str(usatoin_id),
-        "dealer_id": dealer_id if dealer_id else None,
-        "admin_id": admin_id,  # nessuna conversione UUID qui!
+        "dealer_id": int(dealer_id) if dealer_id else None,
+        "admin_id": int(admin_id),
         "inserimento": datetime.utcnow(),
         "modifica": datetime.utcnow(),
         "costo": payload.prezzo_costo,
