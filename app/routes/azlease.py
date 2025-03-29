@@ -253,7 +253,7 @@ async def upload_foto_usato(
         )
 
         # URL pubblico
-        image_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_name}"
+        image_url = f"{SUPABASE_URL}/storage/v1/object/public/auto-usate/{file_name}"
 
         # Inserisci URL nella tabella AZLease_UsatoIMG
         img_id = str(uuid.uuid4())
