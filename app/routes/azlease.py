@@ -558,6 +558,7 @@ async def lista_auto_usate(
     query = f"""
         SELECT 
             a.id AS id_auto,
+            a.targa,
             d.marca_nome AS marca,
             d.allestimento,
             a.km_certificati,
