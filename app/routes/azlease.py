@@ -9,6 +9,8 @@ from datetime import datetime
 from sqlalchemy import text
 import requests
 import httpx
+import re
+
 from typing import Optional
 
 router = APIRouter()
@@ -237,7 +239,8 @@ async def upload_foto_usato(
         raise HTTPException(status_code=400, detail="Formato immagine non supportato")
 
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    file_name = f"auto-usate/{auto_id}_{timestamp}_{file.filename}"
+    clean_filename = re.sub(r"[^\w\-\.]", "_", file.filename)  # rimuove spazi, () ecc.
+    file_name = f"auto-usate/{auto_id}_{timestamp}_{clean_filename}"
 
     try:
         content = await file.read()
