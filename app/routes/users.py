@@ -715,5 +715,52 @@ def create_dealer_team(
         "email": new_user.email
     }
 
+@router.get("/mio-team", tags=["Users"])
+async def get_mio_team(
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    if is_admin_user(user):
+        admin_id = get_admin_id(user)
+        membri = db.query(User).filter(
+            User.role == "admin_team",
+            User.parent_id == admin_id
+        ).all()
+
+    elif is_dealer_user(user):
+        dealer_id = get_dealer_id(user)
+        membri = db.query(User).filter(
+            User.role == "dealer_team",
+            User.parent_id == dealer_id
+        ).all()
+
+    else:
+        membri = []
+
+    risultato = [{
+        "id": m.id,
+        "nome_completo": f"{m.nome} {m.cognome}".strip(),
+        "email": m.email,
+        "ragione_sociale": m.ragione_sociale,
+        "partita_iva": m.partita_iva,
+        "indirizzo": m.indirizzo,
+        "cap": m.cap,
+        "citta": m.citta,
+        "codice_sdi": m.codice_sdi,
+        "cellulare": m.cellulare,
+        "logo_url": m.logo_url
+    } for m in membri]
+
+    return {
+        "success": True,
+        "colleghi": risultato
+    }
 
 
