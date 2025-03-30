@@ -4,6 +4,8 @@ from fastapi_jwt_auth import AuthJWT
 from app.database import get_db
 from app.models import SmtpSettings, User
 from pydantic import BaseModel
+from app.auth_helpers import get_admin_id, is_admin_user
+
 
 router = APIRouter()
 
