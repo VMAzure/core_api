@@ -288,20 +288,6 @@ class AZUsatoInsertRequest(BaseModel):
     visibile: Optional[bool] = True
 
 
-class AdminTeamCreateRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8)
-    nome: str
-    cognome: str
-    cellulare: str
-
-class DealerTeamCreateRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8)
-    nome: str
-    cognome: str
-    cellulare: str
-
 
 
 

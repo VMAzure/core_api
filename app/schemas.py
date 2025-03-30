@@ -2,6 +2,8 @@
 from pydantic import BaseModel, EmailStr, root_validator 
 from typing import Optional
 from datetime import datetime, date
+from pydantic import BaseModel, EmailStr, Field
+
 
 
 
@@ -127,3 +129,18 @@ class AutoUsataCreate(BaseModel):
     colore: Optional[str]
     prezzo_costo: float
     prezzo_vendita: float
+
+    
+class AdminTeamCreateRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8)
+    nome: str
+    cognome: str
+    cellulare: str
+
+class DealerTeamCreateRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8)
+    nome: str
+    cognome: str
+    cellulare: str
