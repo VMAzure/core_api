@@ -6,7 +6,8 @@ from app.models import Services, PurchasedServices, User, CreditTransaction
 from pydantic import BaseModel
 from sqlalchemy.sql import func
 from datetime import datetime
-from app.auth_helpers import get_admin_id, is_admin_user, is_dealer_user
+from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
+
 
 import traceback
 import sys
