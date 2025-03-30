@@ -9,17 +9,12 @@ from app.schemas import ClienteResponse, ClienteCreateRequest
 from pydantic import BaseModel
 
 router = APIRouter()
-def get_admin_id(user):
-    return user.parent_id if user.role == "admin_team" else user.id
-
-def get_dealer_id(user):
-    return user.parent_id if user.role == "dealer_team" else (user.id if user.role == "dealer" else None)
-
-def is_admin_user(user):
-    return user.role in ["admin", "admin_team", "superadmin"]
-
-def is_dealer_user(user):
-    return user.role in ["dealer", "dealer_team"]
+from app.auth_helpers import (
+    get_admin_id,
+    get_dealer_id,
+    is_admin_user,
+    is_dealer_user
+)
 
 
 # Recupero lista clienti in base al ruolo

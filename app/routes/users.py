@@ -11,6 +11,12 @@ from fastapi import UploadFile, File
 import supabase
 from supabase import create_client, Client
 from app.schemas import UserUpdateRequest, ChangePasswordRequest, AdminTeamCreateRequest, DealerTeamCreateRequest
+from app.auth_helpers import (
+    get_admin_id,
+    get_dealer_id,
+    is_admin_user,
+    is_dealer_user
+)
 
 import os
 from datetime import datetime
@@ -173,7 +179,7 @@ def create_dealer(
 
     # ✅ Recupera i dati dell'utente autenticato (Admin)
     admin_user = db.query(User).filter(User.email == user_email).first()
-    if not admin_user or admin_user.role != "admin":
+    if not admin_user or not is_admin_user(admin_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
 
     # ✅ Verifica credito sufficiente
@@ -205,6 +211,8 @@ def create_dealer(
     hashed_password = pwd_context.hash(dealer_data.password)
 
     # ✅ Creazione del nuovo dealer
+    parent_id = get_admin_id(admin_user)
+
     new_dealer = User(
         email=dealer_data.email,
         hashed_password=hashed_password,
@@ -219,7 +227,7 @@ def create_dealer(
         partita_iva=dealer_data.partita_iva,
         codice_sdi=dealer_data.codice_sdi,
         credit=0.0,
-        parent_id=admin_user.id,
+        parent_id=parent_id,
         shared_customers=(dealer_data.partita_iva == admin_user.partita_iva)  # 🔥 Automatico
     )
 
@@ -276,7 +284,10 @@ def get_users_list(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
         ).order_by(User.id).all()
     
     # Se l'utente è un Admin, restituisce solo i suoi Dealer
-    elif user.role == "admin":
+    elif is_admin_user(user):
+        admin_id = get_admin_id(user)
+        users = db.query(...).filter(User.parent_id == admin_id, User.role == "dealer").order_by(User.id).all()
+
         users = db.query(
             User.id,
             User.ragione_sociale,
@@ -394,6 +405,8 @@ async def upload_logo(file: UploadFile = File(...), Authorize: AuthJWT = Depends
 
 
 # endpoint me aggiornato
+from app.auth_helpers import get_admin_id, get_dealer_id
+
 @router.get("/me", tags=["Users"])
 def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
@@ -405,6 +418,7 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
         if not user:
             raise HTTPException(status_code=404, detail="Utente non trovato")
 
+        # Dati base dell'utente loggato
         user_data = {
             "id": user.id,
             "email": user.email,
@@ -429,10 +443,16 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
             "dealer_info": None
         }
 
-        if user.role == "dealer":
-            admin = db.query(User).filter(User.id == user.parent_id).first()
+        if user.role in ["dealer", "dealer_team"]:
+            # Ricaviamo il dealer effettivo
+            dealer_id = get_dealer_id(user)
+            dealer = db.query(User).filter(User.id == dealer_id).first()
 
-            admin_data = {
+            # Ricaviamo l'admin collegato al dealer
+            admin = db.query(User).filter(User.id == dealer.parent_id).first()
+
+            response["dealer_info"] = user_data
+            response["admin_info"] = {
                 "id": admin.id,
                 "email": admin.email,
                 "nome": admin.nome,
@@ -450,11 +470,27 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
                 "updated_at": admin.updated_at.isoformat() if admin.updated_at else None
             }
 
-            response["dealer_info"] = user_data
-            response["admin_info"] = admin_data
+        elif user.role in ["admin", "admin_team"]:
+            admin_id = get_admin_id(user)
+            admin = user if user.role == "admin" else db.query(User).filter(User.id == admin_id).first()
 
-        elif user.role == "admin":
-            response["admin_info"] = user_data
+            response["admin_info"] = {
+                "id": admin.id,
+                "email": admin.email,
+                "nome": admin.nome,
+                "cognome": admin.cognome,
+                "ragione_sociale": admin.ragione_sociale,
+                "partita_iva": admin.partita_iva,
+                "indirizzo": admin.indirizzo,
+                "cap": admin.cap,
+                "citta": admin.citta,
+                "codice_sdi": admin.codice_sdi,
+                "cellulare": admin.cellulare,
+                "credit": admin.credit,
+                "logo_url": admin.logo_url,
+                "created_at": admin.created_at.isoformat() if admin.created_at else None,
+                "updated_at": admin.updated_at.isoformat() if admin.updated_at else None
+            }
 
         return response
 
@@ -548,11 +584,13 @@ async def get_dealers_assegnabili(
     if not current_user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    if current_user.role == "admin":
+    if is_admin_user(current_user):
+        admin_id = get_admin_id(current_user)
         dealers = db.query(User).filter(
-            User.parent_id == current_user.id,
+            User.parent_id == admin_id,
             User.role == "dealer"
         ).all()
+
 
     elif current_user.role == "dealer":
         dealers = db.query(User).filter(
