@@ -285,29 +285,28 @@ def get_users_list(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
     
     # Se l'utente è un Admin, restituisce solo i suoi Dealer
     elif is_admin_user(user):
-        admin_id = get_admin_id(user)
-        users = db.query(...).filter(User.parent_id == admin_id, User.role == "dealer").order_by(User.id).all()
+    admin_id = get_admin_id(user)
 
-        users = db.query(
-            User.id,
-            User.ragione_sociale,
-            User.parent_id.label("admin_id"),
-            User.email,
-            User.partita_iva,
-            User.indirizzo,
-            User.created_at.label("activation_date"),
-            User.updated_at,
-            User.cap,
-            User.citta,
-            User.role,
-            User.codice_sdi,
-            User.nome,
-            User.cognome,
-            User.cellulare,
-            User.credit,
-            User.logo_url  # ✅ aggiungi questo
+    users = db.query(
+        User.id,
+        User.ragione_sociale,
+        User.parent_id.label("admin_id"),
+        User.email,
+        User.partita_iva,
+        User.indirizzo,
+        User.created_at.label("activation_date"),
+        User.updated_at,
+        User.cap,
+        User.citta,
+        User.role,
+        User.codice_sdi,
+        User.nome,
+        User.cognome,
+        User.cellulare,
+        User.credit,
+        User.logo_url
+    ).filter(User.parent_id == admin_id, User.role == "dealer").order_by(User.id).all()
 
-        ).filter(User.parent_id == user.id, User.role == "dealer").order_by(User.id).all()
     
     # Se l'utente ha un ruolo diverso, accesso negato
     else:
