@@ -1,4 +1,4 @@
-# app/auth_helpers.py
+ï»¿# app/auth_helpers.py
 
 def get_admin_id(user):
     """Restituisce l'ID dell'admin effettivo (anche per admin_team)"""
@@ -19,13 +19,13 @@ def get_dealer_id(user):
     return None
 
 def is_admin_user(user):
-    """True se l'utente è admin, admin_team o superadmin"""
+    """True se l'utente Ã¨ admin, admin_team o superadmin"""
     return user.role in ["admin", "admin_team", "superadmin"]
 
 def is_dealer_user(user):
-    """True se l'utente è dealer o dealer_team"""
+    """True se l'utente Ã¨ dealer o dealer_team"""
     return user.role in ["dealer", "dealer_team"]
 
 def is_team_user(user):
-    """True se l'utente è parte di un team"""
+    """True se l'utente Ã¨ parte di un team"""
     return user.role in ["admin_team", "dealer_team"]
