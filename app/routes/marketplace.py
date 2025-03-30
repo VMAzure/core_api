@@ -182,7 +182,7 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
         } for service in services]
 
     elif user.role in ["dealer", "dealer_team"]:
-        from app.auth_helpers import get_admin_id
+        
 
         admin_id = get_admin_id(user)
 
