@@ -7,6 +7,13 @@ from pydantic import BaseModel, BaseSettings
 from jose import jwt, JWTError  # ✅ Aggiunto import corretto per decodificare il token JWT
 from fastapi_jwt_auth import AuthJWT
 from typing import List, Optional
+from app.auth_helpers import (
+    get_admin_id,
+    get_dealer_id,
+    is_admin_user,
+    is_dealer_user
+)
+
 
 import uuid
 import httpx
@@ -62,24 +69,24 @@ SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSI
 async def salva_preventivo(
     file: UploadFile = File(...),
     cliente_id: int = Form(...),
-    creato_da: int = Form(...),
+    current_user: User = Depends(get_current_user),
     marca: str = Form(...),
     modello: str = Form(...),
     durata: int = Form(...),
     km_totali: int = Form(...),
     anticipo: float = Form(...),
     canone: float = Form(...),
-    preventivo_assegnato_a: Optional[int] = Form(None),  # ✅ nuovo campo
-    note: Optional[str] = Form(None),                    # ✅ nuovo campo
-    player: Optional[str] = Form(None),                  # ✅ nuovo campo
+    preventivo_assegnato_a: Optional[int] = Form(None),
+    note: Optional[str] = Form(None),
+    player: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
-    # Genera nome file univoco
+    creato_da = current_user.id  # ✅ assegnato qui
+
     file_extension = file.filename.split(".")[-1]
     file_name = f"NLT_Offer_{uuid.uuid4()}.{file_extension}"
     file_path = f"{SUPABASE_BUCKET}/{file_name}"
 
-    # Carica file su Supabase
     async with httpx.AsyncClient() as client:
         headers = {
             "Content-Type": file.content_type,
@@ -96,7 +103,6 @@ async def salva_preventivo(
 
     file_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_path}"
 
-    # ✅ Modifica qui: aggiungi i nuovi campi
     nuovo_preventivo = NltPreventivi(
         cliente_id=cliente_id,
         file_url=file_url,
@@ -112,6 +118,7 @@ async def salva_preventivo(
         note=note,
         player=player
     )
+
     db.add(nuovo_preventivo)
     db.commit()
     db.refresh(nuovo_preventivo)
@@ -134,9 +141,6 @@ async def salva_preventivo(
     }
 
 
-
-
-
 @router.get("/preventivi/{cliente_id}")
 async def get_preventivi_cliente(
     cliente_id: int, 
@@ -153,12 +157,14 @@ async def get_preventivi_cliente(
     nome_cliente = cliente.ragione_sociale if cliente.ragione_sociale else f"{cliente.nome} {cliente.cognome}".strip()
 
     # 🔹 Dealer: logica aggiornata
-    if current_user.role == "dealer":
+    if is_dealer_user(current_user):
         if current_user.shared_customers:
+            dealer_id = get_dealer_id(current_user)
             team_ids = db.query(User.id).filter(
-                (User.parent_id == current_user.parent_id) | 
-                (User.id == current_user.parent_id)
+                (User.parent_id == dealer_id) |
+                (User.id == dealer_id)
             ).subquery()
+
 
             preventivi = db.query(NltPreventivi).filter(
                 NltPreventivi.creato_da.in_(team_ids),
@@ -214,7 +220,7 @@ async def get_miei_preventivi(
 ):
     offset = (page - 1) * size
 
-    if current_user.role == "dealer":
+    if is_dealer_user(current_user):
         if current_user.shared_customers:
             team_ids = db.query(User.id).filter(
                 (User.parent_id == current_user.parent_id) |
@@ -233,10 +239,12 @@ async def get_miei_preventivi(
                 NltPreventivi.visibile == 1
             )
 
-    elif current_user.role == "admin":
-        dealer_ids = db.query(User.id).filter(User.parent_id == current_user.id).all()
+    elif is_admin_user(current_user):
+        admin_id = get_admin_id(current_user)
+        dealer_ids = db.query(User.id).filter(User.parent_id == admin_id).all()
         dealer_ids_list = [id for (id,) in dealer_ids]
-        dealer_ids_list.append(current_user.id)
+        dealer_ids_list.append(admin_id)
+
 
         query = db.query(NltPreventivi).join(Cliente).filter(
             NltPreventivi.creato_da.in_(dealer_ids_list),

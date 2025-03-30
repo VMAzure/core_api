@@ -6,6 +6,8 @@ from app.models import Services, PurchasedServices, User, CreditTransaction
 from pydantic import BaseModel
 from sqlalchemy.sql import func
 from datetime import datetime
+from app.auth_helpers import get_admin_id, is_admin_user, is_dealer_user
+
 import traceback
 import sys
 import logging
@@ -157,11 +159,15 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
             "is_active": True
         } for service in services]
 
-    elif user.role == "admin":
-        purchased_services = {p.service_id for p in db.query(PurchasedServices).filter(
-            PurchasedServices.admin_id == user.id,
-            PurchasedServices.status == 'active'
-        ).all()}
+    elif is_admin_user(user):
+        admin_id = get_admin_id(user)
+
+        purchased_services = {
+            p.service_id for p in db.query(PurchasedServices).filter(
+                PurchasedServices.admin_id == admin_id,
+                PurchasedServices.status == 'active'
+            ).all()
+        }
 
         result = [{
             "id": service.id,
@@ -174,9 +180,13 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
             "is_active": service.id in purchased_services
         } for service in services]
 
-    elif user.role == "dealer":
+    elif user.role in ["dealer", "dealer_team"]:
+        from app.auth_helpers import get_admin_id
+
+        admin_id = get_admin_id(user)
+
         purchased_services = db.query(Services).join(PurchasedServices).filter(
-            PurchasedServices.admin_id == user.parent_id,
+            PurchasedServices.admin_id == admin_id,
             PurchasedServices.status == 'active'
         ).all()
 
@@ -207,39 +217,43 @@ async def purchase_service(
     db: Session = Depends(get_db)
 ):
     """
-    Permette a un Admin di acquistare o riattivare un servizio, verificando il credito disponibile.
+    Permette a un Admin o admin_team di acquistare o riattivare un servizio,
+    verificando il credito disponibile dell'admin principale.
     """
-
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
-    # Recuperiamo l'utente (Admin)
     user = db.query(User).filter(User.email == user_email).first()
-    if not user or user.role != "admin":
+    if not user or not is_admin_user(user):
         raise HTTPException(status_code=403, detail="Accesso negato: solo gli Admin possono acquistare servizi.")
+
+    admin_id = get_admin_id(user)
+    admin = db.query(User).filter(User.id == admin_id, User.role == "admin").first()
+    if not admin:
+        raise HTTPException(status_code=403, detail="Admin principale non trovato")
 
     # Recuperiamo il servizio richiesto
     service = db.query(Services).filter(Services.id == request.service_id).first()
     if not service:
         raise HTTPException(status_code=404, detail="Servizio non trovato.")
 
+    # Controlla se è già stato acquistato
     existing_purchase = db.query(PurchasedServices).filter(
-        PurchasedServices.admin_id == user.id,
+        PurchasedServices.admin_id == admin.id,
         PurchasedServices.service_id == request.service_id
     ).first()
 
     if existing_purchase:
         if existing_purchase.status == "sospeso":
-            # Se il servizio è sospeso, controlla credito e riattiva
-            if user.credit < service.price:
+            if admin.credit < service.price:
                 raise HTTPException(status_code=402, detail="Credito insufficiente per riattivare il servizio.")
 
-            user.credit -= service.price
+            admin.credit -= service.price
             existing_purchase.status = "active"
-            existing_purchase.activated_at = datetime.utcnow()  # Riattivazione servizio
+            existing_purchase.activated_at = datetime.utcnow()
 
             transaction = CreditTransaction(
-                admin_id=user.id,
+                admin_id=admin.id,
                 amount=service.price,
                 transaction_type="USE"
             )
@@ -250,26 +264,27 @@ async def purchase_service(
             return {
                 "message": "Servizio riattivato con successo!",
                 "service_id": service.id,
-                "remaining_credit": user.credit
+                "remaining_credit": admin.credit
             }
+
         else:
             raise HTTPException(status_code=400, detail="Hai già acquistato questo servizio.")
 
-    # Se il servizio non è mai stato acquistato, procedi con nuovo acquisto
-    if user.credit < service.price:
+    # Nuovo acquisto
+    if admin.credit < service.price:
         raise HTTPException(status_code=402, detail="Credito insufficiente per acquistare il servizio.")
 
     try:
-        user.credit -= service.price
+        admin.credit -= service.price
 
         transaction = CreditTransaction(
-            admin_id=user.id,
+            admin_id=admin.id,
             amount=service.price,
             transaction_type="USE"
         )
 
         new_purchase = PurchasedServices(
-            admin_id=user.id,
+            admin_id=admin.id,
             service_id=service.id,
             status="active",
             activated_at=datetime.utcnow()
@@ -282,7 +297,7 @@ async def purchase_service(
         return {
             "message": "Servizio acquistato con successo!",
             "service_id": service.id,
-            "remaining_credit": user.credit
+            "remaining_credit": admin.credit
         }
 
     except Exception as e:

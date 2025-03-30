@@ -16,6 +16,8 @@ def get_db():
         db.close()
 
 # ✅ API per ottenere i dettagli di un servizio
+from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
+
 @service_router.get("/{service_id}")
 def get_service(
     service_id: int,
@@ -23,27 +25,46 @@ def get_service(
     db: Session = Depends(get_db)
 ):
     try:
-        # ✅ Verifica il token JWT
         Authorize.jwt_required()
 
-        # 🔹 Recupera l'utente autenticato dal token JWT
-        user_id = Authorize.get_jwt_subject()
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Unauthorized")
+        user_email = Authorize.get_jwt_subject()
+        if not user_email:
+            raise HTTPException(status_code=401, detail="Utente non autenticato")
 
-        # 🔹 Controlla se il servizio esiste e se è attivo
+        user = db.query(User).filter(User.email == user_email).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="Utente non trovato")
+
+        # Controlla se il servizio esiste ed è attivo
         service = db.query(Services).filter(Services.id == service_id, Services.is_active == True).first()
         if not service:
-            raise HTTPException(status_code=404, detail="Service not found")
+            raise HTTPException(status_code=404, detail="Servizio non trovato")
 
-        # 🔹 Controlla se l'utente ha acquistato o è assegnato al servizio
-        purchased = db.query(PurchasedServices).filter_by(user_id=user_id, service_id=service_id, status='attivo').first()
-        assigned = db.query(AssignedServices).filter_by(dealer_id=user_id, service_id=service_id, status='attivo').first()
+        # Verifica accesso al servizio
+        access_granted = False
 
-        if not purchased and not assigned:
-            raise HTTPException(status_code=403, detail="Access denied")
+        if is_admin_user(user):
+            admin_id = get_admin_id(user)
+            purchased = db.query(PurchasedServices).filter_by(
+                admin_id=admin_id,
+                service_id=service_id,
+                status='active'
+            ).first()
+            access_granted = bool(purchased)
 
-        # 🔹 Restituisce i dettagli del servizio
+        elif is_dealer_user(user):
+            dealer_id = get_dealer_id(user)
+            assigned = db.query(AssignedServices).filter_by(
+                dealer_id=dealer_id,
+                service_id=service_id,
+                status='active'
+            ).first()
+            access_granted = bool(assigned)
+
+        if not access_granted:
+            raise HTTPException(status_code=403, detail="Accesso negato a questo servizio")
+
+        # Restituisce i dettagli
         return {
             "id": service.id,
             "name": service.name,
@@ -56,5 +77,3 @@ def get_service(
     except Exception as e:
         print(f"❌ ERRORE: {str(e)}")
         raise HTTPException(status_code=500, detail="Errore interno del server")
-
-
