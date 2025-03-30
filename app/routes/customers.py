@@ -9,6 +9,18 @@ from app.schemas import ClienteResponse, ClienteCreateRequest
 from pydantic import BaseModel
 
 router = APIRouter()
+def get_admin_id(user):
+    return user.parent_id if user.role == "admin_team" else user.id
+
+def get_dealer_id(user):
+    return user.parent_id if user.role == "dealer_team" else (user.id if user.role == "dealer" else None)
+
+def is_admin_user(user):
+    return user.role in ["admin", "admin_team", "superadmin"]
+
+def is_dealer_user(user):
+    return user.role in ["dealer", "dealer_team"]
+
 
 # Recupero lista clienti in base al ruolo
 @router.get("/clienti", response_model=List[ClienteResponse])
@@ -23,17 +35,13 @@ def get_clienti(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     if user.role == "superadmin":
         clienti = db.query(Cliente).all()
 
-    elif user.role == "admin":
-        clienti = db.query(Cliente).filter(
-            (Cliente.admin_id == user.id) |
-            (Cliente.admin_id.in_([dealer.id for dealer in user.dealers]))
-        ).all()
+    elif is_admin_user(user):
+        admin_id = get_admin_id(user)
+        clienti = db.query(Cliente).filter(Cliente.admin_id == admin_id).all()
 
-    elif user.role == "dealer":
-        if user.shared_customers:
-            clienti = db.query(Cliente).filter(Cliente.admin_id == user.parent_id).all()
-        else:
-            clienti = db.query(Cliente).filter(Cliente.dealer_id == user.id).all()
+    elif is_dealer_user(user):
+        dealer_id = get_dealer_id(user)
+        clienti = db.query(Cliente).filter(Cliente.dealer_id == dealer_id).all()
 
     else:
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
@@ -65,7 +73,7 @@ def check_cliente_exists(
         raise HTTPException(status_code=404, detail="Utente non trovato")
 
     # Se l'utente è dealer, cerca fra tutti i clienti dell'admin associato
-    admin_id = user.parent_id if user.role == "dealer" else user.id
+    admin_id = get_admin_id(user)
     query = db.query(Cliente).filter(Cliente.admin_id == admin_id)
 
     # Logica di controllo aggiornata
@@ -123,8 +131,9 @@ def crea_cliente(
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato")
 
-    admin_id = user.parent_id if user.role == "dealer" else user.id
-    dealer_id = user.id if user.role == "dealer" else None
+    admin_id = get_admin_id(user)
+    dealer_id = get_dealer_id(user)
+
 
     # Verifica duplicati cliente sotto lo stesso Admin/Dealer
     query = db.query(Cliente).filter(Cliente.admin_id == admin_id)
@@ -194,10 +203,14 @@ def richiedi_modifica_cliente(
     user_email = Authorize.get_jwt_subject()
 
     user = db.query(User).filter(User.email == user_email).first()
-    if not user or user.role != "dealer":
+    if not user or not is_dealer_user(user):
         raise HTTPException(status_code=403, detail="Accesso non autorizzato")
 
-    cliente = db.query(Cliente).filter(Cliente.id == cliente_id, Cliente.dealer_id == user.id).first()
+    cliente = db.query(Cliente).filter(
+        Cliente.id == cliente_id,
+        Cliente.dealer_id == get_dealer_id(user)
+    ).first()
+
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
 
@@ -228,12 +241,18 @@ def modifica_cliente(
     user_email = Authorize.get_jwt_subject()
 
     user = db.query(User).filter(User.email == user_email).first()
-    if not user or user.role not in ["admin", "superadmin"]:
+    if not user or not is_admin_user(user):
         raise HTTPException(status_code=403, detail="Accesso non autorizzato")
 
-    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    admin_id = get_admin_id(user)
+
+    cliente = db.query(Cliente).filter(
+        Cliente.id == cliente_id,
+        Cliente.admin_id == admin_id
+    ).first()
+
     if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente non trovato")
+        raise HTTPException(status_code=404, detail="Cliente non trovato o non appartenente a questo admin")
 
     for key, value in dati_cliente.dict().items():
         setattr(cliente, key, value)
@@ -244,5 +263,6 @@ def modifica_cliente(
     db.refresh(cliente)
 
     return {"msg": "Cliente modificato correttamente", "cliente": cliente}
+
 
 
