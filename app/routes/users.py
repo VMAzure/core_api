@@ -12,8 +12,6 @@ import supabase
 from supabase import create_client, Client
 from app.schemas import UserUpdateRequest, ChangePasswordRequest
 
-
-
 import os
 from datetime import datetime
 
@@ -585,6 +583,98 @@ async def get_dealers_assegnabili(
         "dealers": risultato
     }
 
+@router.post("/admin-team", tags=["Users"])
+def create_admin_team(
+    user_data: AdminTeamCreateRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    admin = db.query(User).filter(User.email == user_email).first()
+
+    if not admin or admin.role != "admin":
+        raise HTTPException(status_code=403, detail="Accesso negato")
+
+    # Email già registrata?
+    if db.query(User).filter(User.email == user_data.email).first():
+        raise HTTPException(status_code=400, detail="Email già in uso")
+
+    hashed_password = pwd_context.hash(user_data.password)
+
+    new_user = User(
+        email=user_data.email,
+        hashed_password=hashed_password,
+        role="admin_team",
+        nome=user_data.nome,
+        cognome=user_data.cognome,
+        cellulare=user_data.cellulare,
+        indirizzo=admin.indirizzo,
+        cap=admin.cap,
+        citta=admin.citta,
+        ragione_sociale=admin.ragione_sociale,
+        partita_iva=admin.partita_iva,
+        codice_sdi=admin.codice_sdi,
+        logo_url=admin.logo_url,
+        parent_id=admin.id,
+        credit=0
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return {
+        "message": "Collaboratore admin_team creato con successo.",
+        "user_id": new_user.id,
+        "email": new_user.email
+    }
+
+@router.post("/dealer-team", tags=["Users"])
+def create_dealer_team(
+    user_data: DealerTeamCreateRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    dealer_email = Authorize.get_jwt_subject()
+    dealer = db.query(User).filter(User.email == dealer_email).first()
+
+    if not dealer or dealer.role != "dealer":
+        raise HTTPException(status_code=403, detail="Accesso negato")
+
+    if db.query(User).filter(User.email == user_data.email).first():
+        raise HTTPException(status_code=400, detail="Email già in uso")
+
+    hashed_password = pwd_context.hash(user_data.password)
+
+    new_user = User(
+        email=user_data.email,
+        hashed_password=hashed_password,
+        role="dealer_team",
+        nome=user_data.nome,
+        cognome=user_data.cognome,
+        cellulare=user_data.cellulare,
+        indirizzo=dealer.indirizzo,
+        cap=dealer.cap,
+        citta=dealer.citta,
+        ragione_sociale=dealer.ragione_sociale,
+        partita_iva=dealer.partita_iva,
+        codice_sdi=dealer.codice_sdi,
+        logo_url=dealer.logo_url,
+        parent_id=dealer.id,
+        credit=0
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return {
+        "message": "Dealer team creato con successo.",
+        "user_id": new_user.id,
+        "email": new_user.email
+    }
 
 
 
