@@ -632,7 +632,7 @@ def create_admin_team(
     user_email = Authorize.get_jwt_subject()
     admin = db.query(User).filter(User.email == user_email).first()
 
-    if not admin or admin.role != "admin":
+    if not admin or not is_admin_user(admin):
         raise HTTPException(status_code=403, detail="Accesso negato")
 
     # Email già registrata?

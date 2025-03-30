@@ -4,13 +4,13 @@ from fastapi_jwt_auth import AuthJWT
 from app.database import get_db, supabase_client, SUPABASE_URL
 from app.models import User, AZUsatoInsertRequest
 from app.schemas import AutoUsataCreate
+from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
 import uuid
 from datetime import datetime
 from sqlalchemy import text
 import requests
 import httpx
 import re
-
 from typing import Optional
 
 router = APIRouter()
@@ -28,27 +28,22 @@ async def inserisci_auto_usata(
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    if user.role not in ["dealer", "admin", "superadmin"]:
+    if not (is_admin_user(user) or is_dealer_user(user)):
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
 
     # Determina admin_id e dealer_id in base al ruolo
-    dealer_id = None
-    admin_id = None
+    dealer_id = get_dealer_id(user) if is_dealer_user(user) else None
+    admin_id = get_admin_id(user)
 
-    if user.role == "dealer":
-        dealer_id = user.id  # int
-        admin_id = user.parent_id
-    else:
-        admin_id = user.id
-
-    # 1️⃣ Inserisci in AZLease_UsatoIN
     usatoin_id = uuid.uuid4()
     db.execute(text("""
         INSERT INTO azlease_usatoin (
-            id, dealer_id, admin_id, data_inserimento, data_ultima_modifica, prezzo_costo, prezzo_vendita, visibile
+            id, dealer_id, admin_id, data_inserimento, data_ultima_modifica, prezzo_costo, prezzo_vendita, visibile,
+            opzionato_da, opzionato_il, venduto_da, venduto_il
         )
         VALUES (
-            :id, :dealer_id, :admin_id, :inserimento, :modifica, :costo, :vendita, :visibile
+            :id, :dealer_id, :admin_id, :inserimento, :modifica, :costo, :vendita, :visibile,
+            :opzionato_da, :opzionato_il, :venduto_da, :venduto_il
         )
     """), {
         "id": str(usatoin_id),
@@ -65,7 +60,6 @@ async def inserisci_auto_usata(
         "visibile": payload.visibile
     })
 
-    # 2️⃣ Inserisci in AZLease_UsatoAuto
     auto_id = uuid.uuid4()
     db.execute(text("""
         INSERT INTO azlease_usatoauto (
@@ -89,19 +83,15 @@ async def inserisci_auto_usata(
         "chiavi": payload.doppie_chiavi,
         "codice": payload.codice_motornet,
         "colore": payload.colore,
-        "usatoin_id": str(usatoin_id)  # Assicurati che usatoin_id sia passato come stringa, se richiesto dal database
+        "usatoin_id": str(usatoin_id)
     })
 
+
      # 🌐 Richiesta API esterna per i dettagli auto
-    token_jwt = Authorize._token  # Ottieni il token JWT corrente
-
-    headers = {
-        "Authorization": f"Bearer {token_jwt}"
-    }
-
+    token_jwt = Authorize._token
+    headers = {"Authorization": f"Bearer {token_jwt}"}
     url = f"https://coreapi-production-ca29.up.railway.app/api/usato/motornet/dettagli/{payload.codice_motornet}"
 
-    # Usa httpx per chiamata asincrona
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers, timeout=30)
 
@@ -110,6 +100,7 @@ async def inserisci_auto_usata(
         raise HTTPException(status_code=404, detail="Errore recupero dettagli auto da Motornet.")
 
     data = response.json()
+    modello = data.get("modello") or {}
 
     insert_query = text("""
     INSERT INTO azlease_usatoautodetails (
@@ -138,6 +129,7 @@ async def inserisci_auto_usata(
         :emissioni_extraurb, :created_at
     )
 """)
+
 
 
     # Flattening del JSON
@@ -221,6 +213,7 @@ async def inserisci_auto_usata(
         "id_inserimento": str(usatoin_id)
     }
 
+
 @router.post("/foto-usato", tags=["AZLease"])
 async def upload_foto_usato(
     auto_id: str,
@@ -230,48 +223,51 @@ async def upload_foto_usato(
 ):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
-
     user = db.query(User).filter(User.email == user_email).first()
+
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utente non autorizzato")
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    auto = db.execute(text("""
+        SELECT id_usatoin FROM azlease_usatoauto WHERE id = :auto_id
+    """), {"auto_id": auto_id}).fetchone()
+
+    inserimento = db.execute(text("""
+        SELECT admin_id, dealer_id FROM azlease_usatoin WHERE id = :id_usatoin
+    """), {"id_usatoin": auto.id_usatoin}).fetchone()
+
+    user_is_owner = (
+        user.id == inserimento.admin_id
+        or user.id == inserimento.dealer_id
+        or get_admin_id(user) == inserimento.admin_id
+        or get_dealer_id(user) == inserimento.dealer_id
+    )
+
+    if not user_is_owner:
+        raise HTTPException(403, detail="Non puoi aggiungere immagini a un'auto che non hai inserito")
 
     if file.content_type not in ["image/png", "image/jpeg", "image/jpg"]:
         raise HTTPException(status_code=400, detail="Formato immagine non supportato")
 
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    clean_filename = re.sub(r"[^\w\-\.]", "_", file.filename)  # rimuove spazi, () ecc.
+    clean_filename = re.sub(r"[^\w\-\.]", "_", file.filename)
     file_name = f"auto-usate/{auto_id}_{timestamp}_{clean_filename}"
 
     try:
         content = await file.read()
-
-        # Upload su Supabase bucket "auto-usate"
         supabase_client.storage.from_("auto-usate").upload(
-            file_name,
-            content,
-            {"content-type": file.content_type}
+            file_name, content, {"content-type": file.content_type}
         )
-
-        # URL pubblico
         image_url = f"{SUPABASE_URL}/storage/v1/object/public/auto-usate/{file_name}"
-
-        # Inserisci URL nella tabella AZLease_UsatoIMG
         img_id = str(uuid.uuid4())
         db.execute(text("""
             INSERT INTO azlease_usatoimg (id, auto_id, foto)
             VALUES (:id, :auto_id, :foto)
-        """), {
-            "id": img_id,
-            "auto_id": auto_id,
-            "foto": image_url
-        })
-
+        """), {"id": img_id, "auto_id": auto_id, "foto": image_url})
         db.commit()
-
         return {"message": "Immagine caricata con successo", "image_url": image_url}
 
     except Exception as e:
-        print(f"❌ Errore durante l'upload su Supabase: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
 
@@ -287,10 +283,28 @@ async def upload_perizia_usato(
 ):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
-
     user = db.query(User).filter(User.email == user_email).first()
+
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utente non autorizzato")
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    auto = db.execute(text("""
+        SELECT id_usatoin FROM azlease_usatoauto WHERE id = :auto_id
+    """), {"auto_id": auto_id}).fetchone()
+
+    inserimento = db.execute(text("""
+        SELECT admin_id, dealer_id FROM azlease_usatoin WHERE id = :id_usatoin
+    """), {"id_usatoin": auto.id_usatoin}).fetchone()
+
+    user_is_owner = (
+        user.id == inserimento.admin_id
+        or user.id == inserimento.dealer_id
+        or get_admin_id(user) == inserimento.admin_id
+        or get_dealer_id(user) == inserimento.dealer_id
+    )
+
+    if not user_is_owner:
+        raise HTTPException(403, detail="Non puoi aggiungere perizie a un'auto che non hai inserito")
 
     if file.content_type not in ["image/png", "image/jpeg", "image/jpg"]:
         raise HTTPException(status_code=400, detail="Formato immagine non supportato")
@@ -300,18 +314,10 @@ async def upload_perizia_usato(
 
     try:
         content = await file.read()
-
-        # Upload foto danno in Supabase bucket "auto-usate"
         supabase_client.storage.from_("auto-usate").upload(
-            file_name,
-            content,
-            {"content-type": file.content_type}
+            file_name, content, {"content-type": file.content_type}
         )
-
-        # URL pubblico dell'immagine
         image_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_name}"
-
-        # Inserimento dati nella tabella AZLease_UsatoDANNI
         danno_id = str(uuid.uuid4())
         db.execute(text("""
             INSERT INTO azlease_usatodanni (id, auto_id, foto, valore_perizia, descrizione)
@@ -323,15 +329,13 @@ async def upload_perizia_usato(
             "valore_perizia": valore_perizia,
             "descrizione": descrizione
         })
-
         db.commit()
-
         return {"message": "Perizia inserita con successo", "danno_id": danno_id, "foto_url": image_url}
 
     except Exception as e:
-        print(f"❌ Errore durante upload della perizia su Supabase: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+
 
 
 @router.get("/foto-usato/{auto_id}", tags=["AZLease"])
@@ -366,117 +370,64 @@ async def get_perizie_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: Se
 async def get_dettagli_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """Restituisce tutti i dettagli completi di un'auto usata."""
     Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    # 1️⃣ Recupera i dati dell'auto
+    # 🔍 Recupera i dati principali
     auto = db.execute(text("""
         SELECT * FROM azlease_usatoauto WHERE id = :auto_id
     """), {"auto_id": auto_id}).fetchone()
-
     if not auto:
         raise HTTPException(status_code=404, detail="Auto non trovata")
 
-    # 5️⃣ Recupera TUTTI i dati da azlease_usatoin
+    # 🔍 Recupera dati di inserimento
     inserimento = db.execute(text("""
         SELECT * FROM azlease_usatoin
-        WHERE id = (SELECT id_usatoin FROM azlease_usatoauto WHERE id = :auto_id)
-    """), {"auto_id": auto_id}).fetchone()
+        WHERE id = :id_usatoin
+    """), {"id_usatoin": auto.id_usatoin}).fetchone()
+    if not inserimento:
+        raise HTTPException(status_code=404, detail="Inserimento non trovato")
 
+    is_admin_match = is_admin_user(user) and get_admin_id(user) == inserimento.admin_id
+    is_dealer_match = is_dealer_user(user) and get_dealer_id(user) == inserimento.dealer_id
 
-    # 2️⃣ Recupera i dettagli tecnici
+    is_creator = user.id in [inserimento.admin_id, inserimento.dealer_id]
+
+    # 🔐 Controllo visibilità
+    if not inserimento.visibile and not (is_creator or is_admin_match or is_dealer_match or user.role == "superadmin"):
+        raise HTTPException(status_code=403, detail="Non hai accesso a questa auto (non visibile)")
+
+    # 🔎 Recupera dettagli tecnici, immagini e danni
     dettagli = db.execute(text("""
         SELECT * FROM azlease_usatoautodetails WHERE auto_id = :auto_id
     """), {"auto_id": auto_id}).fetchone()
 
-    # 3️⃣ Recupera le immagini
     immagini = db.execute(text("""
         SELECT foto FROM azlease_usatoimg WHERE auto_id = :auto_id
     """), {"auto_id": auto_id}).fetchall()
 
-    # 4️⃣ Recupera i danni
     danni = db.execute(text("""
         SELECT foto, valore_perizia, descrizione FROM azlease_usatodanni WHERE auto_id = :auto_id
     """), {"auto_id": auto_id}).fetchall()
 
     return {
-    "inserimento": dict(inserimento._mapping) if inserimento else {},
-    "auto": dict(auto._mapping) if auto else {},
-    "dettagli": dict(dettagli._mapping) if dettagli else {},
-    "immagini": [img.foto for img in immagini],
-    "danni": [{"foto": d.foto, "valore_perizia": d.valore_perizia, "descrizione": d.descrizione} for d in danni]
-}
-
-@router.put("/stato-usato/{id_auto}", tags=["AZLease"])
-async def aggiorna_stato_auto_usata(
-    id_auto: str,
-    payload: dict = Body(...),
-    Authorize: AuthJWT = Depends(),
-    db: Session = Depends(get_db)
-):
-    Authorize.jwt_required()
-    user_email = Authorize.get_jwt_subject()
-    user = db.query(User).filter(User.email == user_email).first()
-
-    if not user:
-        raise HTTPException(status_code=401, detail="Utente non trovato")
-
-    azione = payload.get("azione")
-
-    # Recupera ID inserimento (usatoin) collegato a quest'auto
-    result = db.execute(text("""
-        SELECT id_usatoin FROM azlease_usatoauto WHERE id = :auto_id
-    """), {"auto_id": id_auto}).fetchone()
-
-    if not result:
-        raise HTTPException(status_code=404, detail="Auto non trovata")
-
-    id_usatoin = result.id_usatoin
-    now = datetime.utcnow()
-
-    if azione == "opzione":
-        db.execute(text("""
-            UPDATE azlease_usatoin
-            SET opzionato_da = :user_id, opzionato_il = :data
-            WHERE id = :id_usatoin
-        """), {
-            "user_id": str(user.id),
-            "data": now,
-            "id_usatoin": id_usatoin
-        })
-
-    elif azione == "vendita":
-        db.execute(text("""
-            UPDATE azlease_usatoin
-            SET venduto_da = :user_id, venduto_il = :data
-            WHERE id = :id_usatoin
-        """), {
-            "user_id": str(uuid.UUID(str(user.id))),
-            "data": now,
-            "id_usatoin": id_usatoin
-        })
-
-    elif azione == "elimina":
-        db.execute(text("""
-            UPDATE azlease_usatoin
-            SET visibile = false
-            WHERE id = :id_usatoin
-        """), {"id_usatoin": id_usatoin})
-
-    # 🔧 AGGIUNGI QUESTO:
-    elif azione == "visibile":
-        db.execute(text("""
-            UPDATE azlease_usatoin
-            SET visibile = true
-            WHERE id = :id_usatoin
-        """), {"id_usatoin": id_usatoin})
+        "inserimento": dict(inserimento._mapping) if inserimento else {},
+        "auto": dict(auto._mapping) if auto else {},
+        "dettagli": dict(dettagli._mapping) if dettagli else {},
+        "immagini": [img.foto for img in immagini],
+        "danni": [
+            {
+                "foto": d.foto,
+                "valore_perizia": d.valore_perizia,
+                "descrizione": d.descrizione
+            }
+            for d in danni
+        ]
+    }
 
 
-    else:
-        raise HTTPException(status_code=400, detail="Azione non valida. Usa: opzione, vendita, elimina")
-
-
-    db.commit()
-
-    return {"message": f"Stato aggiornato con successo ({azione})"}
 
 
 targa: Optional[str] = None
@@ -533,28 +484,26 @@ async def lista_auto_usate(
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    # 🔎 Costruzione filtro per user_ids da includere
-    user_ids = []
-
     if user.role == "superadmin":
         filtro = ""
-    elif user.role == "admin":
+    elif is_admin_user(user):
+        admin_id = get_admin_id(user)
         dealer_ids = db.execute(text("SELECT id FROM utenti WHERE parent_id = :admin_id"), {
-            "admin_id": user.id
+            "admin_id": admin_id
         }).fetchall()
-        ids = [str(user.id)] + [str(d.id) for d in dealer_ids]
+        ids = [str(admin_id)] + [str(d.id) for d in dealer_ids]
         filtro = f"AND i.admin_id IN ({','.join(ids)})"
-    elif user.role == "dealer":
+    elif is_dealer_user(user):
+        dealer_id = get_dealer_id(user)
         dealer_ids = db.execute(text("""
             SELECT id FROM utenti 
             WHERE parent_id = :admin_id OR id = :admin_id
-        """), {"admin_id": user.parent_id}).fetchall()
-        ids = [str(user.id), str(user.parent_id)] + [str(d.id) for d in dealer_ids]
+        """), {"admin_id": dealer_id}).fetchall()
+        ids = [str(user.id), str(dealer_id)] + [str(d.id) for d in dealer_ids]
         filtro = f"AND i.admin_id IN ({','.join(set(ids))})"
     else:
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
 
-    # 🔧 Query principale
     query = f"""
         SELECT 
             a.id AS id_auto,
@@ -590,6 +539,6 @@ async def lista_auto_usate(
     """
 
     risultati = db.execute(text(query)).fetchall()
-
     return [dict(r._mapping) for r in risultati]
+
 

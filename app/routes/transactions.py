@@ -21,49 +21,59 @@ def get_db():
         db.close()
 
 # Endpoint per assegnare credito (solo Super Admin)
+from app.auth_helpers import get_admin_id
+
 @router.post("/assign-credit")
 def assign_credit(request: CreditAssignRequest, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    Authorize.jwt_required()  # ✅ Verifica il token direttamente
+    Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
-    
-    print(f"🔍 DEBUG: Token valido, utente autenticato: {user_email}")
 
     user = db.query(User).filter(User.email == user_email).first()
     if not user or user.role != "superadmin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
+        raise HTTPException(status_code=403, detail="Accesso negato")
 
-    admin = db.query(User).filter(User.email == request.admin_email, User.role == "admin").first()
+    # Trova l'utente a cui vogliamo assegnare (potrebbe essere admin_team)
+    target_user = db.query(User).filter(User.email == request.admin_email).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+
+    # Recupera l'admin effettivo
+    admin_id = get_admin_id(target_user)
+    admin = db.query(User).filter(User.id == admin_id, User.role == "admin").first()
     if not admin:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Admin non trovato")
+        raise HTTPException(status_code=404, detail="Admin principale non trovato")
 
     admin.credit += request.amount
     db.commit()
     db.refresh(admin)
 
     return {"message": f"Credito assegnato con successo. Nuovo saldo: {admin.credit}"}
+
     
 @router.post("/use-credit")
 def use_credit(amount: float, target_email: str = None, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
-    print(f"🔍 DEBUG: Token valido, utente autenticato: {user_email}")
-
     requesting_user = db.query(User).filter(User.email == user_email).first()
     if not requesting_user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utente autenticato non trovato")
+        raise HTTPException(status_code=404, detail="Utente autenticato non trovato")
 
-    # Se l'utente è Super Admin, può scegliere un altro utente a cui togliere credito
+    # Se superadmin, può specificare a chi scalare credito
     if requesting_user.role == "superadmin" and target_email:
         target_user = db.query(User).filter(User.email == target_email).first()
         if not target_user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utente target non trovato")
+            raise HTTPException(status_code=404, detail="Utente target non trovato")
     else:
-        # Se non è Super Admin, può solo scalare credito a sé stesso
-        target_user = requesting_user
+        # Altri ruoli: il credito va sempre scalato all'admin principale
+        admin_id = get_admin_id(requesting_user)
+        target_user = db.query(User).filter(User.id == admin_id, User.role == "admin").first()
+
+        if not target_user:
+            raise HTTPException(status_code=404, detail="Admin principale non trovato")
 
     if target_user.credit < amount:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Credito insufficiente")
+        raise HTTPException(status_code=400, detail="Credito insufficiente")
 
     target_user.credit -= amount
     db.commit()
@@ -73,4 +83,5 @@ def use_credit(amount: float, target_email: str = None, Authorize: AuthJWT = Dep
         "message": f"Credito scalato: {amount}. Nuovo saldo: {target_user.credit}",
         "user": target_user.email
     }
+
 
