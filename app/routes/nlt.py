@@ -230,12 +230,14 @@ async def get_miei_preventivi(
             team_ids_list = [id for (id,) in team_ids]
 
             query = db.query(NltPreventivi).join(Cliente).filter(
-                NltPreventivi.creato_da.in_(team_ids_list),
+                (NltPreventivi.creato_da.in_(team_ids_list)) |
+                (NltPreventivi.preventivo_assegnato_a == current_user.id),
                 NltPreventivi.visibile == 1
             )
         else:
             query = db.query(NltPreventivi).join(Cliente).filter(
-                NltPreventivi.creato_da == current_user.id,
+                (NltPreventivi.creato_da == current_user.id) |
+                (NltPreventivi.preventivo_assegnato_a == current_user.id),
                 NltPreventivi.visibile == 1
             )
 
