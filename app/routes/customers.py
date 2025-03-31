@@ -18,6 +18,8 @@ from app.auth_helpers import (
 
 
 # Recupero lista clienti in base al ruolo
+from fastapi import Query
+
 @router.get("/clienti", response_model=List[ClienteResponse])
 def get_clienti(
     dealer_id: Optional[int] = Query(None),
@@ -31,12 +33,12 @@ def get_clienti(
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato")
 
-    # 🔹 Se viene passato dealer_id, filtriamo solo i clienti di quel dealer
-    if dealer_id is not None:
+    # 👇 Se viene passato un dealer_id in query → restituisci SOLO i clienti di quel dealer
+    if dealer_id:
         clienti = db.query(Cliente).filter(Cliente.dealer_id == dealer_id).all()
         return clienti
 
-    # 🔹 Altrimenti, applichiamo la logica basata sul ruolo
+    # Altrimenti si comporta normalmente
     if user.role == "superadmin":
         clienti = db.query(Cliente).all()
     elif is_admin_user(user):
