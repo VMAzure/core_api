@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
 from app.database import get_db
@@ -19,7 +19,11 @@ from app.auth_helpers import (
 
 # Recupero lista clienti in base al ruolo
 @router.get("/clienti", response_model=List[ClienteResponse])
-def get_clienti(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+def get_clienti(
+    dealer_id: Optional[int] = Query(None),
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
@@ -27,17 +31,20 @@ def get_clienti(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato")
 
+    # 🔹 Se viene passato dealer_id, filtriamo solo i clienti di quel dealer
+    if dealer_id is not None:
+        clienti = db.query(Cliente).filter(Cliente.dealer_id == dealer_id).all()
+        return clienti
+
+    # 🔹 Altrimenti, applichiamo la logica basata sul ruolo
     if user.role == "superadmin":
         clienti = db.query(Cliente).all()
-
     elif is_admin_user(user):
         admin_id = get_admin_id(user)
         clienti = db.query(Cliente).filter(Cliente.admin_id == admin_id).all()
-
     elif is_dealer_user(user):
         dealer_id = get_dealer_id(user)
         clienti = db.query(Cliente).filter(Cliente.dealer_id == dealer_id).all()
-
     else:
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
 
@@ -109,9 +116,6 @@ def check_cliente_exists(
     }
 
 
-
-
-# Endpoint creazione nuovo cliente
 # Endpoint creazione nuovo cliente
 @router.post("/clienti", response_model=ClienteResponse)
 def crea_cliente(
