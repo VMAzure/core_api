@@ -16,7 +16,10 @@ router = APIRouter()
 # Configurazioni API Motornet
 MOTORN_AUTH_URL = "https://webservice.motornet.it/auth/realms/webservices/protocol/openid-connect/token"
 MOTORN_MARCHE_URL = "https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/marche"
-
+# NUOVO - Endpoint Motornet per veicoli NUOVI
+MOTORN_NUOVO_MARCHE_URL = "https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/marche"
+MOTORN_NUOVO_MODELLI_URL = "https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/marca/modelli"
+MOTORN_NUOVO_ALLESTIMENTI_URL = "https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/modello/versioni"
 
 # Credenziali API Motornet
 MOTORN_CLIENT_ID = "azure447"
@@ -342,6 +345,203 @@ async def get_accessori_auto(
         return data  # 🔹 Restituiamo tutti i dati ricevuti senza modificarli
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero degli accessori del veicolo")
+
+@router.get("/nuovo/marche", tags=["Motornet"])
+async def get_marche_nuovo(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    """Recupera la lista delle marche da Motornet per il mercato del NUOVO (utenti autenticati)"""
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    token = get_motornet_token()
+
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    response = requests.get(MOTORN_NUOVO_MARCHE_URL, headers=headers)
+
+    if response.status_code == 200:
+        data = response.json()
+
+        marche_pulite = [
+            {
+                "acronimo": marca.get("acronimo"),
+                "nome": marca.get("nome"),
+                "logo": marca.get("logo")
+            }
+            for marca in data.get("marche", [])
+        ]
+
+        return marche_pulite
+
+    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero delle marche (nuovo)")
+
+from datetime import datetime
+
+@router.get("/nuovo/modelli/{codice_marca}", tags=["Motornet"])
+async def get_modelli_nuovo(
+    codice_marca: str,
+    anno: int = None,
+    codice_tipo: str = None,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    token = get_motornet_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    if anno is None:
+        anno = datetime.today().year
+
+    # Componiamo l'URL dinamicamente
+    motornet_url = (
+        f"https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/modelli"
+        f"?codice_marca={codice_marca}&anno={anno}"
+    )
+
+    if codice_tipo:
+        motornet_url += f"&codice_tipo={codice_tipo}"
+
+    response = requests.get(motornet_url, headers=headers)
+
+    if response.status_code == 200:
+        data = response.json()
+        modelli_puliti = [
+            {
+                "codice": modello["gammaModello"]["codice"] if modello.get("gammaModello") else None,
+                "descrizione": modello["gammaModello"]["descrizione"] if modello.get("gammaModello") else None,
+                "inizio_produzione": modello.get("inizioProduzione"),
+                "fine_produzione": modello.get("fineProduzione"),
+                "gruppo_storico": modello["gruppoStorico"]["descrizione"] if modello.get("gruppoStorico") else None,
+                "serie_gamma": modello["serieGamma"]["descrizione"] if modello.get("serieGamma") else None,
+                "codice_desc_modello": modello["codDescModello"]["codice"] if modello.get("codDescModello") else None,
+                "descrizione_dettagliata": modello["codDescModello"]["descrizione"] if modello.get("codDescModello") else None,
+                "inizio_commercializzazione": modello.get("inizioCommercializzazione"),
+                "fine_commercializzazione": modello.get("fineCommercializzazione"),
+                "modello": modello.get("modello"),
+                "foto": modello.get("foto"),
+                "prezzo_minimo": modello.get("prezzoMinimo"),
+                "modello_breve_carrozzeria": modello.get("modelloBreveCarrozzeria")
+            }
+            for modello in data.get("modelli", [])
+        ]
+        return modelli_puliti
+
+    raise HTTPException(status_code=response.status_code, detail="Errore recupero modelli nuovo")
+
+@router.get("/nuovo/versioni/{codice_marca}/{codice_modello}", tags=["Motornet"])
+async def get_versioni_nuovo(
+    codice_marca: str,
+    codice_modello: str,
+    anno: int = None,
+    codice_alimentazione: str = None,
+    tipologia: str = None,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    token = get_motornet_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    if anno is None:
+        anno = datetime.today().year
+
+    params = {
+        "codice_modello": codice_modello,
+        "anno": anno,
+        "codice_marca": codice_marca,
+    }
+
+    if codice_alimentazione:
+        params["codice_alimentazione"] = codice_alimentazione
+
+    if tipologia:
+        params["tipologia"] = tipologia
+
+    motornet_url = "https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/versioni"
+
+    response = requests.get(motornet_url, headers=headers, params=params)
+
+    if response.status_code == 200:
+        data = response.json()
+        versioni_pulite = [
+            {
+                "codice_univoco": versione.get("codiceMotornetUnivoco"),
+                "codice_motornet": versione.get("codiceMotornet"),
+                "da": versione.get("da"),
+                "a": versione.get("a"),
+                "inizio_produzione": versione.get("inizioProduzione"),
+                "fine_produzione": versione.get("fineProduzione"),
+                "nome": versione.get("nome"),
+                "marca_acronimo": versione["marca"]["acronimo"] if versione.get("marca") else None,
+                "marca_nome": versione["marca"]["nome"] if versione.get("marca") else None,
+            }
+            for versione in data.get("versioni", [])
+        ]
+        return versioni_pulite
+
+    raise HTTPException(status_code=response.status_code, detail="Errore recupero versioni nuovo")
+
+@router.get("/nuovo/alimentazioni/{codice_modello}", tags=["Motornet"])
+async def get_alimentazioni_nuovo(
+    codice_modello: str,
+    anno: int = None,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    if anno is None:
+        anno = datetime.today().year
+
+    token = get_motornet_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    motornet_url = (
+        f"https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/alimentazioni"
+        f"?codice_modello={codice_modello}&anno={anno}"
+    )
+
+    response = requests.get(motornet_url, headers=headers)
+
+    if response.status_code == 200:
+        data = response.json()
+        alimentazioni = [
+            {
+                "codice": alimentazione.get("codice"),
+                "descrizione": alimentazione.get("descrizione")
+            }
+            for alimentazione in data.get("alimentazioni", [])
+        ]
+        return alimentazioni
+
+    raise HTTPException(status_code=response.status_code, detail="Errore recupero alimentazioni nuovo")
+
+
+
+
+
 
 
 

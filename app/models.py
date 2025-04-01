@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func, Boolean
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func, Boolean, Numeric, Date
 from sqlalchemy.orm import relationship
 from datetime import datetime, date
 from passlib.context import CryptContext
@@ -286,6 +286,82 @@ class AZUsatoInsertRequest(BaseModel):
     venduto_da: Optional[str] = None
     venduto_il: Optional[str] = None
     visibile: Optional[bool] = True
+
+class NltOfferte(Base):
+    __tablename__ = 'nlt_offerte'
+
+    id_offerta = Column(Integer, primary_key=True)
+    id_admin = Column(Integer, nullable=False)
+    marca = Column(String(100), nullable=False)
+    modello = Column(String(100), nullable=False)
+    versione = Column(String(100), nullable=False)
+    codice_motornet = Column(String(50), nullable=False)
+    id_player = Column(Integer, ForeignKey('nlt_players.id_player'), nullable=False)
+    data_inserimento = Column(DateTime, default=datetime.utcnow)
+    attivo = Column(Boolean, default=True)
+    descrizione_breve = Column(String(255), nullable=True)
+    valido_da = Column(Date, nullable=True)
+    valido_fino = Column(Date, nullable=True)
+
+    player = relationship("NltPlayers", back_populates="offerte")
+    quotazioni = relationship("NltQuotazioni", back_populates="offerta", cascade="all, delete-orphan")
+    immagini = relationship("NltImmagini", back_populates="offerta", cascade="all, delete-orphan")
+    tags = relationship("NltOfferteTag", secondary="nlt_offerta_tag", back_populates="offerte")
+
+class NltQuotazioni(Base):
+    __tablename__ = 'nlt_quotazioni'
+
+    id_quotazione = Column(Integer, primary_key=True)
+    id_offerta = Column(Integer, ForeignKey('nlt_offerte.id_offerta', ondelete='CASCADE'))
+    mesi_36_10 = Column("36_10", Numeric(10, 2))
+    mesi_36_15 = Column("36_15", Numeric(10, 2))
+    mesi_36_20 = Column("36_20", Numeric(10, 2))
+    mesi_36_25 = Column("36_25", Numeric(10, 2))
+    mesi_36_30 = Column("36_30", Numeric(10, 2))
+    mesi_36_40 = Column("36_40", Numeric(10, 2))
+    mesi_48_10 = Column("48_10", Numeric(10, 2))
+    mesi_48_15 = Column("48_15", Numeric(10, 2))
+    mesi_48_20 = Column("48_20", Numeric(10, 2))
+    mesi_48_25 = Column("48_25", Numeric(10, 2))
+    mesi_48_30 = Column("48_30", Numeric(10, 2))
+    mesi_48_40 = Column("48_40", Numeric(10, 2))
+
+    offerta = relationship("NltOfferte", back_populates="quotazioni")
+
+class NltImmagini(Base):
+    __tablename__ = 'nlt_immagini'
+
+    id_immagine = Column(Integer, primary_key=True)
+    id_offerta = Column(Integer, ForeignKey('nlt_offerte.id_offerta', ondelete='CASCADE'))
+    url_imagin = Column(String(255), nullable=False)
+    principale = Column(Boolean, default=False)
+
+    offerta = relationship("NltOfferte", back_populates="immagini")
+
+class NltOfferteTag(Base):
+    __tablename__ = 'nlt_offerte_tag'
+
+    id_tag = Column(Integer, primary_key=True)
+    nome = Column(String(50), nullable=False, unique=True)
+    fa_icon = Column(String(50), nullable=False)
+    colore = Column(String(7), nullable=False)
+
+    offerte = relationship("NltOfferte", secondary="nlt_offerta_tag", back_populates="tags")
+
+class NltOffertaTag(Base):
+    __tablename__ = 'nlt_offerta_tag'
+
+    id_offerta = Column(Integer, ForeignKey('nlt_offerte.id_offerta', ondelete='CASCADE'), primary_key=True)
+    id_tag = Column(Integer, ForeignKey('nlt_offerte_tag.id_tag', ondelete='CASCADE'), primary_key=True)
+
+class NltPlayers(Base):
+    __tablename__ = 'nlt_players'
+
+    id_player = Column(Integer, primary_key=True)
+    nome = Column(String(100), nullable=False, unique=True)
+    colore = Column(String(7), nullable=False)
+
+    offerte = relationship("NltOfferte", back_populates="player")
 
 
 

@@ -41,6 +41,9 @@ from app.routes.azlease import router as azlease_router
 from app.schemas import AutoUsataCreate
 from app.routes.openapi import router as openapi_router
 from app.routes.pdf import router as pdf_router
+from app.routes.nlt_offerte import router as nlt_offerte_router
+
+
 
 
 # ✅ Configuriamo il logging
@@ -152,6 +155,8 @@ app.include_router(motornet_router, prefix="/api/usato/motornet")
 app.include_router(azlease_router, prefix="/api/azlease")
 app.include_router(openapi_router, prefix="/api")
 app.include_router(pdf_router, prefix="/pdf",tags=["PDF"])
+app.include_router(nlt_offerte_router)
+
 
 
 @app.get("/")
