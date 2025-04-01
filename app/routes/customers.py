@@ -17,9 +17,6 @@ from app.auth_helpers import (
 )
 
 
-# Recupero lista clienti in base al ruolo
-from fastapi import Query
-
 @router.get("/clienti", response_model=List[ClienteResponse])
 def get_clienti(
     dealer_id: Optional[int] = Query(None),
@@ -135,6 +132,9 @@ def crea_cliente(
     admin_id = get_admin_id(user)
     dealer_id = get_dealer_id(user)
 
+    # 👇 Se il payload include un dealer_id, usalo (es. da parte di un admin)
+    if hasattr(cliente, "dealer_id") and cliente.dealer_id:
+        dealer_id = cliente.dealer_id
 
     # Verifica duplicati cliente sotto lo stesso Admin/Dealer
     query = db.query(Cliente).filter(Cliente.admin_id == admin_id)
