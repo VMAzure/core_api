@@ -9,7 +9,10 @@ from datetime import datetime
 
 
 
-router = APIRouter()
+router_generic = APIRouter()
+router_usato = APIRouter(prefix="/usato/motornet")
+router_nuovo = APIRouter(prefix="/nuovo/motornet")
+
 
 
 
@@ -66,8 +69,8 @@ def get_motornet_token():
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero del token")
 
 
-@router.get("/marche", tags=["Motornet"])
-async def get_marche(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+@router_usato.get("/marche", tags=["Motornet"])
+async def get_marche_usato(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """Recupera la lista delle marche da Motornet solo per utenti autenticati"""
     Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
     user_email = Authorize.get_jwt_subject()
@@ -103,8 +106,8 @@ async def get_marche(Authorize: AuthJWT = Depends(), db: Session = Depends(get_d
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero delle marche")
 
-@router.get("/modelli/{codice_marca}", tags=["Motornet"])
-async def get_modelli(codice_marca: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+@router_usato.get("/modelli/{codice_marca}", tags=["Motornet"])
+async def get_modelli_usato(codice_marca: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """Recupera la lista dei modelli per una marca specifica"""
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
@@ -150,8 +153,8 @@ async def get_modelli(codice_marca: str, Authorize: AuthJWT = Depends(), db: Ses
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero dei modelli")
 
-@router.get("/allestimenti/{codice_marca}/{codice_modello}", tags=["Motornet"])
-async def get_allestimenti(codice_marca: str, codice_modello: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+@router_usato.get("/allestimenti/{codice_marca}/{codice_modello}", tags=["Motornet"])
+async def get_allestimenti_usato(codice_marca: str, codice_modello: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """Recupera la lista degli allestimenti per un modello specifico"""
     Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
     user_email = Authorize.get_jwt_subject()
@@ -194,8 +197,8 @@ async def get_allestimenti(codice_marca: str, codice_modello: str, Authorize: Au
 
 import httpx
 
-@router.get("/dettagli/{codice_motornet}", tags=["Motornet"])
-async def get_dettagli_auto(codice_motornet: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+@router_usato.get("/dettagli/{codice_motornet}", tags=["Motornet"])
+async def get_dettagli_auto_usato(codice_motornet: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
@@ -223,7 +226,7 @@ async def get_dettagli_auto(codice_motornet: str, Authorize: AuthJWT = Depends()
 
 
 
-@router.get("/valutazione/{codice_motornet}/{anno_immatricolazione}/{mese_immatricolazione}", tags=["Motornet"])
+@router_usato.get("/valutazione/{codice_motornet}/{anno_immatricolazione}/{mese_immatricolazione}", tags=["Motornet"])
 async def get_valutazione_auto(
     codice_motornet: str,
     anno_immatricolazione: int,
@@ -269,8 +272,8 @@ async def get_valutazione_auto(
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero della valutazione")
 
-@router.get("/marche/{anno}", tags=["Motornet"])
-async def get_marche_per_anno(anno: int, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+@router_usato.get("/marche/{anno}", tags=["Motornet"])
+async def get_marche_per_anno_usato(anno: int, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """Recupera la lista delle marche per un anno specifico"""
     Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
     user_email = Authorize.get_jwt_subject()
@@ -307,8 +310,8 @@ async def get_marche_per_anno(anno: int, Authorize: AuthJWT = Depends(), db: Ses
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero delle marche per l'anno specificato")
 
-@router.get("/accessori/{codice_motornet}/{anno}/{mese}", tags=["Motornet"])
-async def get_accessori_auto(
+@router_usato.get("/accessori/{codice_motornet}/{anno}/{mese}", tags=["Motornet"])
+async def get_accessori_auto_usato(
     codice_motornet: str,
     anno: int,
     mese: int,
@@ -346,7 +349,7 @@ async def get_accessori_auto(
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero degli accessori del veicolo")
 
-@router.get("/nuovo/marche", tags=["Motornet"])
+@router_nuovo.get("/marche", tags=["Motornet"])
 async def get_marche_nuovo(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """Recupera la lista delle marche da Motornet per il mercato del NUOVO (utenti autenticati)"""
     Authorize.jwt_required()
@@ -382,7 +385,7 @@ async def get_marche_nuovo(Authorize: AuthJWT = Depends(), db: Session = Depends
 
 from datetime import datetime
 
-@router.get("/nuovo/modelli/{codice_marca}", tags=["Motornet"])
+@router_nuovo.get("/modelli/{codice_marca}", tags=["Motornet"])
 async def get_modelli_nuovo(
     codice_marca: str,
     anno: int = None,
@@ -439,7 +442,7 @@ async def get_modelli_nuovo(
 
     raise HTTPException(status_code=response.status_code, detail="Errore recupero modelli nuovo")
 
-@router.get("/nuovo/versioni/{codice_marca}/{codice_modello}", tags=["Motornet"])
+@router_nuovo.get("/versioni/{codice_marca}/{codice_modello}", tags=["Motornet"])
 async def get_versioni_nuovo(
     codice_marca: str,
     codice_modello: str,
@@ -498,7 +501,7 @@ async def get_versioni_nuovo(
 
     raise HTTPException(status_code=response.status_code, detail="Errore recupero versioni nuovo")
 
-@router.get("/nuovo/alimentazioni/{codice_modello}", tags=["Motornet"])
+@router_nuovo.get("/alimentazioni/{codice_modello}", tags=["Motornet"])
 async def get_alimentazioni_nuovo(
     codice_modello: str,
     anno: int = None,
