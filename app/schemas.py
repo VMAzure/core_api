@@ -51,6 +51,8 @@ class ClienteCreateRequest(BaseModel):
     telefono: str
     email: EmailStr
     iban: Optional[str] = None
+    dealer_id: Optional[int] = None  # ✅ Deve esserci questo campo
+
 
 
 
