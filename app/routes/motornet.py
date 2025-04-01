@@ -541,6 +541,52 @@ async def get_alimentazioni_nuovo(
 
     raise HTTPException(status_code=response.status_code, detail="Errore recupero alimentazioni nuovo")
 
+from datetime import datetime
+from fastapi import Depends, HTTPException
+from sqlalchemy.orm import Session
+from fastapi_jwt_auth import AuthJWT
+import requests
+import httpx
+
+@router_nuovo.get("/accessori/{codice_motornet_uni}", tags=["Motornet"])
+async def get_accessori_nuovo(
+    codice_motornet_uni: str,
+    anno: int = None,
+    mese: int = None,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    # Imposto automaticamente anno e mese correnti se non passati
+    if anno is None or mese is None:
+        oggi = datetime.today()
+        anno = anno or oggi.year
+        mese = mese or oggi.month
+
+    token = get_motornet_token()
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    motornet_url = (
+        "https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/accessori"
+        f"?codice_motornet_uni={codice_motornet_uni}&anno={anno}&mese={mese}"
+    )
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(motornet_url, headers=headers)
+
+    if response.status_code == 200:
+        return response.json()
+
+    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero degli accessori del veicolo nuovo")
+
+
 
 
 
