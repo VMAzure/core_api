@@ -379,7 +379,18 @@ class NltOffertaAccessori(Base):
     # relazione inversa opzionale, se vuoi accedere da NltOfferte agli accessori
     offerta = relationship("NltOfferte", backref="accessori")
 
+class MotornetImaginAlias(Base):
+    __tablename__ = "motornet_imagin_alias"
 
+    make = Column(String, primary_key=True)
+    model_family = Column(String, primary_key=True)
+    model_range = Column(String, primary_key=True)
+    model_variant = Column(String, primary_key=True)
+
+    alias_make = Column(String, nullable=True)
+    alias_model_family = Column(String, nullable=True)
+    alias_model_range = Column(String, nullable=True)
+    alias_model_variant = Column(String, nullable=True)
 
 
 
