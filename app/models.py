@@ -307,6 +307,14 @@ class NltOfferte(Base):
     quotazioni = relationship("NltQuotazioni", back_populates="offerta", cascade="all, delete-orphan")
     immagini = relationship("NltImmagini", back_populates="offerta", cascade="all, delete-orphan")
     tags = relationship("NltOfferteTag", secondary="nlt_offerta_tag", back_populates="offerte")
+    prezzo_accessori = Column(Numeric(10, 2))
+    prezzo_messa_su_strada = Column(Numeric(10, 2))
+    prezzo_listino = Column(Numeric(10, 2))
+    prezzo_totale = Column(Numeric(10, 2))
+
+
+
+
 
 class NltQuotazioni(Base):
     __tablename__ = 'nlt_quotazioni'
@@ -362,6 +370,19 @@ class NltPlayers(Base):
     colore = Column(String(7), nullable=False)
 
     offerte = relationship("NltOfferte", back_populates="player")
+
+class NltOffertaAccessori(Base):
+    __tablename__ = 'nlt_offerta_accessori'
+
+    id = Column(Integer, primary_key=True)
+    id_offerta = Column(Integer, ForeignKey('nlt_offerte.id_offerta', ondelete='CASCADE'))
+    codice = Column(String(20), nullable=False)
+    descrizione = Column(Text, nullable=False)
+    prezzo = Column(Numeric(10, 2), nullable=False)
+
+    # relazione inversa opzionale, se vuoi accedere da NltOfferte agli accessori
+    offerta = relationship("NltOfferte", backref="accessori")
+
 
 
 
