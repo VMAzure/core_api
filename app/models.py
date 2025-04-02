@@ -312,10 +312,6 @@ class NltOfferte(Base):
     prezzo_listino = Column(Numeric(10, 2))
     prezzo_totale = Column(Numeric(10, 2))
 
-
-
-
-
 class NltQuotazioni(Base):
     __tablename__ = 'nlt_quotazioni'
 
