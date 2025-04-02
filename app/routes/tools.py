@@ -33,44 +33,42 @@ async def sync_motornet_imagin(
 
     marche = res_marche.json().get("marche", [])
     inseriti = 0
+    marche_saltate = []
 
     for marca in marche:
-        acronimo = marca.get("acronimo")
-        nome_marca = marca.get("nome")
+        acronimo = marca["acronimo"]
 
-        # Recupera modelli per la marca
-        res_modelli = requests.get(f"{MOTORN_MODELLI_URL}/{acronimo}", headers=headers)
-        if res_modelli.status_code != 200:
+        try:
+            modelli_url = f"{MOTORN_MODELLI_URL}/{acronimo}"
+            modelli_res = requests.get(modelli_url, headers=headers)
+
+            if modelli_res.status_code != 200:
+                print(f"❌ Errore su marca {acronimo}: status {modelli_res.status_code}")
+                marche_saltate.append(acronimo)
+                continue
+
+            modelli = modelli_res.json().get("modelli", [])
+
+            for modello in modelli:
+                alias = MotornetImaginAlias(
+                    marca=marca["nome"],
+                    acronimo=acronimo,
+                    modello=modello.get("modello", ""),
+                    gruppo_storico=modello.get("gruppoStorico", {}).get("descrizione", ""),
+                    model_range=modello.get("gammaModello", {}).get("descrizione", ""),
+                    model_variant=modello.get("serieGamma", {}).get("descrizione", "")
+                )
+                db.add(alias)
+                inseriti += 1
+
+        except Exception as e:
+            print(f"⚠️ Errore imprevisto su marca {acronimo}: {e}")
+            marche_saltate.append(acronimo)
             continue
 
-        modelli = res_modelli.json().get("modelli", [])
-
-        for modello in modelli:
-            gruppo_storico = modello.get("gruppoStorico", {}).get("descrizione")
-            model_range = modello.get("serieGamma", {}).get("descrizione")
-            model_variant = modello.get("modello")
-
-            if not gruppo_storico:
-                continue
-
-            # Verifica se esiste già
-            esiste = db.query(MotornetImaginAlias).filter_by(
-                make=nome_marca,
-                model_family=gruppo_storico
-            ).first()
-
-            if esiste:
-                continue
-
-            nuovo = MotornetImaginAlias(
-                make=nome_marca,
-                model_family=gruppo_storico,
-                model_range=model_range,
-                model_variant=model_variant
-            )
-            db.add(nuovo)
-            inseriti += 1
-
     db.commit()
-
-    return {"success": True, "nuovi_inseriti": inseriti}
+    return {
+        "success": True,
+        "nuovi_inseriti": inseriti,
+        "marche_saltate": marche_saltate
+    }
