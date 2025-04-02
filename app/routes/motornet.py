@@ -6,8 +6,6 @@ from app.routes.auth import get_current_user
 from app.database import get_db  # ✅ Import corretto per il DB
 from app.models import User  # ✅ Import del modello User se necessario
 from datetime import datetime
-
-from utils.token import get_motornet_token
 import httpx
 
 
