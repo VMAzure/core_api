@@ -7,6 +7,12 @@ from app.database import get_db  # ✅ Import corretto per il DB
 from app.models import User  # ✅ Import del modello User se necessario
 from datetime import datetime
 
+from utils.token import get_motornet_token
+import httpx
+
+
+
+
 
 
 router_generic = APIRouter()
@@ -383,7 +389,6 @@ async def get_marche_nuovo(Authorize: AuthJWT = Depends(), db: Session = Depends
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero delle marche (nuovo)")
 
-from datetime import datetime
 
 @router_nuovo.get("/modelli/{codice_marca}", tags=["Motornet"])
 async def get_modelli_nuovo(
@@ -541,12 +546,7 @@ async def get_alimentazioni_nuovo(
 
     raise HTTPException(status_code=response.status_code, detail="Errore recupero alimentazioni nuovo")
 
-from datetime import datetime
-from fastapi import Depends, HTTPException
-from sqlalchemy.orm import Session
-from fastapi_jwt_auth import AuthJWT
-import requests
-import httpx
+
 
 @router_nuovo.get("/accessori/{codice_motornet_uni}", tags=["Motornet"])
 async def get_accessori_nuovo(
@@ -586,6 +586,27 @@ async def get_accessori_nuovo(
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero degli accessori del veicolo nuovo")
 
+
+@router_nuovo.get("/messa-strada/{codice_univoco}", tags=["Motornet"])
+async def get_messa_su_strada(codice_univoco: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    """Recupera il costo di messa su strada da Motornet per un veicolo NUOVO"""
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    token = get_motornet_token()
+    headers = { "Authorization": f"Bearer {token}" }
+
+    url = f"https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/messa-strada?codice_motornet_uni={codice_univoco}"
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        return response.json()
+
+    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero messa su strada")
 
 
 
