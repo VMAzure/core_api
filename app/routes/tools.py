@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from auth import AuthJWT
 from app.database import get_db
 from app.models import User, MotornetImaginAlias
-from app.routes.auth import get_current_user
+from fastapi_jwt_auth import AuthJWT
 import requests
 
 router = APIRouter(prefix="/tools", tags=["Tools"])
