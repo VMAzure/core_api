@@ -1,6 +1,5 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from auth import AuthJWT
 from app.database import get_db
 from app.models import User, MotornetImaginAlias
 from fastapi_jwt_auth import AuthJWT
