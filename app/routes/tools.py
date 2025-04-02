@@ -4,6 +4,7 @@ from app.database import get_db
 from app.models import User, MotornetImaginAlias
 from fastapi_jwt_auth import AuthJWT
 import requests
+from app.routes.motornet import get_motornet_token
 
 router = APIRouter(prefix="/tools", tags=["Tools"])
 
