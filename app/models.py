@@ -308,7 +308,7 @@ class NltOfferte(Base):
     immagini = relationship("NltImmagini", back_populates="offerta", cascade="all, delete-orphan")
     tags = relationship("NltOfferteTag", secondary="nlt_offerta_tag", back_populates="offerte")
     prezzo_accessori = Column(Numeric(10, 2))
-    prezzo_messa_su_strada = Column(Numeric(10, 2))
+    prezzo_mss = Column(Numeric(10, 2))
     prezzo_listino = Column(Numeric(10, 2))
     prezzo_totale = Column(Numeric(10, 2))
 
