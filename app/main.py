@@ -159,7 +159,8 @@ app.include_router(nlt_offerte_router)
 app.include_router(router_generic, prefix="/api")
 app.include_router(router_usato, prefix="/api")
 app.include_router(router_nuovo, prefix="/api")
-app.include_router(tools.router)
+app.include_router(tools.router, prefix="/tools", tags=["Tools"])
+
 
 
 

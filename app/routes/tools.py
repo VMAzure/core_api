@@ -1,47 +1,76 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.auth import get_current_user
-from app.models import User, MotornetImaginAlias
+from auth import AuthJWT
 from app.database import get_db
-from app.utils.motornet import get_motornet_token
+from app.models import User, MotornetImaginAlias
+from app.routes.auth import get_current_user
 import requests
 
-router = APIRouter(prefix="/tools", tags=["Motornet Tools"])
+router = APIRouter(prefix="/tools", tags=["Tools"])
+
+MOTORN_MARCHE_URL = "https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/marche"
+MOTORN_MODELLI_URL = "https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/marca/modelli"
 
 @router.get("/sync-motornet-imagin")
-def sync_modelli_motornet_imagin(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if current_user.role not in ("admin", "superadmin"):
+async def sync_motornet_imagin(
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter_by(email=user_email).first()
+
+    if not user or user.role not in ["admin", "superadmin"]:
         raise HTTPException(status_code=403, detail="Accesso negato")
 
     token = get_motornet_token()
     headers = {"Authorization": f"Bearer {token}"}
-    url = "https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/modelli"
-    
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise HTTPException(status_code=500, detail="Errore nel recupero modelli da Motornet")
 
-    modelli = response.json().get("modelli", [])
+    # Recupera marche
+    res_marche = requests.get(MOTORN_MARCHE_URL, headers=headers)
+    if res_marche.status_code != 200:
+        raise HTTPException(status_code=502, detail="Errore nel recupero marche da Motornet")
 
-    nuovi = 0
-    for m in modelli:
-        esiste = db.query(MotornetImaginAlias).filter_by(
-            make=m.get("make"),
-            model_family=m.get("modelFamily"),
-            model_range=m.get("modelRange"),
-            model_variant=m.get("modelVariant")
-        ).first()
+    marche = res_marche.json().get("marche", [])
+    inseriti = 0
 
-        if not esiste:
-            alias = MotornetImaginAlias(
-                make=m.get("make"),
-                model_family=m.get("modelFamily"),
-                model_range=m.get("modelRange"),
-                model_variant=m.get("modelVariant")
+    for marca in marche:
+        acronimo = marca.get("acronimo")
+        nome_marca = marca.get("nome")
+
+        # Recupera modelli per la marca
+        res_modelli = requests.get(f"{MOTORN_MODELLI_URL}/{acronimo}", headers=headers)
+        if res_modelli.status_code != 200:
+            continue
+
+        modelli = res_modelli.json().get("modelli", [])
+
+        for modello in modelli:
+            gruppo_storico = modello.get("gruppoStorico", {}).get("descrizione")
+            model_range = modello.get("serieGamma", {}).get("descrizione")
+            model_variant = modello.get("modello")
+
+            if not gruppo_storico:
+                continue
+
+            # Verifica se esiste già
+            esiste = db.query(MotornetImaginAlias).filter_by(
+                make=nome_marca,
+                model_family=gruppo_storico
+            ).first()
+
+            if esiste:
+                continue
+
+            nuovo = MotornetImaginAlias(
+                make=nome_marca,
+                model_family=gruppo_storico,
+                model_range=model_range,
+                model_variant=model_variant
             )
-            db.add(alias)
-            nuovi += 1
+            db.add(nuovo)
+            inseriti += 1
 
     db.commit()
 
-    return {"success": True, "nuovi_inseriti": nuovi, "totale": len(modelli)}
+    return {"success": True, "nuovi_inseriti": inseriti}
