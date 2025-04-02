@@ -1,10 +1,11 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, Query
+﻿from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from app.database import get_db
-from app.models import NltOfferte, NltQuotazioni, NltPlayers, NltImmagini, NltOfferteTag, NltOffertaTag, User
+from app.models import NltOfferte, NltQuotazioni, NltPlayers, NltImmagini, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
-from app.routes.nlt import get_current_user  # Riutilizziamo l'autenticazione esistente
+from app.routes.nlt import get_current_user  
+from datetime import date, datetime
 
 router = APIRouter(
     prefix="/nlt/offerte",
@@ -37,7 +38,6 @@ async def get_offerte(
     offerte = query.order_by(NltOfferte.data_inserimento.desc()).all()
     return {"success": True, "offerte": offerte}
 
-# ✅ POST Nuova offerta (solo admin o superadmin)
 @router.post("/")
 async def crea_offerta(
     marca: str,
@@ -45,13 +45,23 @@ async def crea_offerta(
     versione: str,
     codice_motornet: str,
     id_player: int,
+    prezzo_listino: Optional[float] = None,
+    prezzo_accessori: Optional[float] = None,
+    prezzo_mss: Optional[float] = None,
+    prezzo_totale: Optional[float] = None,
+    accessori: Optional[List[dict]] = Body(None),
+    tags: Optional[List[int]] = Body(None),
     descrizione_breve: Optional[str] = None,
     valido_da: Optional[str] = None,
     valido_fino: Optional[str] = None,
+    quotazioni: Optional[dict] = Body(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     verify_admin_or_superadmin(current_user)
+
+    if not valido_da:
+        valido_da = datetime.utcnow().date()
 
     nuova_offerta = NltOfferte(
         id_admin=current_user.id,
@@ -62,14 +72,58 @@ async def crea_offerta(
         id_player=id_player,
         descrizione_breve=descrizione_breve,
         valido_da=valido_da,
-        valido_fino=valido_fino
+        valido_fino=valido_fino,
+        prezzo_listino=prezzo_listino,
+        prezzo_accessori=prezzo_accessori,
+        prezzo_mss=prezzo_mss,
+        prezzo_totale=prezzo_totale
     )
 
     db.add(nuova_offerta)
     db.commit()
     db.refresh(nuova_offerta)
 
-    return {"success": True, "offerta": nuova_offerta}
+    # Accessori
+    if accessori:
+        for acc in accessori:
+            nuovo = NltOffertaAccessori(
+                id_offerta=nuova_offerta.id_offerta,
+                codice=acc["codice"],
+                descrizione=acc["descrizione"],
+                prezzo=acc["prezzo"]
+            )
+            db.add(nuovo)
+
+    # Tags
+    if tags:
+        for id_tag in tags:
+            db.add(NltOffertaTag(
+                id_offerta=nuova_offerta.id_offerta,
+                id_tag=id_tag
+            ))
+
+    # Quotazioni
+    if quotazioni:
+        db.add(NltQuotazioni(
+            id_offerta=nuova_offerta.id_offerta,
+            mesi_36_10=quotazioni.get("36_10"),
+            mesi_36_15=quotazioni.get("36_15"),
+            mesi_36_20=quotazioni.get("36_20"),
+            mesi_36_25=quotazioni.get("36_25"),
+            mesi_36_30=quotazioni.get("36_30"),
+            mesi_36_40=quotazioni.get("36_40"),
+            mesi_48_10=quotazioni.get("48_10"),
+            mesi_48_15=quotazioni.get("48_15"),
+            mesi_48_20=quotazioni.get("48_20"),
+            mesi_48_25=quotazioni.get("48_25"),
+            mesi_48_30=quotazioni.get("48_30"),
+            mesi_48_40=quotazioni.get("48_40")
+        ))
+
+    db.commit()
+
+    return {"success": True, "id_offerta": nuova_offerta.id_offerta}
+
 
 # ✅ PUT Attiva/Disattiva Offerta
 @router.put("/{id_offerta}/stato")
