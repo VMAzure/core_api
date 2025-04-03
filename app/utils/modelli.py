@@ -17,8 +17,8 @@ def pulisci_modello(modello: str) -> str:
 
     # Eccezioni specifiche per modelli particolari (prioritarie)
     eccezioni = {
-       "Tesla Moldel X": "Tesla Model X",
-       "Mercedes GLE - V167": "Mercedes GLE", 
+       "Moldel X": "Model X",
+       "GLE - V167": "GLE", 
        # aggiungi qui altre eccezioni specifiche
     }
 
