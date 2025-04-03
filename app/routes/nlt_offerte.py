@@ -56,7 +56,7 @@ async def crea_offerta(
     valido_fino: Optional[str] = Body(None),
     quotazioni: Optional[dict] = Body(None),
     current_user: User = Depends(get_current_user),
-    img_url: Optional[str] = None,
+    img_url: Optional[str] = Body(None),
     db: Session = Depends(get_db)
 ):
     verify_admin_or_superadmin(current_user)
@@ -78,6 +78,7 @@ async def crea_offerta(
         prezzo_accessori=prezzo_accessori,
         prezzo_mss=prezzo_mss,
         prezzo_totale=prezzo_totale
+
     )
 
     db.add(nuova_offerta)
@@ -129,7 +130,7 @@ async def crea_offerta(
             url_imagin=img_url,
             principale=True
         )
-    db.add(immagine_principale)
+        db.add(immagine_principale)
 
 
     return {"success": True, "id_offerta": nuova_offerta.id_offerta}
