@@ -18,13 +18,21 @@ def verify_admin_or_superadmin(user: User):
         raise HTTPException(status_code=403, detail="Permessi insufficienti.")
 
 # ✅ GET Offerte disponibili (dealer vede le offerte del proprio admin, admin le proprie, superadmin tutte)
+from sqlalchemy.orm import selectinload
+
 @router.get("/")
 async def get_offerte(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     attivo: Optional[bool] = Query(None)
 ):
-    query = db.query(NltOfferte)
+    query = db.query(NltOfferte).options(
+        selectinload(NltOfferte.accessori),
+        selectinload(NltOfferte.tags),
+        selectinload(NltOfferte.quotazioni),
+        selectinload(NltOfferte.immagini),
+        selectinload(NltOfferte.player)
+    )
 
     if is_admin_user(current_user):
         query = query.filter(NltOfferte.id_admin == current_user.id)
@@ -36,7 +44,61 @@ async def get_offerte(
         query = query.filter(NltOfferte.attivo == attivo)
 
     offerte = query.order_by(NltOfferte.data_inserimento.desc()).all()
-    return {"success": True, "offerte": offerte}
+
+    risultati = []
+    for o in offerte:
+        risultati.append({
+            "id_offerta": o.id_offerta,
+            "marca": o.marca,
+            "modello": o.modello,
+            "versione": o.versione,
+            "codice_motornet": o.codice_motornet,
+            "id_player": o.id_player,
+            "player": {
+                "nome": o.player.nome,
+                "colore": o.player.colore
+            } if o.player else None,
+            "descrizione_breve": o.descrizione_breve,
+            "valido_da": o.valido_da,
+            "valido_fino": o.valido_fino,
+            "prezzo_listino": o.prezzo_listino,
+            "prezzo_accessori": o.prezzo_accessori,
+            "prezzo_mss": o.prezzo_mss,
+            "prezzo_totale": o.prezzo_totale,
+            "accessori": [
+                {
+                    "codice": a.codice,
+                    "descrizione": a.descrizione,
+                    "prezzo": float(a.prezzo)
+                } for a in o.accessori
+            ],
+            "tags": [
+                {
+                    "id_tag": t.id_tag,
+                    "nome": t.nome,
+                    "fa_icon": t.fa_icon,
+                    "colore": t.colore
+                } for t in o.tags
+            ],
+            "quotazioni": {
+                "36_10": o.quotazioni[0].mesi_36_10 if o.quotazioni else None,
+                "36_15": o.quotazioni[0].mesi_36_15 if o.quotazioni else None,
+                "36_20": o.quotazioni[0].mesi_36_20 if o.quotazioni else None,
+                "36_25": o.quotazioni[0].mesi_36_25 if o.quotazioni else None,
+                "36_30": o.quotazioni[0].mesi_36_30 if o.quotazioni else None,
+                "36_40": o.quotazioni[0].mesi_36_40 if o.quotazioni else None,
+                "48_10": o.quotazioni[0].mesi_48_10 if o.quotazioni else None,
+                "48_15": o.quotazioni[0].mesi_48_15 if o.quotazioni else None,
+                "48_20": o.quotazioni[0].mesi_48_20 if o.quotazioni else None,
+                "48_25": o.quotazioni[0].mesi_48_25 if o.quotazioni else None,
+                "48_30": o.quotazioni[0].mesi_48_30 if o.quotazioni else None,
+                "48_40": o.quotazioni[0].mesi_48_40 if o.quotazioni else None,
+            },
+            "immagine": next((img.url_imagin for img in o.immagini if img.principale), None)
+        })
+
+    return {"success": True, "offerte": risultati}
+
 
 @router.post("/")
 async def crea_offerta(
