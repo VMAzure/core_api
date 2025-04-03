@@ -420,13 +420,13 @@ async def get_modelli_nuovo(
 
         modelli_puliti = []
         for modello in data.get("modelli", []):
-            descrizione_originale = modello["descrizione"]
+            descrizione_originale = modello.get("descrizione")
             descrizione_pulita = pulisci_modello(descrizione_originale) if descrizione_originale else None
 
             print(f"🔎 Originale: '{descrizione_originale}' → Pulito: '{descrizione_pulita}'")
 
             modelli_puliti.append({
-                "codice": modello["codice"],
+                "codice": modello.get("codice"),
                 "descrizione": descrizione_pulita,
                 "inizio_produzione": modello.get("inizio_produzione"),
                 "fine_produzione": modello.get("fine_produzione"),
