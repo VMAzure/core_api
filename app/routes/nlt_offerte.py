@@ -131,6 +131,8 @@ async def crea_offerta(
             principale=True
         )
         db.add(immagine_principale)
+        db.commit()
+
 
 
     return {"success": True, "id_offerta": nuova_offerta.id_offerta}
