@@ -56,6 +56,7 @@ async def crea_offerta(
     valido_fino: Optional[str] = Body(None),
     quotazioni: Optional[dict] = Body(None),
     current_user: User = Depends(get_current_user),
+    img_url: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     verify_admin_or_superadmin(current_user)
@@ -121,6 +122,15 @@ async def crea_offerta(
         ))
 
     db.commit()
+
+    if img_url:
+        immagine_principale = NltImmagini(
+            id_offerta=nuova_offerta.id_offerta,
+            url_imagin=img_url,
+            principale=True
+        )
+    db.add(immagine_principale)
+
 
     return {"success": True, "id_offerta": nuova_offerta.id_offerta}
 
