@@ -420,31 +420,28 @@ async def get_modelli_nuovo(
 
         modelli_puliti = []
         for modello in data.get("modelli", []):
-            descrizione_originale = modello["codDescModello"]["descrizione"] if modello.get("codDescModello") else None
-            modello_originale = modello.get("modello")
-
+            descrizione_originale = modello["descrizione"]
             descrizione_pulita = pulisci_modello(descrizione_originale) if descrizione_originale else None
-            modello_pulito = pulisci_modello(modello_originale) if modello_originale else None
 
-            print(f"🔎 Descrizione originale: '{descrizione_originale}' → Pulita: '{descrizione_pulita}'")
-            print(f"🔎 Modello originale: '{modello_originale}' → Pulito: '{modello_pulito}'")
+            print(f"🔎 Originale: '{descrizione_originale}' → Pulito: '{descrizione_pulita}'")
 
             modelli_puliti.append({
-                "codice": modello["gammaModello"]["codice"] if modello.get("gammaModello") else None,
-                "descrizione": modello["gammaModello"]["descrizione"] if modello.get("gammaModello") else None,
-                "inizio_produzione": modello.get("inizioProduzione"),
-                "fine_produzione": modello.get("fineProduzione"),
-                "gruppo_storico": modello["gruppoStorico"]["descrizione"] if modello.get("gruppoStorico") else None,
-                "serie_gamma": modello["serieGamma"]["descrizione"] if modello.get("serieGamma") else None,
-                "codice_desc_modello": modello["codDescModello"]["codice"] if modello.get("codDescModello") else None,
-                "descrizione_dettagliata": descrizione_pulita,
-                "inizio_commercializzazione": modello.get("inizioCommercializzazione"),
-                "fine_commercializzazione": modello.get("fineCommercializzazione"),
-                "modello": modello_pulito,
+                "codice": modello["codice"],
+                "descrizione": descrizione_pulita,
+                "inizio_produzione": modello.get("inizio_produzione"),
+                "fine_produzione": modello.get("fine_produzione"),
+                "gruppo_storico": modello.get("gruppo_storico"),
+                "serie_gamma": modello.get("serie_gamma"),
+                "codice_desc_modello": modello.get("codice_desc_modello"),
+                "descrizione_dettagliata": modello.get("descrizione_dettagliata"),
+                "inizio_commercializzazione": modello.get("inizio_commercializzazione"),
+                "fine_commercializzazione": modello.get("fine_commercializzazione"),
+                "modello": modello.get("modello"),
                 "foto": modello.get("foto"),
-                "prezzo_minimo": modello.get("prezzoMinimo"),
-                "modello_breve_carrozzeria": modello.get("modelloBreveCarrozzeria")
+                "prezzo_minimo": modello.get("prezzo_minimo"),
+                "modello_breve_carrozzeria": modello.get("modello_breve_carrozzeria")
             })
+
 
         return modelli_puliti
 
