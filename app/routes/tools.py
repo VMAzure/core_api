@@ -9,7 +9,7 @@ from app.routes.motornet import get_motornet_token
 router = APIRouter(prefix="/tools", tags=["Tools"])
 
 MOTORN_MARCHE_URL = "https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/marche"
-MOTORN_MODELLI_URL = "https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/marca/modelli"
+MOTORN_MODELLI_URL = "https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/marca/modelli?codice_marca="
 
 @router.get("/sync-motornet-imagin")
 async def sync_motornet_imagin(
@@ -26,10 +26,9 @@ async def sync_motornet_imagin(
     token = get_motornet_token()
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Recupera marche
     res_marche = requests.get(MOTORN_MARCHE_URL, headers=headers)
     if res_marche.status_code != 200:
-        raise HTTPException(status_code=502, detail="Errore nel recupero marche da Motornet")
+        raise HTTPException(status_code=502, detail="Errore recupero marche Motornet")
 
     marche = res_marche.json().get("marche", [])
     inseriti = 0
@@ -37,36 +36,54 @@ async def sync_motornet_imagin(
 
     for marca in marche:
         acronimo = marca["acronimo"]
+        modelli_url = f"{MOTORN_MODELLI_URL}{acronimo}"
 
         try:
-            modelli_url = f"{MOTORN_MODELLI_URL}/{acronimo}"
             modelli_res = requests.get(modelli_url, headers=headers)
 
             if modelli_res.status_code != 200:
-                print(f"❌ Errore su marca {acronimo}: status {modelli_res.status_code}")
+                print(f"❌ Errore {acronimo}: status {modelli_res.status_code}")
                 marche_saltate.append(acronimo)
                 continue
 
             modelli = modelli_res.json().get("modelli", [])
 
             for modello in modelli:
-                alias = MotornetImaginAlias(
-                    marca=marca["nome"],
+                marca_nome = marca["nome"]
+                modello_descrizione = modello.get("codDescModello", {}).get("descrizione", "")
+                gruppo_storico = modello.get("gruppoStorico", {}).get("descrizione", "")
+                gamma_modello = modello.get("gammaModello", {}).get("descrizione", "")
+                serie_gamma = modello.get("serieGamma", {}).get("descrizione", "")
+
+                # Verifica duplicati
+                esistente = db.query(MotornetImaginAlias).filter_by(
+                    marca=marca_nome,
                     acronimo=acronimo,
-                    modello=modello.get("modello", ""),
-                    gruppo_storico=modello.get("gruppoStorico", {}).get("descrizione", ""),
-                    model_range=modello.get("gammaModello", {}).get("descrizione", ""),
-                    model_variant=modello.get("serieGamma", {}).get("descrizione", "")
-                )
-                db.add(alias)
-                inseriti += 1
+                    modello=modello_descrizione,
+                    gruppo_storico=gruppo_storico,
+                    model_range=gamma_modello,
+                    model_variant=serie_gamma
+                ).first()
+
+                if not esistente:
+                    alias = MotornetImaginAlias(
+                        marca=marca_nome,
+                        acronimo=acronimo,
+                        modello=modello_descrizione,
+                        gruppo_storico=gruppo_storico,
+                        model_range=gamma_modello,
+                        model_variant=serie_gamma
+                    )
+                    db.add(alias)
+                    inseriti += 1
 
         except Exception as e:
-            print(f"⚠️ Errore imprevisto su marca {acronimo}: {e}")
+            print(f"⚠️ Eccezione su {acronimo}: {e}")
             marche_saltate.append(acronimo)
             continue
 
     db.commit()
+
     return {
         "success": True,
         "nuovi_inseriti": inseriti,
