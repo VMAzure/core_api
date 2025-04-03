@@ -114,7 +114,7 @@ async def get_modelli_usato(codice_marca: str, Authorize: AuthJWT = Depends(), d
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    token = get_motornet_token()  # 🔹 Otteniamo il token da Motornet prima della richiesta
+    token = get_motornet_token()
 
     headers = {
         "Authorization": f"Bearer {token}"
@@ -125,31 +125,33 @@ async def get_modelli_usato(codice_marca: str, Authorize: AuthJWT = Depends(), d
     response = requests.get(motornet_url, headers=headers)
 
     print(f"🔍 DEBUG: Risposta completa di Motornet:")
-    print(response.text)  # 🔹 Stampiamo il JSON completo per analizzarlo
+    print(response.text)
 
     if response.status_code == 200:
         data = response.json()
 
-        # Estraggo solo i dati utili
-        modelli_puliti = [
-    {
-        "codice": modello["gammaModello"]["codice"] if modello.get("gammaModello") else None,
-        "descrizione": modello["gammaModello"]["descrizione"] if modello.get("gammaModello") else None,
-        "inizio_produzione": modello.get("inizioProduzione"),
-        "fine_produzione": modello.get("fineProduzione"),
-        "gruppo_storico": modello["gruppoStorico"]["descrizione"] if modello.get("gruppoStorico") else None,
-        "serie_gamma": modello["serieGamma"]["descrizione"] if modello.get("serieGamma") else None,
-        "codice_desc_modello": modello["codDescModello"]["codice"] if modello.get("codDescModello") else None,
-        "descrizione_dettagliata": pulisci_modello(modello["codDescModello"]["descrizione"]) if modello.get("codDescModello") else None
-    }
-    for modello in data.get("modelli", [])
-]
+        modelli_puliti = []
+        for modello in data.get("modelli", []):
+            descrizione_originale = modello["codDescModello"]["descrizione"] if modello.get("codDescModello") else None
+            descrizione_pulita = pulisci_modello(descrizione_originale) if descrizione_originale else None
 
+            print(f"🔎 Modello originale: '{descrizione_originale}' → Pulito: '{descrizione_pulita}'")
 
+            modelli_puliti.append({
+                "codice": modello["gammaModello"]["codice"] if modello.get("gammaModello") else None,
+                "descrizione": modello["gammaModello"]["descrizione"] if modello.get("gammaModello") else None,
+                "inizio_produzione": modello.get("inizioProduzione"),
+                "fine_produzione": modello.get("fineProduzione"),
+                "gruppo_storico": modello["gruppoStorico"]["descrizione"] if modello.get("gruppoStorico") else None,
+                "serie_gamma": modello["serieGamma"]["descrizione"] if modello.get("serieGamma") else None,
+                "codice_desc_modello": modello["codDescModello"]["codice"] if modello.get("codDescModello") else None,
+                "descrizione_dettagliata": descrizione_pulita
+            })
 
         return modelli_puliti
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero dei modelli")
+
 
 @router_usato.get("/allestimenti/{codice_marca}/{codice_modello}", tags=["Motornet"])
 async def get_allestimenti_usato(codice_marca: str, codice_modello: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
