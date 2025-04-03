@@ -420,27 +420,28 @@ async def get_modelli_nuovo(
 
         modelli_puliti = []
         for modello in data.get("modelli", []):
-            descrizione_originale = modello.get("descrizione")
+            descrizione_originale = modello.get("gammaModello", {}).get("descrizione")
             descrizione_pulita = pulisci_modello(descrizione_originale) if descrizione_originale else None
 
             print(f"🔎 Originale: '{descrizione_originale}' → Pulito: '{descrizione_pulita}'")
 
             modelli_puliti.append({
-                "codice": modello.get("codice"),
+                "codice": modello.get("gammaModello", {}).get("codice"),
                 "descrizione": descrizione_pulita,
-                "inizio_produzione": modello.get("inizio_produzione"),
-                "fine_produzione": modello.get("fine_produzione"),
-                "gruppo_storico": modello.get("gruppo_storico"),
-                "serie_gamma": modello.get("serie_gamma"),
-                "codice_desc_modello": modello.get("codice_desc_modello"),
-                "descrizione_dettagliata": modello.get("descrizione_dettagliata"),
-                "inizio_commercializzazione": modello.get("inizio_commercializzazione"),
-                "fine_commercializzazione": modello.get("fine_commercializzazione"),
+                "inizio_produzione": modello.get("inizioProduzione"),
+                "fine_produzione": modello.get("fineProduzione"),
+                "gruppo_storico": modello.get("gruppoStorico", {}).get("descrizione"),
+                "serie_gamma": modello.get("serieGamma", {}).get("descrizione"),
+                "codice_desc_modello": modello.get("codDescModello", {}).get("codice"),
+                "descrizione_dettagliata": modello.get("codDescModello", {}).get("descrizione"),
+                "inizio_commercializzazione": modello.get("inizioCommercializzazione"),
+                "fine_commercializzazione": modello.get("fineCommercializzazione"),
                 "modello": modello.get("modello"),
                 "foto": modello.get("foto"),
-                "prezzo_minimo": modello.get("prezzo_minimo"),
-                "modello_breve_carrozzeria": modello.get("modello_breve_carrozzeria")
+                "prezzo_minimo": modello.get("prezzoMinimo"),
+                "modello_breve_carrozzeria": modello.get("modelloBreveCarrozzeria")
             })
+
 
 
         return modelli_puliti
