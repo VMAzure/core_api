@@ -7,17 +7,11 @@ from app.database import get_db  # ✅ Import corretto per il DB
 from app.models import User  # ✅ Import del modello User se necessario
 from datetime import datetime
 import httpx
-
-
-
-
-
+from app.utils.modelli import pulisci_modello
 
 router_generic = APIRouter()
 router_usato = APIRouter(prefix="/usato/motornet")
 router_nuovo = APIRouter(prefix="/nuovo/motornet")
-
-
 
 
 # Configurazioni API Motornet
@@ -146,7 +140,7 @@ async def get_modelli_usato(codice_marca: str, Authorize: AuthJWT = Depends(), d
         "gruppo_storico": modello["gruppoStorico"]["descrizione"] if modello.get("gruppoStorico") else None,
         "serie_gamma": modello["serieGamma"]["descrizione"] if modello.get("serieGamma") else None,
         "codice_desc_modello": modello["codDescModello"]["codice"] if modello.get("codDescModello") else None,
-        "descrizione_dettagliata": modello["codDescModello"]["descrizione"] if modello.get("codDescModello") else None
+        "descrizione_dettagliata": pulisci_modello(modello["codDescModello"]["descrizione"]) if modello.get("codDescModello") else None
     }
     for modello in data.get("modelli", [])
 ]
@@ -434,7 +428,7 @@ async def get_modelli_nuovo(
                 "descrizione_dettagliata": modello["codDescModello"]["descrizione"] if modello.get("codDescModello") else None,
                 "inizio_commercializzazione": modello.get("inizioCommercializzazione"),
                 "fine_commercializzazione": modello.get("fineCommercializzazione"),
-                "modello": modello.get("modello"),
+                "modello": pulisci_modello(modello.get("modello")),
                 "foto": modello.get("foto"),
                 "prezzo_minimo": modello.get("prezzoMinimo"),
                 "modello_breve_carrozzeria": modello.get("modelloBreveCarrozzeria")
