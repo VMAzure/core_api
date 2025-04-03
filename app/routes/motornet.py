@@ -423,7 +423,10 @@ async def get_modelli_nuovo(
             # Filtra solo modelli attualmente commercializzati
             if modello.get("fineCommercializzazione") is None:
                 descrizione_originale = modello["gammaModello"]["descrizione"]
+                print(f"DEBUG - Modello originale prima della pulizia: '{descrizione_originale}' ({descrizione_originale.encode('utf-8')})")
+
                 descrizione_pulita = pulisci_modello(descrizione_originale) if descrizione_originale else None
+                print(f"DEBUG - Modello dopo la pulizia: '{descrizione_pulita}'")
 
                 modelli_puliti.append({
                     "codice": modello["gammaModello"]["codice"],
