@@ -405,7 +405,6 @@ async def get_modelli_nuovo(
     if anno is None:
         anno = datetime.today().year
 
-    # Componiamo l'URL dinamicamente
     motornet_url = (
         f"https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/modelli"
         f"?codice_marca={codice_marca}&anno={anno}"
@@ -418,8 +417,19 @@ async def get_modelli_nuovo(
 
     if response.status_code == 200:
         data = response.json()
-        modelli_puliti = [
-            {
+
+        modelli_puliti = []
+        for modello in data.get("modelli", []):
+            descrizione_originale = modello["codDescModello"]["descrizione"] if modello.get("codDescModello") else None
+            modello_originale = modello.get("modello")
+
+            descrizione_pulita = pulisci_modello(descrizione_originale) if descrizione_originale else None
+            modello_pulito = pulisci_modello(modello_originale) if modello_originale else None
+
+            print(f"🔎 Descrizione originale: '{descrizione_originale}' → Pulita: '{descrizione_pulita}'")
+            print(f"🔎 Modello originale: '{modello_originale}' → Pulito: '{modello_pulito}'")
+
+            modelli_puliti.append({
                 "codice": modello["gammaModello"]["codice"] if modello.get("gammaModello") else None,
                 "descrizione": modello["gammaModello"]["descrizione"] if modello.get("gammaModello") else None,
                 "inizio_produzione": modello.get("inizioProduzione"),
@@ -427,19 +437,19 @@ async def get_modelli_nuovo(
                 "gruppo_storico": modello["gruppoStorico"]["descrizione"] if modello.get("gruppoStorico") else None,
                 "serie_gamma": modello["serieGamma"]["descrizione"] if modello.get("serieGamma") else None,
                 "codice_desc_modello": modello["codDescModello"]["codice"] if modello.get("codDescModello") else None,
-                "descrizione_dettagliata": modello["codDescModello"]["descrizione"] if modello.get("codDescModello") else None,
+                "descrizione_dettagliata": descrizione_pulita,
                 "inizio_commercializzazione": modello.get("inizioCommercializzazione"),
                 "fine_commercializzazione": modello.get("fineCommercializzazione"),
-                "modello": pulisci_modello(modello.get("modello")),
+                "modello": modello_pulito,
                 "foto": modello.get("foto"),
                 "prezzo_minimo": modello.get("prezzoMinimo"),
                 "modello_breve_carrozzeria": modello.get("modelloBreveCarrozzeria")
-            }
-            for modello in data.get("modelli", [])
-        ]
+            })
+
         return modelli_puliti
 
     raise HTTPException(status_code=response.status_code, detail="Errore recupero modelli nuovo")
+
 
 @router_nuovo.get("/versioni/{codice_marca}/{codice_modello}", tags=["Motornet"])
 async def get_versioni_nuovo(
