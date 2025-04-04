@@ -4,6 +4,10 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
 from supabase import create_client
 
+load_dotenv()
+
+
+
 # Otteniamo DATABASE_URL dal file di configurazione
 DATABASE_URL = os.getenv("DATABASE_URL")
 
