@@ -43,3 +43,24 @@ def pulizia_massiva_modelli(db):
 
     db.commit()
     print("✅ Pulizia completata.")
+
+import re
+
+def pulisci_modello(modello: str) -> str:
+    """Pulisce un nome modello rimuovendo anni e numeri romani finali"""
+    if not modello:
+        return ""
+
+    modello_pulito = re.sub(r'\b(20[1-2][0-9]|2030)\b', '', modello).strip()
+
+    eccezioni = {
+        "Model X": "Model X",
+        "Classe": "Classe V",
+    }
+
+    if modello_pulito in eccezioni:
+        return eccezioni[modello_pulito]
+
+    modello_pulito = re.sub(r'\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$', '', modello_pulito).strip()
+    return modello_pulito
+
