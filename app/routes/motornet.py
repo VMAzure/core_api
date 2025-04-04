@@ -498,7 +498,18 @@ async def get_dettagli_auto_nuovo(
     if not result:
         raise HTTPException(status_code=404, detail="Dettaglio non trovato")
 
-    return dict(result)
+    # Wrappiamo i dati nel formato atteso dal frontend
+    m = dict(result)
+
+    return {
+        "modello": {
+            **m,
+            "alimentazione": {"descrizione": m["alimentazione"]} if m.get("alimentazione") else None,
+            "cambio": {"descrizione": m["tipo_cambio"]} if m.get("tipo_cambio") else None,
+            "trazione": {"descrizione": m["trazione"]} if m.get("trazione") else None,
+            "architettura": {"descrizione": m["architettura"]} if m.get("architettura") else None
+        }
+    }
 
 
 
