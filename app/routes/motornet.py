@@ -502,25 +502,23 @@ async def get_dettagli_auto_nuovo(
     m = dict(result)
 
     return {
-    "modello": {
-        **m,
-        "alimentazione": {"descrizione": m["alimentazione"]} if m.get("alimentazione") else None,
-        "cambio": {"descrizione": m["cambio_descrizione"]} if m.get("cambio_descrizione") else None,
-        "trazione": {"descrizione": m["trazione"]} if m.get("trazione") else None,
-        "architettura": {"descrizione": m["architettura"]} if m.get("architettura") else None,
-        "freni": {"descrizione": m["freni"]} if m.get("freni") else None,
-        "segmento": {
-            "codice": m["segmento"],
-            "descrizione": m["segmento_descrizione"]
-        } if m.get("segmento") else None,
-        "tipo": {
-            "codice": m["tipo"],
-            "descrizione": m["tipo_descrizione"]
-        } if m.get("tipo") else None
-    }
-}
-
-
+        "modello": {
+            **m,
+            "alimentazione": {"descrizione": m["alimentazione"]} if m.get("alimentazione") else None,
+            "cambio": {"descrizione": m["cambio_descrizione"]} if m.get("cambio_descrizione") else None,
+            "trazione": {"descrizione": m["trazione"]} if m.get("trazione") else None,
+            "architettura": {"descrizione": m["architettura"]} if m.get("architettura") else None,
+            "freni": {"descrizione": m["freni"]} if m.get("freni") else None,
+            "segmento": {
+                "codice": m["segmento"],
+                "descrizione": m["segmento_descrizione"]
+            } if m.get("segmento") else None,
+            "tipo": {
+                "codice": m["tipo"],
+                "descrizione": m["tipo_descrizione"]
+            } if m.get("tipo") else None
+        }
+    }   
 
 
 @router_nuovo.get("/alimentazioni/{codice_modello}", tags=["Motornet"])
