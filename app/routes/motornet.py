@@ -432,7 +432,7 @@ async def get_modelli_nuovo(
 async def get_versioni_nuovo(
     codice_marca: str,
     codice_modello: str,
-    alimentazione: str = None,
+    codice_alimentazione: str = None,
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -453,11 +453,12 @@ async def get_versioni_nuovo(
         LEFT JOIN mnet_dettagli d ON a.codice_motornet_uni = d.codice_motornet_uni
         WHERE a.codice_modello = :codice_modello
         AND (:alimentazione IS NULL OR d.alimentazione = :alimentazione)
+        AND a.data_a IS NULL
     """)
 
     result = db.execute(query, {
         "codice_modello": codice_modello,
-        "alimentazione": alimentazione
+        "alimentazione": codice_alimentazione
     }).fetchall()
 
     versioni = [
@@ -515,31 +516,28 @@ async def get_alimentazioni_nuovo(
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    if anno is None:
-        anno = datetime.today().year
+    query = text("""
+        SELECT DISTINCT d.alimentazione
+        FROM mnet_allestimenti a
+        JOIN mnet_dettagli d ON a.codice_motornet_uni = d.codice_motornet_uni
+        WHERE a.codice_modello = :codice_modello
+        AND a.data_a IS NULL
+        AND d.alimentazione IS NOT NULL
+        ORDER BY d.alimentazione
+    """)
 
-    token = get_motornet_token()
-    headers = {"Authorization": f"Bearer {token}"}
+    result = db.execute(query, {"codice_modello": codice_modello}).fetchall()
 
-    motornet_url = (
-        f"https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/alimentazioni"
-        f"?codice_modello={codice_modello}&anno={anno}"
-    )
+    alimentazioni = [
+        {
+            "codice": row.alimentazione,
+            "descrizione": row.alimentazione
+        }
+        for row in result
+    ]
 
-    response = requests.get(motornet_url, headers=headers)
+    return alimentazioni
 
-    if response.status_code == 200:
-        data = response.json()
-        alimentazioni = [
-            {
-                "codice": alimentazione.get("codice"),
-                "descrizione": alimentazione.get("descrizione")
-            }
-            for alimentazione in data.get("alimentazioni", [])
-        ]
-        return alimentazioni
-
-    raise HTTPException(status_code=response.status_code, detail="Errore recupero alimentazioni nuovo")
 
 
 
