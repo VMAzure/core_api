@@ -119,6 +119,10 @@ async def crea_offerta(
     quotazioni: Optional[dict] = Body(None),
     current_user: User = Depends(get_current_user),
     img_url: Optional[str] = Body(None),
+    cambio: Optional[str] = Body(None),
+    alimentazione: Optional[str] = Body(None),
+    segmento: Optional[str] = Body(None),
+
     db: Session = Depends(get_db)
 ):
     verify_admin_or_superadmin(current_user)
@@ -139,7 +143,10 @@ async def crea_offerta(
         prezzo_listino=prezzo_listino,
         prezzo_accessori=prezzo_accessori,
         prezzo_mss=prezzo_mss,
-        prezzo_totale=prezzo_totale
+        prezzo_totale=prezzo_totale,
+        cambio=cambio,
+        alimentazione=alimentazione,
+        segmento=segmento
 
     )
 

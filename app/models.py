@@ -311,6 +311,10 @@ class NltOfferte(Base):
     prezzo_mss = Column(Numeric(10, 2))
     prezzo_listino = Column(Numeric(10, 2))
     prezzo_totale = Column(Numeric(10, 2))
+    cambio = Column(String, nullable=True)
+    alimentazione = Column(String, nullable=True)
+    segmento = Column(String, nullable=True)
+
 
 class NltQuotazioni(Base):
     __tablename__ = 'nlt_quotazioni'
