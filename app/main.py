@@ -163,8 +163,6 @@ app.include_router(tools.router, prefix="/tools", tags=["Tools"])
 
 
 
-
-
 @app.get("/")
 def read_root():
     return {"message": "Welcome to CORE API"}
