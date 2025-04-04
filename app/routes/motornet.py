@@ -1,7 +1,8 @@
 ﻿from fastapi import APIRouter, HTTPException, Depends
 import requests
 from fastapi_jwt_auth import AuthJWT
-from sqlalchemy.orm import Session, text
+from sqlalchemy.orm import Session
+from sqlalchemy import text
 from app.routes.auth import get_current_user
 from app.database import get_db  # ✅ Import corretto per il DB
 from app.models import User  # ✅ Import del modello User se necessario
