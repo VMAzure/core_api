@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func, Boolean, Numeric, Date
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func, Boolean, Numeric, Date, TIMESTAMP
 from sqlalchemy.orm import relationship
 from datetime import datetime, date
 from passlib.context import CryptContext
@@ -391,6 +391,173 @@ class MotornetImaginAlias(Base):
     alias_model_family = Column(String, nullable=True)
     alias_model_range = Column(String, nullable=True)
     alias_model_variant = Column(String, nullable=True)
+
+class MnetModelli(Base):
+    __tablename__ = "mnet_modelli"
+
+    codice_modello = Column(String, primary_key=True, index=True)
+    descrizione = Column(String, nullable=False)
+    marca_acronimo = Column(String, nullable=False, index=True)
+    inizio_produzione = Column(Date, nullable=True)
+    fine_produzione = Column(Date, nullable=True)
+    gruppo_storico_codice = Column(String, nullable=True)
+    gruppo_storico_descrizione = Column(String, nullable=True)
+    serie_gamma_codice = Column(String, nullable=True)
+    serie_gamma_descrizione = Column(String, nullable=True)
+    cod_desc_modello_codice = Column(String, nullable=True)
+    cod_desc_modello_descrizione = Column(String, nullable=True)
+    inizio_commercializzazione = Column(Date, nullable=True)
+    fine_commercializzazione = Column(Date, nullable=True)
+    modello = Column(String, nullable=True)
+    foto = Column(String, nullable=True)
+    prezzo_minimo = Column(String, nullable=True)
+    modello_breve_carrozzeria = Column(String, nullable=True)
+    ultima_modifica = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+class MnetAllestimenti(Base):
+    __tablename__ = "mnet_allestimenti"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    codice_modello = Column(String, ForeignKey("mnet_modelli.codice_modello", ondelete="CASCADE"), nullable=False)
+    codice_motornet_uni = Column(String, unique=True, nullable=False)
+    nome = Column(String, nullable=False)
+    data_da = Column(Date)
+    data_a = Column(Date)
+    ultima_modifica = Column(DateTime, default=func.now(), onupdate=func.now())
+
+class MnetMarche(Base):
+    __tablename__ = "mnet_marche"
+
+    acronimo = Column(String, primary_key=True, index=True)
+    nome = Column(String, nullable=False)
+    logo = Column(Text, nullable=False)
+    utile = Column(Boolean, default=True)  # ✅ nuova colonna
+
+
+class MnetDettagli(Base):
+    __tablename__ = "mnet_dettagli"
+
+    codice_motornet_uni = Column(String, primary_key=True)
+
+    alimentazione = Column(Text)
+    cilindrata = Column(Integer)
+    hp = Column(Integer)
+    kw = Column(Integer)
+    euro = Column(Text)
+
+    consumo_medio = Column(Float)
+    consumo_urbano = Column(Float)
+    consumo_extraurbano = Column(Float)
+    emissioni_co2 = Column(Text)
+
+    tipo_cambio = Column(Text)
+    trazione = Column(Text)
+    porte = Column(Integer)
+    posti = Column(Integer)
+    lunghezza = Column(Integer)
+    larghezza = Column(Integer)
+    altezza = Column(Integer)
+    altezza_minima = Column(Integer)
+
+    peso = Column(Integer)
+    peso_vuoto = Column(Text)
+    peso_potenza = Column(Text)
+    portata = Column(Integer)
+
+    velocita = Column(Integer)
+    accelerazione = Column(Float)
+
+    bagagliaio = Column(Text)
+    descrizione_breve = Column(Text)
+    foto = Column(Text)
+    prezzo_listino = Column(Float)
+    prezzo_accessori = Column(Float)
+    data_listino = Column(Date)
+
+    neo_patentati = Column(Boolean)
+    architettura = Column(Text)
+    coppia = Column(Text)
+    coppia_ibrido = Column(Text)
+    coppia_totale = Column(Text)
+
+    numero_giri = Column(Integer)
+    numero_giri_ibrido = Column(Integer)
+    numero_giri_totale = Column(Integer)
+
+    valvole = Column(Integer)
+    passo = Column(Integer)
+
+    cilindri = Column(Text)
+    cavalli_fiscali = Column(Integer)
+
+    pneumatici_anteriori = Column(Text)
+    pneumatici_posteriori = Column(Text)
+
+    massa_p_carico = Column(Text)
+    indice_carico = Column(Text)
+    codice_velocita = Column(Text)
+
+    cap_serb_litri = Column(Integer)
+    cap_serb_kg = Column(Float)
+
+    paese_prod = Column(Text)
+    tipo_guida = Column(Text)
+    tipo_motore = Column(Text)
+    descrizione_motore = Column(Text)
+
+    cambio_descrizione = Column(Text)
+    nome_cambio = Column(Text)
+    marce = Column(Text)
+
+    codice_costruttore = Column(String)
+    modello_breve_carrozzeria = Column(Text)
+
+    tipo = Column(Text)
+    tipo_descrizione = Column(Text)
+    segmento = Column(Text)
+    segmento_descrizione = Column(Text)
+
+    garanzia_km = Column(Integer)
+    garanzia_tempo = Column(Integer)
+    guado = Column(Integer)
+    pendenza_max = Column(Integer)
+    sosp_pneum = Column(Boolean)
+
+    tipo_batteria = Column(Text)
+    traino = Column(Integer)
+    volumi = Column(Text)
+
+    cavalli_ibrido = Column(Integer)
+    cavalli_totale = Column(Integer)
+    potenza_ibrido = Column(Integer)
+    potenza_totale = Column(Integer)
+
+    motore_elettrico = Column(Text)
+    motore_ibrido = Column(Text)
+    capacita_nominale_batteria = Column(Float)
+    capacita_netta_batteria = Column(Float)
+    cavalli_elettrico_max = Column(Integer)
+    cavalli_elettrico_boost_max = Column(Integer)
+    potenza_elettrico_max = Column(Integer)
+    potenza_elettrico_boost_max = Column(Integer)
+
+    autonomia_media = Column(Float)
+    autonomia_massima = Column(Float)
+
+    equipaggiamento = Column(Text)
+    hc = Column(Text)
+    nox = Column(Text)
+    pm10 = Column(Text)
+    tipo_cons = Column(Text)
+    wltp = Column(Text)
+
+    ridotte = Column(Boolean)
+
+    freni = Column(Text)
+
+    ultima_modifica = Column(TIMESTAMP, default=func.now(), onupdate=func.now())
+
+
 
 
 

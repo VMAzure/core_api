@@ -1,34 +1,45 @@
-import re
+﻿from sqlalchemy import text
 
-def pulisci_modello(modello: str) -> str:
-    """
-    Normalizza e pulisce il nome del modello del veicolo.
+def pulizia_massiva_modelli(db):
+    print("🔄 Avvio pulizia massiva modelli...")
 
-    - Rimuove anni compresi tra 2010 e 2030.
-    - Gestisce eccezioni specifiche DOPO la rimozione degli anni.
-    - Rimuove numeri romani da I a X solo se isolati a fine stringa.
+    # 1. Rimozione numeri romani isolati
+    db.execute(text("""
+        UPDATE mnet_modelli
+        SET descrizione = REGEXP_REPLACE(
+            ' ' || TRIM(descrizione) || ' ',
+            '\\s(I{1,3}|IV|V|VI{0,3}|IX|X)\\s',
+            ' ',
+            'g'
+        )
+        WHERE ' ' || TRIM(descrizione) || ' ' ~ '\\s(I{1,3}|IV|V|VI{0,3}|IX|X)\\s';
+    """))
 
-    Args:
-        modello (str): Il nome originale del modello.
+    # 2. Rimozione anni dal 2010 al 2030
+    db.execute(text("""
+        UPDATE mnet_modelli
+        SET descrizione = REGEXP_REPLACE(
+            TRIM(descrizione),
+            '\\s?(20[1-2][0-9]|2030)\\s?',
+            ' ',
+            'g'
+        )
+        WHERE descrizione ~ '\\s?(20[1-2][0-9]|2030)\\s?';
+    """))
 
-    Returns:
-        str: Il nome del modello normalizzato.
-    """
+    # 3. Normalizzazione spazi doppi
+    db.execute(text("""
+        UPDATE mnet_modelli
+        SET descrizione = REGEXP_REPLACE(TRIM(descrizione), '\\s{2,}', ' ', 'g');
+    """))
 
-    # Rimuovi gli anni (2010-2030)
-    modello_pulito = re.sub(r'\b(20[1-2][0-9]|2030)\b', '', modello).strip()
+    # 4. Applicazione correzioni manuali da tabella
+    db.execute(text("""
+        UPDATE mnet_modelli
+        SET descrizione = c.corretto
+        FROM mnet_modelli_correzioni c
+        WHERE TRIM(mnet_modelli.descrizione) = c.originale;
+    """))
 
-    # Eccezioni specifiche per modelli particolari (DOPO rimozione anni)
-    eccezioni = {
-        "GLE - V167": "GLE",
-        "Model X": "Model X",
-    }
-
-    # Verifica eccezioni dopo pulizia degli anni
-    if modello_pulito in eccezioni:
-        return eccezioni[modello_pulito]
-
-    # Rimuovi numeri romani SOLO isolati alla fine
-    modello_pulito = re.sub(r'\s+(I|II|III|IV|V|VI|VII|VIII|IX|X)$', '', modello_pulito).strip()
-
-    return modello_pulito
+    db.commit()
+    print("✅ Pulizia completata.")

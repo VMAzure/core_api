@@ -4,6 +4,11 @@ from app.database import SessionLocal
 from app.models import User, PurchasedServices, Services
 from sqlalchemy import text
 import logging
+from app.utils.modelli import pulizia_massiva_modelli
+from app.routes.sync_dettagli_nuovo import sync_dettagli_auto
+from app.routes.sync_marche_completo import sync_marche
+from app.routes.sync_modelli_nuovo import sync_modelli
+from app.routes.sync_allestimenti_nuovo import sync_allestimenti
 
 # Configurazione dei log
 logging.basicConfig(filename="cron_job.log", level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -78,6 +83,70 @@ def check_and_charge_services():
 
     db.close()
 
-# Creazione scheduler (NON avviarlo qui, lo avviamo in main.py)
-scheduler = BackgroundScheduler()
-scheduler.add_job(check_and_charge_services, 'interval', minutes=1)
+def pulisci_modelli_settimanale():
+    logging.info("🧹 Avvio pulizia settimanale modelli...")
+    db = SessionLocal()
+    try:
+        pulizia_massiva_modelli(db)
+        logging.info("✅ Pulizia modelli completata.")
+    except Exception as e:
+        logging.error(f"❌ Errore nella pulizia modelli: {e}")
+    finally:
+        db.close()
+
+def sync_dettagli_settimanale():
+    print("🛠️ Avvio job settimanale: sync dettagli auto")
+    try:
+        sync_dettagli_auto()
+        print("✅ Sync dettagli completato.")
+    except Exception as e:
+        print(f"❌ Errore durante sync dettagli: {e}")
+
+def sync_allestimenti_settimanale():
+    logging.info("🧩 Avvio sync allestimenti settimanale...")
+    try:
+        sync_allestimenti()
+        logging.info("✅ Sync allestimenti completato.")
+    except Exception as e:
+        logging.error(f"❌ Errore nella sync allestimenti: {e}")
+
+def sync_marche_settimanale():
+    logging.info("🚗 Avvio sync marche settimanale...")
+    try:
+        sync_marche()
+        logging.info("✅ Sync marche completato.")
+    except Exception as e:
+        logging.error(f"❌ Errore nella sync marche: {e}")
+
+
+def sync_modelli_settimanale():
+    logging.info("📦 Avvio sync modelli settimanale...")
+    try:
+        sync_modelli()
+        logging.info("✅ Sync modelli completato.")
+    except Exception as e:
+        logging.error(f"❌ Errore nella sync modelli: {e}")
+
+
+
+
+
+scheduler = BackgroundScheduler(job_defaults={'coalesce': True, 'max_instances': 1})
+
+scheduler.add_job(check_and_charge_services, 'interval', minutes=100)
+# Ogni lunedì alle 03:00
+scheduler.add_job(pulisci_modelli_settimanale, 'cron', day_of_week='mon', hour=3, minute=0)
+# Ogni lunedì alle 04:00
+scheduler.add_job(sync_dettagli_settimanale, 'cron', day_of_week='mon', hour=4, minute=0)
+# Ogni lunedì alle 02:30
+scheduler.add_job(sync_allestimenti_settimanale, 'cron', day_of_week='mon', hour=2, minute=30)
+# Ogni lunedì alle 01:00
+scheduler.add_job(sync_marche_settimanale, 'cron', day_of_week='mon', hour=1, minute=0)
+
+# Ogni lunedì alle 02:00
+scheduler.add_job(sync_modelli_settimanale, 'cron', day_of_week='mon', hour=2, minute=0)
+
+
+
+
+
