@@ -432,6 +432,7 @@ async def get_modelli_nuovo(
 async def get_versioni_nuovo(
     codice_marca: str,
     codice_modello: str,
+    alimentazione: str = None,
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -443,12 +444,21 @@ async def get_versioni_nuovo(
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
     query = text("""
-        SELECT codice_motornet_uni, nome, data_da, data_a
-        FROM mnet_allestimenti
-        WHERE codice_modello = :codice_modello
+        SELECT 
+            a.codice_motornet_uni,
+            a.nome,
+            a.data_da,
+            a.data_a
+        FROM mnet_allestimenti a
+        LEFT JOIN mnet_dettagli d ON a.codice_motornet_uni = d.codice_motornet_uni
+        WHERE a.codice_modello = :codice_modello
+        AND (:alimentazione IS NULL OR d.alimentazione = :alimentazione)
     """)
 
-    result = db.execute(query, {"codice_modello": codice_modello}).fetchall()
+    result = db.execute(query, {
+        "codice_modello": codice_modello,
+        "alimentazione": alimentazione
+    }).fetchall()
 
     versioni = [
         {
@@ -463,6 +473,7 @@ async def get_versioni_nuovo(
     ]
 
     return versioni
+
 
 @router_nuovo.get("/dettagli/{codice_motornet}", tags=["Motornet"])
 async def get_dettagli_auto_nuovo(
