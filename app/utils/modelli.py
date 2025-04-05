@@ -58,6 +58,8 @@ def pulisci_modello(modello: str) -> str:
         "Classe": "Classe V",
         "C5 X": "C5-X",
         "C4 X": "C4-X",
+        "Aygo X": "Aygo X", 
+        "Aygo X Air": "Aygo X Air",
     }
 
     if modello_pulito in eccezioni:
