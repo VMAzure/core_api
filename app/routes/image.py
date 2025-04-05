@@ -2,15 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import AzImage, MnetModelli, MnetMarche, User
-from app.routes.nlt import get_current_user
-from app.auth_helpers import verify_jwt_token
+from app.auth_helpers import get_current_user
 import requests
-
 
 router = APIRouter(
     prefix="/api/image",
-    tags=["image"],
-    dependencies=[Depends(verify_jwt_token)]
+    tags=["image"]
 )
 
 IMAGIN_CDN_BASE_URL = "https://cdn.imagin.studio/getImage"
