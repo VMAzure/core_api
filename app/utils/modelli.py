@@ -56,6 +56,8 @@ def pulisci_modello(modello: str) -> str:
     eccezioni = {
         "Model X": "Model X",
         "Classe": "Classe V",
+        "C5 X": "C5-X",
+        "C4 X": "C4-X",
     }
 
     if modello_pulito in eccezioni:
