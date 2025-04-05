@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+﻿from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import AzImage, MnetModelli, MnetMarche, User
-from app.auth_helpers import get_current_user
+from app.routes.nlt import get_current_user  # 👈 correggi questa linea
 import requests
 
 router = APIRouter(
