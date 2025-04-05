@@ -308,7 +308,7 @@ class NltOfferte(Base):
     descrizione_breve = Column(String(255), nullable=True)
     valido_da = Column(Date, nullable=True)
     valido_fino = Column(Date, nullable=True)
-
+    codice_modello = Column(String(50), nullable=True)  # 👈 nuovo campo aggiunto
     player = relationship("NltPlayers", back_populates="offerte")
     quotazioni = relationship("NltQuotazioni", back_populates="offerta", cascade="all, delete-orphan")
     immagini = relationship("NltImmagini", back_populates="offerta", cascade="all, delete-orphan")

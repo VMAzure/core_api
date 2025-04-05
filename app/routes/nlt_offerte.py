@@ -53,6 +53,8 @@ async def get_offerte(
             "modello": o.modello,
             "versione": o.versione,
             "codice_motornet": o.codice_motornet,
+            "codice_modello": o.codice_modello,  # 👈 Campo aggiunto
+
             "id_player": o.id_player,
             "player": {
                 "nome": o.player.nome,
@@ -106,6 +108,8 @@ async def crea_offerta(
     modello: str = Body(...),
     versione: str = Body(...),
     codice_motornet: str = Body(...),
+    codice_modello: Optional[str] = Body(None),  
+
     id_player: int = Body(...),
     prezzo_listino: Optional[float] = Body(None),
     prezzo_accessori: Optional[float] = Body(None),
@@ -136,6 +140,8 @@ async def crea_offerta(
         modello=modello,
         versione=versione,
         codice_motornet=codice_motornet,
+        codice_modello=codice_modello,  # 👈 Campo aggiunto
+
         id_player=id_player,
         descrizione_breve=descrizione_breve,
         valido_da=valido_da,
