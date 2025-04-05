@@ -567,6 +567,16 @@ class MnetDettagli(Base):
 
     ultima_modifica = Column(TIMESTAMP, default=func.now(), onupdate=func.now())
 
+class AzImage(Base):
+    __tablename__ = "az_image"
+
+    id = Column(Integer, primary_key=True, index=True)
+    codice_modello = Column(String, unique=True, index=True, nullable=False)
+    marca_alias = Column(String, nullable=True)
+    modello_alias = Column(String, nullable=True)
+    model_variant = Column(String, nullable=True)
+
+
 
 
 
