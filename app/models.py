@@ -70,6 +70,12 @@ class User(Base):
         return pwd_context.verify(password, self.hashed_password)
 
         
+class TeamMemberUpdateRequest(BaseModel):
+    email: EmailStr
+    nome: str
+    cognome: str
+    cellulare: str
+
 class PurchasedServices(Base):
     __tablename__ = "purchased_services"
     __table_args__ = {"schema": "public"}
