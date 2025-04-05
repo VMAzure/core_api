@@ -8,11 +8,11 @@ def pulizia_massiva_modelli(db):
         UPDATE mnet_modelli
         SET descrizione = REGEXP_REPLACE(
             ' ' || TRIM(descrizione) || ' ',
-            '\\s(I{1,3}|IV|V|VI{0,3}|IX|X)\\s',
+            '\\s(I{1,3}|IV|V|VI{0,3}|IX)\\s',
             ' ',
             'g'
         )
-        WHERE ' ' || TRIM(descrizione) || ' ' ~ '\\s(I{1,3}|IV|V|VI{0,3}|IX|X)\\s';
+        WHERE ' ' || TRIM(descrizione) || ' ' ~ '\\s(I{1,3}|IV|V|VI{0,3}|IX|)\\s';
     """))
 
     # 2. Rimozione anni dal 2010 al 2030
