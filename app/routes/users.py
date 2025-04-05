@@ -763,4 +763,64 @@ async def get_mio_team(
         "colleghi": risultato
     }
 
+@router.put("/team/{id_membro}", tags=["Users"])
+def update_team_member(
+    id_membro: int,
+    member_data: TeamMemberUpdateRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    # Verifica autenticazione
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    current_user = db.query(User).filter(User.email == user_email).first()
 
+    if not current_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utente non autorizzato")
+
+    # Trova il membro da aggiornare
+    member_to_update = db.query(User).filter(User.id == id_membro).first()
+
+    if not member_to_update:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membro non trovato")
+
+    # Verifica permessi:
+    if current_user.role == "superadmin":
+        # Superadmin può aggiornare chiunque
+        pass
+
+    elif current_user.role == "admin":
+        if not (member_to_update.role == "admin_team" and member_to_update.parent_id == current_user.id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operazione non consentita")
+
+    elif current_user.role == "dealer":
+        if not (member_to_update.role == "dealer_team" and member_to_update.parent_id == current_user.id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operazione non consentita")
+
+    else:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ruolo non autorizzato")
+
+    # Controlla se l'email è già in uso da un altro utente
+    email_exists = db.query(User).filter(User.email == member_data.email, User.id != id_membro).first()
+    if email_exists:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email già utilizzata")
+
+    # Aggiorna i dati
+    member_to_update.email = member_data.email
+    member_to_update.nome = member_data.nome
+    member_to_update.cognome = member_data.cognome
+    member_to_update.cellulare = member_data.cellulare
+
+    db.commit()
+    db.refresh(member_to_update)
+
+    return {
+        "message": "Membro del team aggiornato con successo",
+        "user": {
+            "id": member_to_update.id,
+            "email": member_to_update.email,
+            "nome": member_to_update.nome,
+            "cognome": member_to_update.cognome,
+            "cellulare": member_to_update.cellulare
+        }
+    }
