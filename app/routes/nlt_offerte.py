@@ -60,6 +60,9 @@ async def get_offerte(
                 "nome": o.player.nome,
                 "colore": o.player.colore
             } if o.player else None,
+            "alimentazione": o.alimentazione,
+            "cambio": o.cambio,
+            "segmento": o.segmento,
             "descrizione_breve": o.descrizione_breve,
             "valido_da": o.valido_da,
             "valido_fino": o.valido_fino,
