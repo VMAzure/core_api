@@ -16,6 +16,8 @@ IMAGIN_CDN_BASE_URL = "https://cdn.imagin.studio/getImage"
 async def get_vehicle_image(
     codice_modello: str,
     angle: int = Query(29),
+    random_paint: str = Query("true"),
+    width: int = Query(400, ge=150, le=2600),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -52,8 +54,10 @@ async def get_vehicle_image(
         "billingtag": "core",
         "zoomlevel": 1,
         "zoomType": "fullscreen",
-        "randomPaint": "true"
+        "randomPaint": random_paint,
+        "width": width
     }
+
 
     if model_variant:
         params["modelVariant"] = model_variant
