@@ -18,6 +18,7 @@ async def get_vehicle_image(
     angle: int = Query(29),
     random_paint: str = Query("true"),
     width: int = Query(400, ge=150, le=2600),
+    return_url: bool = Query(False),  # 🔹 nuovo parametro per switch blob/url
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -58,11 +59,17 @@ async def get_vehicle_image(
         "width": width
     }
 
-
     if model_variant:
         params["modelVariant"] = model_variant
 
-    response = requests.get(IMAGIN_CDN_BASE_URL, params=params)
+    # 🔁 Costruzione URL per return_url=true
+    cdn_url = f"{IMAGIN_CDN_BASE_URL}?{requests.compat.urlencode(params)}"
+
+    if return_url:
+        return {"url": cdn_url}
+
+    # 🔄 Altrimenti, ritorna l’immagine (blob)
+    response = requests.get(cdn_url)
 
     if response.status_code != 200:
         raise HTTPException(status_code=502, detail="Errore CDN Imagin.")
