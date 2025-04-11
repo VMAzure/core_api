@@ -102,7 +102,8 @@ def login(
                 "active_services": active_service_infos,
                 "admin_info": {
                     "email": user.email,
-                    "logo_url": user.logo_url or ""
+                    "logo_url": user.logo_url or "",
+                     "ragione_sociale": admin_user.ragione_sociale or ""  
                 }
             },
             expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -163,22 +164,24 @@ def login(
     ]
 
     access_token = Authorize.create_access_token(
-        subject=user.email,
-        user_claims={
-            "id": user.id,
-            "role": user.role,
-            "parent_id": user.parent_id,
-            "credit": user.credit,
-            "admin_id": admin_id,
-            "dealer_id": dealer_id,
-            "active_services": active_service_infos,
-            "admin_info": {
-                "email": admin_user.email,
-                "logo_url": admin_user.logo_url or ""
-            }
-        },
-        expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
+    subject=user.email,
+    user_claims={
+        "id": user.id,
+        "role": user.role,
+        "parent_id": user.parent_id,
+        "credit": user.credit,
+        "admin_id": admin_id,
+        "dealer_id": dealer_id,
+        "active_services": active_service_infos,
+        "admin_info": {
+            "email": admin_user.email,
+            "logo_url": admin_user.logo_url or "",
+            "ragione_sociale": admin_user.ragione_sociale or ""  
+        }
+    },
+    expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+)
+
 
     return {"access_token": access_token, "token_type": "bearer"}
 
