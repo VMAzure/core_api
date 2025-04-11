@@ -484,8 +484,10 @@ async def lista_auto_usate(
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
+    filtro = ""  # Default: nessun filtro
+
     if user.role == "superadmin":
-        filtro = ""
+        filtro = ""  # nessun filtro, vede tutto
     elif is_admin_user(user):
         admin_id = get_admin_id(user)
         dealer_ids = db.execute(text("SELECT id FROM utenti WHERE parent_id = :admin_id"), {
@@ -494,13 +496,8 @@ async def lista_auto_usate(
         ids = [str(admin_id)] + [str(d.id) for d in dealer_ids]
         filtro = f"AND i.admin_id IN ({','.join(ids)})"
     elif is_dealer_user(user):
-        dealer_id = get_dealer_id(user)
-        dealer_ids = db.execute(text("""
-            SELECT id FROM utenti 
-            WHERE parent_id = :admin_id OR id = :admin_id
-        """), {"admin_id": dealer_id}).fetchall()
-        ids = [str(user.id), str(dealer_id)] + [str(d.id) for d in dealer_ids]
-        filtro = f"AND i.admin_id IN ({','.join(set(ids))})"
+        # <-- MODIFICA QUI: i dealer vedono tutte le auto visibili
+        filtro = "AND i.visibile = TRUE"
     else:
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
 
@@ -540,6 +537,7 @@ async def lista_auto_usate(
 
     risultati = db.execute(text(query)).fetchall()
     return [dict(r._mapping) for r in risultati]
+
 
 @router.put("/stato-usato/{id_auto}", tags=["AZLease"])
 async def aggiorna_stato_auto_usata(
