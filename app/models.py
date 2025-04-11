@@ -576,6 +576,20 @@ class AzImage(Base):
     modello_alias = Column(String, nullable=True)
     model_variant = Column(String, nullable=True)
 
+class AZLeaseQuotazioni(Base):
+    __tablename__ = "azlease_quotazioni"
+
+    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
+    id_auto = Column(UUID, ForeignKey("azlease_usatoauto.id"), nullable=False)
+    mesi = Column(Integer, nullable=False)
+    km = Column(Integer, nullable=False)
+    anticipo = Column(Integer, default=0)
+    prv = Column(Integer, default=0)
+    costo = Column(Integer, default=0)
+    vendita = Column(Integer, default=0)
+    buyback = Column(Integer, default=0)
+    canone = Column(Integer, default=0)
+    data_inserimento = Column(TIMESTAMP, server_default=func.now())
 
 
 
