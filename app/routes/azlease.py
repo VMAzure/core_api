@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db, supabase_client, SUPABASE_URL
-from app.models import User, AZUsatoInsertRequest
+from app.models import User, AZUsatoInsertRequest, AZLeaseQuotazioni
 from app.schemas import AutoUsataCreate
 from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
 import uuid
@@ -12,6 +12,10 @@ import requests
 import httpx
 import re
 from typing import Optional
+from pydantic import BaseModel
+from auth import get_current_user  # la funzione che decodifica JWT
+from typing import List
+
 
 router = APIRouter()
 
@@ -611,5 +615,83 @@ async def aggiorna_stato_auto_usata(
     db.commit()
 
     return {"message": f"Stato aggiornato con successo ({azione})"}
+
+
+class QuotazioneInput(BaseModel):
+    id_auto: uuid.UUID
+    mesi: int
+    km: int
+    anticipo: int
+    prv: int  # percentuale intera (es.: 5 per indicare 5%)
+    costo: int
+    vendita: int
+    buyback: int
+    canone: int
+
+@router.post("/api/azlease/quotazioni")
+def inserisci_quotazione(data: QuotazioneInput, db: Session = Depends(get_db)):
+    nuova_quotazione = AZLeaseQuotazioni(
+        id_auto=data.id_auto,
+        mesi=data.mesi,
+        km=data.km,
+        anticipo=data.anticipo,
+        prv=data.prv,
+        costo=data.costo,
+        vendita=data.vendita,
+        buyback=data.buyback,
+        canone=data.canone
+    )
+
+    try:
+        db.add(nuova_quotazione)
+        db.commit()
+        db.refresh(nuova_quotazione)
+        return {"success": True, "id": nuova_quotazione.id}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # Modello Pydantic di risposta
+class QuotazioneOut(BaseModel):
+    id: uuid.UUID
+    id_auto: uuid.UUID
+    mesi: int
+    km: int
+    anticipo: int
+    prv: int | None = None
+    costo: int | None = None
+    vendita: int | None = None
+    buyback: int | None = None
+    canone: int
+    data_inserimento: datetime
+
+    class Config:
+        from_attributes = True
+
+# Rotta GET con gestione ruoli
+@router.get("/api/azlease/quotazioni/{id_auto}", response_model=List[QuotazioneOut])
+def get_quotazioni(
+    id_auto: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    ruolo = current_user.role.lower()
+
+    quotazioni = db.query(AZLeaseQuotazioni).filter_by(id_auto=id_auto).all()
+    
+    if not quotazioni:
+        raise HTTPException(status_code=404, detail="Nessuna quotazione trovata per questa auto.")
+
+    # Dealer e team: campi sensibili nascosti
+    if ruolo in ["dealer", "dealer_team"]:
+        for q in quotazioni:
+            q.prv = None
+            q.costo = None
+            q.vendita = None
+            q.buyback = None
+
+    # Superadmin, admin e admin_team vedono tutto
+
+    return quotazioni
 
 
