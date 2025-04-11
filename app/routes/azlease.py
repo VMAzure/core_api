@@ -13,7 +13,7 @@ import httpx
 import re
 from typing import Optional
 from pydantic import BaseModel
-from auth import get_current_user  # la funzione che decodifica JWT
+from app.routes.auth import get_current_user  # la funzione che decodifica JWT
 from typing import List
 
 
