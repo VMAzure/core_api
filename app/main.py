@@ -44,7 +44,6 @@ from app.routes.pdf import router as pdf_router
 from app.routes.nlt_offerte import router as nlt_offerte_router
 from app.routes import tools
 from app.routes.image import router as image_router
-from app.routes.azlease import router as quotazioni_router
 
 
 
