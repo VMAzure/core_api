@@ -597,16 +597,24 @@ async def aggiorna_stato_auto_usata(
         """), {"id_usatoin": id_usatoin})
 
     # 🔧 AGGIUNGI QUESTO:
-    elif azione == "visibile":
+    elif azione == "toggle-visibilita":
+        stato_corrente = db.execute(text("""
+            SELECT visibile FROM azlease_usatoin WHERE id = :id_usatoin
+        """), {"id_usatoin": id_usatoin}).fetchone()
+
+        nuovo_stato = not stato_corrente.visibile
+
         db.execute(text("""
             UPDATE azlease_usatoin
-            SET visibile = true
+            SET visibile = :nuovo_stato
             WHERE id = :id_usatoin
-        """), {"id_usatoin": id_usatoin})
+        """), {"nuovo_stato": nuovo_stato, "id_usatoin": id_usatoin})
+
 
 
     else:
-        raise HTTPException(status_code=400, detail="Azione non valida. Usa: opzione, vendita, elimina")
+        raise HTTPException(status_code=400, detail="Azione non valida. Usa: opzione, vendita, elimina, toggle-visibilita")
+
 
 
     db.commit()
