@@ -649,7 +649,9 @@ def inserisci_quotazione(data: QuotazioneInput, db: Session = Depends(get_db)):
         return {"success": True, "id": nuova_quotazione.id}
     except Exception as e:
         db.rollback()
+        print("⚠️ Errore:", e)  # Aggiungi questa riga
         raise HTTPException(status_code=500, detail=str(e))
+
 
     # Modello Pydantic di risposta
 class QuotazioneOut(BaseModel):
