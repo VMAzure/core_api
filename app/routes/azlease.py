@@ -655,7 +655,10 @@ def inserisci_quotazione(
         db.add(nuova_quotazione)
         db.commit()
         db.refresh(nuova_quotazione)
-        return {"success": True, "id": nuova_quotazione.id}
+        return {
+            "success": True,
+            "quotazione": QuotazioneOut.from_orm(nuova_quotazione)
+        }
     except Exception as e:
         db.rollback()
         print("⚠️ Errore:", e)
@@ -677,11 +680,7 @@ class QuotazioneOut(BaseModel):
     data_inserimento: datetime
 
     class Config:
-        from_attributes = True
-        json_encoders = {
-            uuid.UUID: lambda v: str(v),
-            datetime: lambda v: v.isoformat()
-        }
+        orm_mode = True  # ← aggiungi questa riga esatta!
 
 
 from pprint import pprint
@@ -756,4 +755,4 @@ def modifica_quotazione(
     db.commit()
     db.refresh(quotazione)
 
-    return quotazione
+    return QuotazioneOut.from_orm(quotazione)
