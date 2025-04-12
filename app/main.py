@@ -164,9 +164,6 @@ app.include_router(router_usato, prefix="/api")
 app.include_router(router_nuovo, prefix="/api")
 app.include_router(tools.router, prefix="/tools", tags=["Tools"])
 app.include_router(image_router)
-app.include_router(quotazioni_router)
-
-
 
 
 @app.get("/")
