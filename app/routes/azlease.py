@@ -1,4 +1,4 @@
-﻿from fastapi import Depends, HTTPException, APIRouter, UploadFile, File, status, Body, Form
+﻿from fastapi import Depends, HTTPException, APIRouter, UploadFile, File, status, Body, Form, Query
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db, supabase_client, SUPABASE_URL
@@ -475,6 +475,7 @@ async def get_id_auto_anche_non_visibili(targa: str, Authorize: AuthJWT = Depend
 
 @router.get("/lista-auto", tags=["AZLease"])
 async def lista_auto_usate(
+    visibilita: Optional[str] = Query(None, description="Opzioni: visibili, non_visibili, tutte"),
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -497,10 +498,17 @@ async def lista_auto_usate(
         ids = [str(admin_id)] + [str(d.id) for d in dealer_ids]
         filtro = f"AND i.admin_id IN ({','.join(ids)})"
     elif is_dealer_user(user):
-        # <-- MODIFICA QUI: i dealer vedono tutte le auto visibili
         filtro = "AND i.visibile = TRUE"
     else:
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
+
+    visibile_filter = ""
+
+    if user.role.lower() in ["superadmin", "admin", "admin_team"]:
+        if visibilita == "visibili":
+            visibile_filter = "AND i.visibile = TRUE"
+        elif visibilita == "non_visibili":
+            visibile_filter = "AND i.visibile = FALSE"
 
     query = f"""
         SELECT 
@@ -523,22 +531,21 @@ async def lista_auto_usate(
             EXISTS (
                 SELECT 1 FROM azlease_usatodanni pd WHERE pd.auto_id = a.id
             ) AS perizie,
-            i.opzionato_da,  -- ← aggiungi questa riga
-            i.venduto_da     -- ← aggiungi questa riga
+            i.opzionato_da,
+            i.venduto_da
         FROM azlease_usatoauto a
         JOIN azlease_usatoin i ON i.id = a.id_usatoin
         LEFT JOIN azlease_usatoautodetails d ON d.auto_id = a.id
         LEFT JOIN utenti u_admin ON u_admin.id = i.admin_id
         LEFT JOIN utenti u_dealer ON u_dealer.id = i.dealer_id
         LEFT JOIN azlease_usatodanni dn ON dn.auto_id = a.id
-        WHERE 1=1 {filtro}
+        WHERE 1=1 {filtro} {visibile_filter}
         GROUP BY 
             a.id, d.marca_nome, d.allestimento, a.km_certificati, a.colore, 
             i.visibile, i.data_inserimento, a.anno_immatricolazione, 
             u_admin.nome, u_admin.cognome, u_dealer.nome, u_dealer.cognome, 
             i.prezzo_vendita, i.opzionato_da, i.venduto_da
         ORDER BY i.data_inserimento DESC
-
     """
 
     risultati = db.execute(text(query)).fetchall()
