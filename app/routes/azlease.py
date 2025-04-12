@@ -540,7 +540,7 @@ async def lista_auto_usate(
                 LEFT JOIN azlease_usatoautodetails d ON d.auto_id = a.id
                 LEFT JOIN utenti u_admin ON u_admin.id = i.admin_id
                 LEFT JOIN utenti u_dealer ON u_dealer.id = i.dealer_id
-                LEFT JOIN utenti u_opz ON u_opz.id = i.opzionato_da  -- ✅ join per ottenere la ragione sociale
+                LEFT JOIN utenti u_opz ON u_opz.id = i.opzionato_da::int
                 LEFT JOIN azlease_usatodanni dn ON dn.auto_id = a.id
                 GROUP BY 
                     a.id, d.marca_nome, d.allestimento, a.km_certificati, a.colore, 
