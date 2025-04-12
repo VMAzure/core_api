@@ -629,9 +629,16 @@ class QuotazioneInput(BaseModel):
 @router.post("/quotazioni", tags=["AZLease"])
 def inserisci_quotazione(
     data: QuotazioneInput, 
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user)
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
 ):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
     nuova_quotazione = AZLeaseQuotazioni(
         id_auto=data.id_auto,
         mesi=data.mesi,
@@ -651,7 +658,7 @@ def inserisci_quotazione(
         return {"success": True, "id": nuova_quotazione.id}
     except Exception as e:
         db.rollback()
-        print("⚠️ Errore:", e)  # Aggiungi questa riga
+        print("⚠️ Errore:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -675,17 +682,24 @@ class QuotazioneOut(BaseModel):
 @router.get("/quotazioni/{id_auto}", tags=["AZLease"], response_model=List[QuotazioneOut])
 def get_quotazioni(
     id_auto: uuid.UUID,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user)
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
 ):
-    ruolo = current_user.role.lower()
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    ruolo = user.role.lower()
 
     quotazioni = db.query(AZLeaseQuotazioni).filter_by(id_auto=id_auto).all()
-    
+
     if not quotazioni:
         raise HTTPException(status_code=404, detail="Nessuna quotazione trovata per questa auto.")
 
-    # Dealer e team: campi sensibili nascosti
+    # Nasconde campi sensibili per dealer e dealer_team
     if ruolo in ["dealer", "dealer_team"]:
         for q in quotazioni:
             q.prv = None
@@ -693,9 +707,8 @@ def get_quotazioni(
             q.vendita = None
             q.buyback = None
 
-    # Superadmin, admin e admin_team vedono tutto
-
     return quotazioni
+
 
 class QuotazioneUpdate(BaseModel):
     mesi: Optional[int] = None
@@ -711,10 +724,17 @@ class QuotazioneUpdate(BaseModel):
 def modifica_quotazione(
     id: uuid.UUID, 
     data: QuotazioneUpdate, 
-    current_user=Depends(get_current_user),
+    Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
-    if current_user.role.lower() not in ["superadmin", "admin", "admin_team"]:
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    if user.role.lower() not in ["superadmin", "admin", "admin_team"]:
         raise HTTPException(status_code=403, detail="Non autorizzato.")
 
     quotazione = db.query(AZLeaseQuotazioni).filter(AZLeaseQuotazioni.id == id).first()
