@@ -511,41 +511,42 @@ async def lista_auto_usate(
             visibile_filter = "AND i.visibile = FALSE"
 
     query = f"""
-        SELECT 
-            a.id AS id_auto,
-            a.targa,
-            d.marca_nome AS marca,
-            d.allestimento,
-            a.km_certificati,
-            a.colore,
-            i.visibile,
-            i.data_inserimento,
-            a.anno_immatricolazione,
-            u_admin.nome || ' ' || u_admin.cognome AS admin,
-            u_dealer.nome || ' ' || u_dealer.cognome AS dealer,
-            i.prezzo_vendita,
-            COALESCE(SUM(dn.valore_perizia), 0) AS valore_perizia,
-            EXISTS (
-                SELECT 1 FROM azlease_usatoimg img WHERE img.auto_id = a.id
-            ) AS foto,
-            EXISTS (
-                SELECT 1 FROM azlease_usatodanni pd WHERE pd.auto_id = a.id
-            ) AS perizie,
-            i.opzionato_da,
-            i.venduto_da
-        FROM azlease_usatoauto a
-        JOIN azlease_usatoin i ON i.id = a.id_usatoin
-        LEFT JOIN azlease_usatoautodetails d ON d.auto_id = a.id
-        LEFT JOIN utenti u_admin ON u_admin.id = i.admin_id
-        LEFT JOIN utenti u_dealer ON u_dealer.id = i.dealer_id
-        LEFT JOIN azlease_usatodanni dn ON dn.auto_id = a.id
-        WHERE 1=1 {filtro} {visibile_filter}
-        GROUP BY 
-            a.id, d.marca_nome, d.allestimento, a.km_certificati, a.colore, 
-            i.visibile, i.data_inserimento, a.anno_immatricolazione, 
-            u_admin.nome, u_admin.cognome, u_dealer.nome, u_dealer.cognome, 
-            i.prezzo_vendita, i.opzionato_da, i.venduto_da
-        ORDER BY i.data_inserimento DESC
+            SELECT 
+                a.id AS id_auto,
+                a.targa,
+                d.marca_nome AS marca,
+                d.allestimento,
+                a.km_certificati,
+                a.colore,
+                i.visibile,
+                i.data_inserimento,
+                a.anno_immatricolazione,
+                u_admin.nome || ' ' || u_admin.cognome AS admin,
+                u_dealer.nome || ' ' || u_dealer.cognome AS dealer,
+                i.prezzo_vendita,
+                COALESCE(SUM(dn.valore_perizia), 0) AS valore_perizia,
+                EXISTS (
+                    SELECT 1 FROM azlease_usatoimg img WHERE img.auto_id = a.id
+                ) AS foto,
+                EXISTS (
+                    SELECT 1 FROM azlease_usatodanni pd WHERE pd.auto_id = a.id
+                ) AS perizie,
+                i.opzionato_da,
+                i.opzionato_il,
+                i.venduto_da
+            FROM azlease_usatoauto a
+            JOIN azlease_usatoin i ON i.id = a.id_usatoin
+            LEFT JOIN azlease_usatoautodetails d ON d.auto_id = a.id
+            LEFT JOIN utenti u_admin ON u_admin.id = i.admin_id
+            LEFT JOIN utenti u_dealer ON u_dealer.id = i.dealer_id
+            LEFT JOIN azlease_usatodanni dn ON dn.auto_id = a.id
+            GROUP BY 
+                a.id, d.marca_nome, d.allestimento, a.km_certificati, a.colore, 
+                i.visibile, i.data_inserimento, a.anno_immatricolazione, 
+                u_admin.nome, u_admin.cognome, u_dealer.nome, u_dealer.cognome, 
+                i.prezzo_vendita, i.opzionato_da, i.opzionato_il, i.venduto_da
+            ORDER BY i.data_inserimento DESC
+
     """
 
     risultati = db.execute(text(query)).fetchall()
@@ -568,7 +569,6 @@ async def aggiorna_stato_auto_usata(
 
     azione = payload.get("azione")
 
-    # Recupera ID inserimento (usatoin) collegato a quest'auto
     result = db.execute(text("""
         SELECT id_usatoin FROM azlease_usatoauto WHERE id = :auto_id
     """), {"auto_id": id_auto}).fetchone()
@@ -596,7 +596,7 @@ async def aggiorna_stato_auto_usata(
             SET venduto_da = :user_id, venduto_il = :data
             WHERE id = :id_usatoin
         """), {
-            "user_id": str(uuid.UUID(str(user.id))),
+            "user_id": str(user.id),
             "data": now,
             "id_usatoin": id_usatoin
         })
@@ -608,30 +608,31 @@ async def aggiorna_stato_auto_usata(
             WHERE id = :id_usatoin
         """), {"id_usatoin": id_usatoin})
 
-    # 🔧 AGGIUNGI QUESTO:
-    elif azione == "toggle-visibilita":
-        stato_corrente = db.execute(text("""
-            SELECT visibile FROM azlease_usatoin WHERE id = :id_usatoin
-        """), {"id_usatoin": id_usatoin}).fetchone()
-
-        nuovo_stato = not stato_corrente.visibile
-
+    elif azione == "visibile":
         db.execute(text("""
             UPDATE azlease_usatoin
-            SET visibile = :nuovo_stato
+            SET visibile = true
             WHERE id = :id_usatoin
-        """), {"nuovo_stato": nuovo_stato, "id_usatoin": id_usatoin})
+        """), {"id_usatoin": id_usatoin})
 
-
+    # 🔧 AGGIUNGI QUESTO:
+    elif azione == "rimuovi_opzione":
+        if user.role.lower() in ["admin", "admin_team", "superadmin"]:
+            db.execute(text("""
+                UPDATE azlease_usatoin
+                SET opzionato_da = NULL, opzionato_il = NULL
+                WHERE id = :id_usatoin
+            """), {"id_usatoin": id_usatoin})
+        else:
+            raise HTTPException(status_code=403, detail="Non autorizzato")
 
     else:
-        raise HTTPException(status_code=400, detail="Azione non valida. Usa: opzione, vendita, elimina, toggle-visibilita")
-
-
+        raise HTTPException(status_code=400, detail="Azione non valida")
 
     db.commit()
 
     return {"message": f"Stato aggiornato con successo ({azione})"}
+
 
 
 class QuotazioneInput(BaseModel):
