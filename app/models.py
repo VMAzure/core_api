@@ -580,7 +580,7 @@ class AZLeaseQuotazioni(Base):
     __tablename__ = "azlease_quotazioni"
 
     id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
-    id_auto = Column(UUID, ForeignKey("azlease_usatoauto.id"), nullable=False)
+    id_auto = Column(UUID, ForeignKey("public.azlease_usatoauto.id"), nullable=False)
     mesi = Column(Integer, nullable=False)
     km = Column(Integer, nullable=False)
     anticipo = Column(Integer, default=0)
