@@ -431,9 +431,6 @@ async def get_dettagli_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: S
         ]
     }
 
-
-
-
 targa: Optional[str] = None
 
 @router.get("/usato", tags=["AZLease"])
@@ -695,3 +692,37 @@ def get_quotazioni(
     # Superadmin, admin e admin_team vedono tutto
 
     return quotazioni
+
+class QuotazioneUpdate(BaseModel):
+    mesi: Optional[int] = None
+    km: Optional[int] = None
+    anticipo: Optional[int] = None
+    prv: Optional[int] = None
+    costo: Optional[int] = None
+    vendita: Optional[int] = None
+    buyback: Optional[int] = None
+    canone: Optional[int] = None
+
+@router.patch("/quotazioni/{id}", tags=["AZLease"])
+def modifica_quotazione(
+    id: uuid.UUID, 
+    data: QuotazioneUpdate, 
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role.lower() not in ["superadmin", "admin"]:
+        raise HTTPException(status_code=403, detail="Non autorizzato.")
+
+    quotazione = db.query(AZLeaseQuotazioni).filter(AZLeaseQuotazioni.id == id).first()
+
+    if not quotazione:
+        raise HTTPException(status_code=404, detail="Quotazione non trovata.")
+
+    update_data = data.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(quotazione, key, value)
+
+    db.commit()
+    db.refresh(quotazione)
+
+    return quotazione
