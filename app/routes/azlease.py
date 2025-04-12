@@ -691,28 +691,19 @@ def get_quotazioni(
     db: Session = Depends(get_db)
 ):
     Authorize.jwt_required()
-    user_email = Authorize.get_jwt_subject()
-    user = db.query(User).filter(User.email == user_email).first()
 
-    if not user:
-        raise HTTPException(status_code=401, detail="Utente non trovato")
-
-    ruolo = user.role.lower()
-
-    quotazioni = db.query(AZLeaseQuotazioni).filter_by(id_auto=id_auto).all()
+    quotazioni = db.query(AZLeaseQuotazioni).filter(AZLeaseQuotazioni.id_auto == id_auto).all()
 
     if not quotazioni:
         raise HTTPException(status_code=404, detail="Nessuna quotazione trovata per questa auto.")
 
-    # Nasconde campi sensibili per dealer e dealer_team
-    if ruolo in ["dealer", "dealer_team"]:
-        for q in quotazioni:
-            q.prv = None
-            q.costo = None
-            q.vendita = None
-            q.buyback = None
+    risultato = [QuotazioneOut.from_orm(q).dict() for q in quotazioni]
+    
+    print("Output finale da restituire al frontend:", risultato)
 
-    return quotazioni
+    return risultato
+
+
 
 
 class QuotazioneUpdate(BaseModel):
