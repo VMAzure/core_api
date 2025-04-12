@@ -628,7 +628,8 @@ class QuotazioneInput(BaseModel):
     buyback: int
     canone: int
 
-@router.post("/api/azlease/quotazioni")
+
+@router.post("/quotazioni", tags=["AZLease"])
 def inserisci_quotazione(data: QuotazioneInput, db: Session = Depends(get_db)):
     nuova_quotazione = AZLeaseQuotazioni(
         id_auto=data.id_auto,
@@ -670,8 +671,7 @@ class QuotazioneOut(BaseModel):
     class Config:
         from_attributes = True
 
-# Rotta GET con gestione ruoli
-@router.get("/api/azlease/quotazioni/{id_auto}", response_model=List[QuotazioneOut])
+@router.get("/quotazioni/{id_auto}", tags=["AZLease"], response_model=List[QuotazioneOut])
 def get_quotazioni(
     id_auto: uuid.UUID,
     db: Session = Depends(get_db),
@@ -695,5 +695,3 @@ def get_quotazioni(
     # Superadmin, admin e admin_team vedono tutto
 
     return quotazioni
-
-
