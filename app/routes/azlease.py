@@ -669,15 +669,20 @@ class QuotazioneOut(BaseModel):
     mesi: int
     km: int
     anticipo: int
-    prv: int | None = None
-    costo: int | None = None
-    vendita: int | None = None
-    buyback: int | None = None
+    prv: Optional[int] = None
+    costo: Optional[int] = None
+    vendita: Optional[int] = None
+    buyback: Optional[int] = None
     canone: int
     data_inserimento: datetime
 
     class Config:
         from_attributes = True
+        json_encoders = {
+            uuid.UUID: lambda v: str(v),
+            datetime: lambda v: v.isoformat()
+        }
+
 
 @router.get("/quotazioni/{id_auto}", tags=["AZLease"], response_model=List[QuotazioneOut])
 def get_quotazioni(
