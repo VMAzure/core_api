@@ -343,8 +343,7 @@ async def upload_perizia_usato(
 
 
 @router.get("/foto-usato/{auto_id}", tags=["AZLease"])
-async def get_foto_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    """Restituisce la lista di immagini associate a un'auto."""
+def get_foto_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
 
     immagini = db.execute(text("""
