@@ -321,7 +321,7 @@ async def upload_perizia_usato(
         supabase_client.storage.from_("auto-usate").upload(
             file_name, content, {"content-type": file.content_type}
         )
-        image_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_name}"
+        image_url = f"{SUPABASE_URL}/storage/v1/object/public/auto-usate/{file_name}"
         danno_id = str(uuid.uuid4())
         db.execute(text("""
             INSERT INTO azlease_usatodanni (id, auto_id, foto, valore_perizia, descrizione)
@@ -756,3 +756,97 @@ def modifica_quotazione(
     db.refresh(quotazione)
 
     return QuotazioneOut.from_orm(quotazione)
+
+# DELETE FOTO
+@router.delete("/foto-usato/{foto_id}", tags=["AZLease"])
+def elimina_foto_usato(
+    foto_id: str,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    foto = db.execute(text("""
+        SELECT foto, auto_id FROM azlease_usatoimg WHERE id = :foto_id
+    """), {"foto_id": foto_id}).fetchone()
+
+    if not foto:
+        raise HTTPException(status_code=404, detail="Foto non trovata")
+
+    auto = db.execute(text("""
+        SELECT id_usatoin FROM azlease_usatoauto WHERE id = :auto_id
+    """), {"auto_id": foto.auto_id}).fetchone()
+
+    inserimento = db.execute(text("""
+        SELECT admin_id, dealer_id FROM azlease_usatoin WHERE id = :id_usatoin
+    """), {"id_usatoin": auto.id_usatoin}).fetchone()
+
+    user_is_owner = (
+        user.role.lower() in ["superadmin", "admin", "admin_team"]
+        or (is_dealer_user(user) and get_dealer_id(user) == inserimento.dealer_id)
+    )
+
+    if not user_is_owner:
+        raise HTTPException(status_code=403, detail="Non autorizzato a eliminare questa foto")
+
+    # Rimuovi da storage
+    supabase_client.storage.from_("auto-usate").remove([foto.foto.split("auto-usate/")[-1]])
+
+    # Rimuovi dal database
+    db.execute(text("DELETE FROM azlease_usatoimg WHERE id = :foto_id"), {"foto_id": foto_id})
+    db.commit()
+
+    return {"message": "Foto eliminata correttamente"}
+
+
+# DELETE PERIZIA
+@router.delete("/perizie-usato/{perizia_id}", tags=["AZLease"])
+def elimina_perizia_usato(
+    perizia_id: str,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    perizia = db.execute(text("""
+        SELECT foto, auto_id FROM azlease_usatodanni WHERE id = :perizia_id
+    """), {"perizia_id": perizia_id}).fetchone()
+
+    if not perizia:
+        raise HTTPException(status_code=404, detail="Perizia non trovata")
+
+    auto = db.execute(text("""
+        SELECT id_usatoin FROM azlease_usatoauto WHERE id = :auto_id
+    """), {"auto_id": perizia.auto_id}).fetchone()
+
+    inserimento = db.execute(text("""
+        SELECT admin_id, dealer_id FROM azlease_usatoin WHERE id = :id_usatoin
+    """), {"id_usatoin": auto.id_usatoin}).fetchone()
+
+    user_is_owner = (
+        user.role.lower() in ["superadmin", "admin", "admin_team"]
+        or (is_dealer_user(user) and get_dealer_id(user) == inserimento.dealer_id)
+    )
+
+    if not user_is_owner:
+        raise HTTPException(status_code=403, detail="Non autorizzato a eliminare questa perizia")
+
+    # Rimuovi da storage
+    supabase_client.storage.from_("auto-usate").remove([perizia.foto.split("auto-usate/")[-1]])
+
+    # Rimuovi dal database
+    db.execute(text("DELETE FROM azlease_usatodanni WHERE id = :perizia_id"), {"perizia_id": perizia_id})
+    db.commit()
+
+    return {"message": "Perizia eliminata correttamente"}
+
