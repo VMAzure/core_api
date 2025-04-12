@@ -825,14 +825,9 @@ def elimina_perizia_usato(
     if not perizia:
         raise HTTPException(status_code=404, detail="Perizia non trovata")
 
-    foto, auto_id = perizia  # Correzione: usa unpacking diretto
-
     auto = db.execute(text("""
         SELECT id_usatoin FROM azlease_usatoauto WHERE id = :auto_id
-    """), {"auto_id": auto_id}).fetchone()
-
-    if not auto:
-        raise HTTPException(status_code=404, detail="Auto non trovata")
+    """), {"auto_id": perizia.auto_id}).fetchone()
 
     inserimento = db.execute(text("""
         SELECT admin_id, dealer_id FROM azlease_usatoin WHERE id = :id_usatoin
@@ -847,7 +842,7 @@ def elimina_perizia_usato(
         raise HTTPException(status_code=403, detail="Non autorizzato a eliminare questa perizia")
 
     # Rimuovi da storage
-    supabase_client.storage.from_("auto-usate").remove([foto.split("auto-usate/")[-1]])
+    supabase_client.storage.from_("auto-usate").remove([perizia.foto.split("auto-usate/")[-1]])
 
     # Rimuovi dal database
     db.execute(text("DELETE FROM azlease_usatodanni WHERE id = :perizia_id"), {"perizia_id": perizia_id})
