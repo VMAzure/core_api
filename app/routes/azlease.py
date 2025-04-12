@@ -627,7 +627,11 @@ class QuotazioneInput(BaseModel):
 
 
 @router.post("/quotazioni", tags=["AZLease"])
-def inserisci_quotazione(data: QuotazioneInput, db: Session = Depends(get_db)):
+def inserisci_quotazione(
+    data: QuotazioneInput, 
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
     nuova_quotazione = AZLeaseQuotazioni(
         id_auto=data.id_auto,
         mesi=data.mesi,
@@ -710,7 +714,7 @@ def modifica_quotazione(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.role.lower() not in ["superadmin", "admin"]:
+    if current_user.role.lower() not in ["superadmin", "admin", "admin_team"]:
         raise HTTPException(status_code=403, detail="Non autorizzato.")
 
     quotazione = db.query(AZLeaseQuotazioni).filter(AZLeaseQuotazioni.id == id).first()
