@@ -522,7 +522,9 @@ async def lista_auto_usate(
             ) AS foto,
             EXISTS (
                 SELECT 1 FROM azlease_usatodanni pd WHERE pd.auto_id = a.id
-            ) AS perizie
+            ) AS perizie,
+            i.opzionato_da,  -- ← aggiungi questa riga
+            i.venduto_da     -- ← aggiungi questa riga
         FROM azlease_usatoauto a
         JOIN azlease_usatoin i ON i.id = a.id_usatoin
         LEFT JOIN azlease_usatoautodetails d ON d.auto_id = a.id
@@ -530,10 +532,13 @@ async def lista_auto_usate(
         LEFT JOIN utenti u_dealer ON u_dealer.id = i.dealer_id
         LEFT JOIN azlease_usatodanni dn ON dn.auto_id = a.id
         WHERE 1=1 {filtro}
-        GROUP BY a.id, d.marca_nome, d.allestimento, a.km_certificati, a.colore, i.visibile, 
-                 i.data_inserimento, a.anno_immatricolazione, u_admin.nome, u_admin.cognome, 
-                 u_dealer.nome, u_dealer.cognome, i.prezzo_vendita
+        GROUP BY 
+            a.id, d.marca_nome, d.allestimento, a.km_certificati, a.colore, 
+            i.visibile, i.data_inserimento, a.anno_immatricolazione, 
+            u_admin.nome, u_admin.cognome, u_dealer.nome, u_dealer.cognome, 
+            i.prezzo_vendita, i.opzionato_da, i.venduto_da
         ORDER BY i.data_inserimento DESC
+
     """
 
     risultati = db.execute(text(query)).fetchall()
