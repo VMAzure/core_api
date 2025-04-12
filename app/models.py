@@ -576,9 +576,11 @@ class AzImage(Base):
     modello_alias = Column(String, nullable=True)
     model_variant = Column(String, nullable=True)
 
+
+
 class AZLeaseQuotazioni(Base):
     __tablename__ = "azlease_quotazioni"
-
+    __table_args__ = {'schema': 'public'}  # ⬅️ Aggiungi schema qui
     id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     id_auto = Column(UUID, ForeignKey("public.azlease_usatoauto.id"), nullable=False)
     mesi = Column(Integer, nullable=False)
@@ -590,6 +592,23 @@ class AZLeaseQuotazioni(Base):
     buyback = Column(Integer, default=0)
     canone = Column(Integer, default=0)
     data_inserimento = Column(TIMESTAMP, server_default=func.now())
+
+class AZLeaseUsatoAuto(Base):
+    __tablename__ = "azlease_usatoauto"
+    __table_args__ = {'schema': 'public'}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    anno_immatricolazione = Column(Integer, nullable=False)
+    data_ultimo_intervento = Column(Date, nullable=True)
+    cronologia_tagliandi = Column(Boolean, default=False)
+    doppie_chiavi = Column(Boolean, default=False)
+    data_passaggio_proprieta = Column(Date, nullable=True)
+    km_certificati = Column(Integer, nullable=False)
+    targa = Column(Text, nullable=False, unique=True)
+    descrizione_ultimo_intervento = Column(Text, nullable=True)
+    codice_motornet = Column(Text, nullable=True)
+    colore = Column(Text, nullable=True)
+    id_usatoin = Column(UUID(as_uuid=True), nullable=True)
 
 
 
