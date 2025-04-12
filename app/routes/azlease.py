@@ -684,6 +684,8 @@ class QuotazioneOut(BaseModel):
         }
 
 
+from pprint import pprint
+
 @router.get("/quotazioni/{id_auto}", tags=["AZLease"], response_model=List[QuotazioneOut])
 def get_quotazioni(
     id_auto: uuid.UUID,
@@ -697,12 +699,21 @@ def get_quotazioni(
     if not quotazioni:
         raise HTTPException(status_code=404, detail="Nessuna quotazione trovata per questa auto.")
 
-    risultato = [QuotazioneOut.from_orm(q).dict() for q in quotazioni]
-    
-    print("Output finale da restituire al frontend:", risultato)
+    # Aggiungi questo:
+    print("Quotazioni SQLAlchemy originali:")
+    for q in quotazioni:
+        pprint(vars(q))
+
+    try:
+        risultato = [QuotazioneOut.from_orm(q).dict() for q in quotazioni]
+    except Exception as e:
+        print("❌ Errore durante from_orm:", e)
+        raise
+
+    print("Output finale da restituire al frontend:")
+    pprint(risultato)
 
     return risultato
-
 
 
 
