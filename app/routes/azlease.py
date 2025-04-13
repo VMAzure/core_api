@@ -347,10 +347,51 @@ def get_foto_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = D
     Authorize.jwt_required()
 
     immagini = db.execute(text("""
-        SELECT id, foto FROM azlease_usatoimg WHERE auto_id = :auto_id
+        SELECT id, foto, principale FROM azlease_usatoimg WHERE auto_id = :auto_id
     """), {"auto_id": auto_id}).fetchall()
 
-    return {"auto_id": auto_id, "immagini": [{"id": img.id, "foto_url": img.foto} for img in immagini]}
+    return {
+        "auto_id": auto_id,
+        "immagini": [
+            {
+                "id": img.id,
+                "foto_url": img.foto,
+                "principale": img.principale
+            } for img in immagini
+        ]
+    }
+@router.put("/foto-usato/{id_foto}/principale", tags=["AZLease"])
+def imposta_foto_principale(id_foto: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    Authorize.jwt_required()
+
+    # 1. Recupera auto_id dalla foto selezionata
+    foto = db.execute(text("""
+        SELECT auto_id FROM azlease_usatoimg WHERE id = :id_foto
+    """), {"id_foto": id_foto}).fetchone()
+
+    if not foto:
+        raise HTTPException(status_code=404, detail="Foto non trovata")
+
+    auto_id = foto.auto_id
+
+    # 2. Imposta tutte le foto dell'auto come principale = FALSE
+    db.execute(text("""
+        UPDATE azlease_usatoimg
+        SET principale = FALSE
+        WHERE auto_id = :auto_id
+    """), {"auto_id": auto_id})
+
+    # 3. Imposta la foto selezionata come principale = TRUE
+    db.execute(text("""
+        UPDATE azlease_usatoimg
+        SET principale = TRUE
+        WHERE id = :id_foto
+    """), {"id_foto": id_foto})
+
+    db.commit()
+
+    return {"message": "Foto impostata come principale", "foto_id": id_foto}
+
 
 @router.get("/perizie-usato/{auto_id}", tags=["AZLease"])
 async def get_perizie_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
