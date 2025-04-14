@@ -775,7 +775,7 @@ def get_quotazioni(
     print("Output finale da restituire al frontend:")
     pprint(risultato)
 
-    return risultato
+    return risultato or []
 
 
 
