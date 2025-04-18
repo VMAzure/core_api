@@ -213,16 +213,18 @@ class SmtpSettings(Base):
     __table_args__ = {"schema": "public"}
 
     id = Column(Integer, primary_key=True, index=True)
-    admin_id = Column(Integer, ForeignKey('public.utenti.id', ondelete='CASCADE'), nullable=False)
-    smtp_host = Column(String(255), nullable=False)
+    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=False)
+    smtp_host = Column(String, nullable=False)
     smtp_port = Column(Integer, nullable=False)
-    smtp_user = Column(String(255), nullable=False)
-    smtp_password = Column(String(255), nullable=False)
+    smtp_user = Column(String, nullable=False)
+    smtp_password = Column(String, nullable=False)
     use_ssl = Column(Boolean, default=True)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    smtp_alias = Column(String, nullable=True)  # <-- ✅ AGGIUNGI QUESTO CAMPO
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     admin = relationship("User", back_populates="smtp_settings")
+
 
 class SiteAdminSettings(Base):
     __tablename__ = "site_admin_settings"
