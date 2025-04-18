@@ -59,6 +59,8 @@ class User(Base):
 
     parent = relationship("User", remote_side=[id], backref="dealers", primaryjoin="User.parent_id == User.id")
     smtp_settings = relationship("SmtpSettings", uselist=False, back_populates="admin", cascade="all, delete-orphan")
+    reset_token = Column(String, nullable=True, index=True)
+    reset_token_expiration = Column(DateTime, nullable=True)
 
 
     def set_password(self, password: str):
