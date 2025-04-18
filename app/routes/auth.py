@@ -266,3 +266,31 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
     )
 
     return {"access_token": new_token}
+
+from pydantic import BaseModel
+from fastapi import BackgroundTasks, Depends, APIRouter, HTTPException
+import secrets  # ✅ mancava questo import!
+from app.utils.email import send_reset_email  # ✅ mancava questo import!
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+@router.post("/forgot-password")
+def forgot_password(request: ForgotPasswordRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == request.email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+
+    token = secrets.token_urlsafe(32)
+    expiration = datetime.utcnow() + timedelta(minutes=30)
+
+    user.reset_token = token
+    user.reset_token_expiration = expiration
+    db.commit()
+
+    # Usa sempre admin_id=1 (SuperAdmin)
+    background_tasks.add_task(send_reset_email, 1, request.email, token)
+
+    return {"message": "Email inviata correttamente"}
