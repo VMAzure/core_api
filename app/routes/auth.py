@@ -294,3 +294,26 @@ def forgot_password(request: ForgotPasswordRequest, background_tasks: Background
     background_tasks.add_task(send_reset_email, 4, request.email, token)
 
     return {"message": "Email inviata correttamente"}
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+@router.post("/reset-password")
+def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(
+        User.reset_token == request.token,
+        User.reset_token_expiration > datetime.utcnow()
+    ).first()
+
+    if not user:
+        raise HTTPException(status_code=400, detail="Token non valido o scaduto")
+
+    user.hashed_password = pwd_context.hash(request.new_password)
+    user.reset_token = None
+    user.reset_token_expiration = None
+
+    db.commit()
+
+    return {"message": "Password aggiornata con successo"}
+
