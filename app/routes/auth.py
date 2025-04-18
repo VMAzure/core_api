@@ -291,6 +291,6 @@ def forgot_password(request: ForgotPasswordRequest, background_tasks: Background
     db.commit()
 
     # Usa sempre admin_id=1 (SuperAdmin)
-    background_tasks.add_task(send_reset_email, 1, request.email, token)
+    background_tasks.add_task(send_reset_email, 4, request.email, token)
 
     return {"message": "Email inviata correttamente"}
