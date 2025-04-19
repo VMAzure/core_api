@@ -551,18 +551,12 @@ async def invia_mail_preventivo(
         server.login(smtp_settings.smtp_user, smtp_settings.smtp_password)
         server.send_message(msg)
         server.quit()
+        print("✅ Email inviata correttamente a", to_email)
 
-        # Aggiungi evento timeline
-        evento_timeline = NltPreventiviTimeline(
-            preventivo_id=preventivo_id,
-            evento="email_inviata",
-            descrizione=f"Preventivo inviato via email a {email_destinatario}",
-            utente_id=current_user.id
-        )
-        db.add(evento_timeline)
-        db.commit()
-
-        return {"success": True}
+    except smtplib.SMTPException as smtp_err:
+        print("❌ Errore SMTP:", smtp_err)
+        raise HTTPException(status_code=500, detail=f"Errore SMTP: {smtp_err}")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore invio mail: {str(e)}")
+        print("❌ Errore generico invio email:", e)
+        raise HTTPException(status_code=500, detail=str(e))
