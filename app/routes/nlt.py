@@ -2,18 +2,19 @@
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User
+from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User, NltPreventivi, NltPreventiviLinks, NltPreventiviTimeline
 from pydantic import BaseModel, BaseSettings
 from jose import jwt, JWTError  # ✅ Aggiunto import corretto per decodificare il token JWT
 from fastapi_jwt_auth import AuthJWT
+from fastapi.responses import RedirectResponse
 from typing import List, Optional
+from datetime import datetime, timedelta  # aggiunto timedelta
 from app.auth_helpers import (
     get_admin_id,
     get_dealer_id,
     is_admin_user,
     is_dealer_user
 )
-
 
 import uuid
 import httpx
@@ -445,5 +446,75 @@ async def get_preventivo_completo(preventivo_id: str, dealerId: Optional[int] = 
         "CarMainImageUrl": "",
         "CarImages": []
     }
+
+@router.post("/preventivi/{preventivo_id}/genera-link")
+async def genera_link_preventivo(
+    preventivo_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 🔍 Verifica che il preventivo esista
+    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
+    if not preventivo:
+        raise HTTPException(status_code=404, detail="Preventivo non trovato")
+
+    # 🔐 Genera il token univoco
+    token = str(uuid.uuid4())
+
+    # 📌 Salva il token nella tabella
+    nuovo_link = NltPreventiviLinks(
+        token=token,
+        preventivo_id=preventivo.id
+    )
+
+    db.add(nuovo_link)
+    db.commit()
+
+    # 🔗 URL completo restituito al frontend
+    url_download = f"https://coreapi-production-ca29.up.railway.app/nlt/preventivi/download/{token}"
+
+    return {
+        "token": token,
+        "url_download": url_download
+    }
+
+
+@router.get("/preventivi/download/{token}")
+async def scarica_preventivo_con_token(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    # 🔍 verifica il token
+    link = db.query(NltPreventiviLinks).filter(
+        NltPreventiviLinks.token == token
+    ).first()
+
+    if not link:
+        raise HTTPException(status_code=404, detail="Link non valido o scaduto")
+
+    # 🔐 controlla la data di scadenza (16 giorni)
+    if link.data_scadenza < datetime.utcnow():
+        raise HTTPException(status_code=410, detail="Questo link è scaduto")
+
+    # 🔗 recupera il preventivo associato
+    preventivo = db.query(NltPreventivi).filter(
+        NltPreventivi.id == link.preventivo_id
+    ).first()
+
+    if not preventivo:
+        raise HTTPException(status_code=404, detail="Preventivo non trovato")
+
+    # 📝 registra evento nella timeline ad ogni download
+    evento_timeline = NltPreventiviTimeline(
+        preventivo_id=preventivo.id,
+        evento="scaricato",
+        descrizione=f"Preventivo scaricato tramite link (token={token})",
+        utente_id=preventivo.preventivo_assegnato_a or preventivo.creato_da
+    )
+    db.add(evento_timeline)
+    db.commit()
+
+    # 🚀 Redirect diretto al file PDF
+    return RedirectResponse(url=preventivo.file_url)
 
 
