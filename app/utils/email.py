@@ -62,7 +62,7 @@ def send_email(admin_id: int, to_email: str, subject: str, body: str):
         db.close()
         raise Exception("Impostazioni SMTP non configurate per questo admin.")
 
-    msg = MIMEText(body, "plain", "utf-8")
+    msg = MIMEText(body, "html", "utf-8")
     msg["Subject"] = subject
 
     if smtp_settings.smtp_alias and current_user.role == "superadmin":
