@@ -5,6 +5,10 @@ from app.database import get_db
 from app.models import SmtpSettings, User
 from pydantic import BaseModel
 from app.auth_helpers import get_admin_id, is_admin_user
+import smtplib
+from email.mime.text import MIMEText
+from email.utils import formataddr
+
 
 
 router = APIRouter()
