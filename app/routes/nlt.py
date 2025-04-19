@@ -1,6 +1,6 @@
 ﻿from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Security, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User, NltPreventivi, NltPreventiviLinks, NltPreventiviTimeline
 from pydantic import BaseModel, BaseSettings
@@ -9,6 +9,9 @@ from fastapi_jwt_auth import AuthJWT
 from fastapi.responses import RedirectResponse
 from typing import List, Optional
 from datetime import datetime, timedelta  # aggiunto timedelta
+from app.utils.email import send_email
+
+
 from app.auth_helpers import (
     get_admin_id,
     get_dealer_id,
@@ -518,3 +521,37 @@ async def scarica_preventivo_con_token(
     return RedirectResponse(url=preventivo.file_url)
 
 
+@router.post("/preventivi/{preventivo_id}/invia-mail")
+async def invia_mail_cliente(
+    preventivo_id: str,
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    preventivo = db.query(NltPreventivi).options(joinedload(NltPreventivi.cliente)).filter(NltPreventivi.id == preventivo_id).first()
+    if not preventivo:
+        raise HTTPException(status_code=404, detail="Preventivo non trovato")
+
+    cliente = preventivo.cliente
+    if not cliente or not cliente.email:
+        raise HTTPException(status_code=400, detail="Cliente o email non disponibili")
+
+    # 👇 usa la nuova funzione generica qui:
+    subject = "Il tuo preventivo è pronto"
+    email_body = f"""
+    Gentile {cliente.nome or cliente.ragione_sociale},
+
+    Il tuo preventivo è pronto. Puoi scaricarlo cliccando qui:
+
+    {body['url_download']}
+
+    Cordiali saluti,
+    {current_user.nome}
+    """
+
+    try:
+        send_email(current_user.id, cliente.email, subject, email_body)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore invio email: {str(e)}")
+
+    return {"success": True, "message": "Email inviata"}
