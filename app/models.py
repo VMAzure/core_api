@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func, Boolean, Numeric, Date, TIMESTAMP
 from sqlalchemy.orm import relationship
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from passlib.context import CryptContext
 from app.database import Base  # Manteniamo solo Base senza importare engine
 from typing import TYPE_CHECKING, Optional, List
@@ -615,7 +615,30 @@ class AZLeaseUsatoAuto(Base):
     id_usatoin = Column(UUID(as_uuid=True), nullable=True)
 
 
+class NltPreventiviTimeline(Base):
+    __tablename__ = 'nlt_preventivi_timeline'
 
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    preventivo_id = Column(UUID(as_uuid=True), ForeignKey('nlt_preventivi.id', ondelete='CASCADE'))
+    evento = Column(String(50), nullable=False)
+    descrizione = Column(Text, nullable=True)
+    data_evento = Column(DateTime, default=datetime.utcnow, nullable=False)
+    utente_id = Column(Integer, nullable=False)
+
+    # relazioni (opzionali ma comode per query)
+    preventivo = relationship("NltPreventivi", backref="timeline")
+
+
+class NltPreventiviLinks(Base):
+    __tablename__ = 'nlt_preventivi_links'
+
+    token = Column(String(100), primary_key=True, index=True)
+    preventivo_id = Column(UUID(as_uuid=True), ForeignKey('nlt_preventivi.id', ondelete='CASCADE'))
+    data_creazione = Column(DateTime, default=datetime.utcnow, nullable=False)
+    data_scadenza = Column(DateTime, nullable=False, default=lambda: datetime.utcnow() + timedelta(days=16))  # 🔥 aggiunto
+    usato = Column(Boolean, default=False, nullable=False)
+
+    preventivo = relationship("NltPreventivi", backref="links")
 
 
 
