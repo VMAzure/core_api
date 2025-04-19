@@ -527,7 +527,7 @@ async def invia_mail_preventivo(
     email_destinatario = cliente.email
 
     # recupera SMTP (admin)
-    smtp_settings = get_smtp_settings(current_user.admin_id or current_user.id, db)
+    smtp_settings = get_smtp_settings(current_user.parent_id or current_user.id, db)
 
     if not smtp_settings:
         raise HTTPException(status_code=500, detail="SMTP non configurato")
