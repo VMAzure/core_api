@@ -551,7 +551,7 @@ async def invia_mail_preventivo(
         server.login(smtp_settings.smtp_user, smtp_settings.smtp_password)
         server.send_message(msg)
         server.quit()
-        print("✅ Email inviata correttamente a", to_email)
+        print("✅ Email inviata correttamente a", email_destinatario)
 
     except smtplib.SMTPException as smtp_err:
         print("❌ Errore SMTP:", smtp_err)
