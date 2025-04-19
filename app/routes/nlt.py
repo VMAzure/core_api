@@ -353,6 +353,12 @@ async def aggiorna_preventivo(
 @router.get("/preventivo-completo/{preventivo_id}")
 async def get_preventivo_completo(preventivo_id: str, dealerId: Optional[int] = None, db: Session = Depends(get_db)):
     
+    # ✅ PRIMA recupera il preventivo
+    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
+    if not preventivo:
+        raise HTTPException(status_code=404, detail="Preventivo non trovato")
+
+    # ✅ POI puoi usare preventivo
     dealer_id = dealerId or preventivo.preventivo_assegnato_a
     if not dealer_id:
         raise HTTPException(status_code=400, detail="Dealer non assegnato")
@@ -361,10 +367,6 @@ async def get_preventivo_completo(preventivo_id: str, dealerId: Optional[int] = 
     if not dealer:
         raise HTTPException(status_code=404, detail="Dealer non trovato")
 
-    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
-    if not preventivo:
-        raise HTTPException(status_code=404, detail="Preventivo non trovato")
- 
     cliente = db.query(Cliente).filter(Cliente.id == preventivo.cliente_id).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
@@ -373,22 +375,12 @@ async def get_preventivo_completo(preventivo_id: str, dealerId: Optional[int] = 
     if not admin:
         raise HTTPException(status_code=404, detail="Admin non trovato")
 
-    dealer = db.query(User).filter(User.id == preventivo.preventivo_assegnato_a).first()
-    if not dealer:
-        raise HTTPException(status_code=404, detail="Dealer assegnato non trovato")
-
-    # 🔁 Recupera i documenti richiesti (chiamata interna all’API)
+    # Recupera documenti richiesti
     import httpx
-
-
 
     async with httpx.AsyncClient() as client:
         res = await client.get(f"https://coreapi-production-ca29.up.railway.app/nlt/documenti-richiesti/{cliente.tipo_cliente}")
-        if res.status_code == 200:
-            documenti = res.json().get("documenti", [])
-        else:
-            documenti = []
-
+        documenti = res.json().get("documenti", []) if res.status_code == 200 else []
 
     return {
         "CustomerFirstName": cliente.nome,
@@ -445,7 +437,7 @@ async def get_preventivo_completo(preventivo_id: str, dealerId: Optional[int] = 
             "LogoUrl": dealer.logo_url
         },
 
-
+        "file_url": preventivo.file_url,
         "CarMainImageUrl": "",
         "CarImages": []
     }
