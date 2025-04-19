@@ -10,6 +10,13 @@ from fastapi.responses import RedirectResponse
 from typing import List, Optional
 from datetime import datetime, timedelta  # aggiunto timedelta
 from app.utils.email import send_email
+import uuid
+from uuid import UUID
+from app.utils.email import get_smtp_settings  # se vuoi usare direttamente la funzione già definita in email.py
+import smtplib
+from email.mime.text import MIMEText
+from email.utils import formataddr
+
 
 
 from app.auth_helpers import (
@@ -19,7 +26,7 @@ from app.auth_helpers import (
     is_dealer_user
 )
 
-import uuid
+
 import httpx
 import os
 
@@ -503,36 +510,59 @@ async def download_preventivo(token: str, db: Session = Depends(get_db)):
 
 
 @router.post("/preventivi/{preventivo_id}/invia-mail")
-async def invia_mail_cliente(
-    preventivo_id: str,
+async def invia_mail_preventivo(
+    preventivo_id: UUID,
     body: dict,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    preventivo = db.query(NltPreventivi).options(joinedload(NltPreventivi.cliente)).filter(NltPreventivi.id == preventivo_id).first()
+    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
     if not preventivo:
         raise HTTPException(status_code=404, detail="Preventivo non trovato")
 
-    cliente = preventivo.cliente
+    cliente = db.query(Cliente).filter(Cliente.id == preventivo.cliente_id).first()
     if not cliente or not cliente.email:
-        raise HTTPException(status_code=400, detail="Cliente o email non disponibili")
+        raise HTTPException(status_code=404, detail="Cliente o email non trovati")
 
-    # 👇 usa la nuova funzione generica qui:
-    subject = "Il tuo preventivo è pronto"
-    email_body = f"""
-    Gentile {cliente.nome or cliente.ragione_sociale},
+    email_destinatario = cliente.email
 
-    Il tuo preventivo è pronto. Puoi scaricarlo cliccando qui:
+    # recupera SMTP (admin)
+    smtp_settings = get_smtp_settings(current_user.admin_id or current_user.id, db)
 
-    {body['url_download']}
+    if not smtp_settings:
+        raise HTTPException(status_code=500, detail="SMTP non configurato")
 
-    Cordiali saluti,
-    {current_user.nome}
-    """
+    # Componi il messaggio
+    html_body = body.get("html_body", f"Clicca per scaricare il preventivo: {body['url_download']}")
 
+    msg = MIMEText(html_body, "html", "utf-8")
+    msg["Subject"] = f"Preventivo {preventivo.marca} {preventivo.modello}"
+    msg["From"] = formataddr((smtp_settings.smtp_alias or current_user.email, smtp_settings.smtp_user))
+    msg["To"] = email_destinatario
+
+    # Invia mail
     try:
-        send_email(current_user.id, cliente.email, subject, email_body)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore invio email: {str(e)}")
+        if smtp_settings.use_ssl:
+            server = smtplib.SMTP_SSL(smtp_settings.smtp_host, smtp_settings.smtp_port)
+        else:
+            server = smtplib.SMTP(smtp_settings.smtp_host, smtp_settings.smtp_port)
+            server.starttls()
 
-    return {"success": True, "message": "Email inviata"}
+        server.login(smtp_settings.smtp_user, smtp_settings.smtp_password)
+        server.send_message(msg)
+        server.quit()
+
+        # Aggiungi evento timeline
+        evento_timeline = NltPreventiviTimeline(
+            preventivo_id=preventivo_id,
+            evento="email_inviata",
+            descrizione=f"Preventivo inviato via email a {email_destinatario}",
+            utente_id=current_user.id
+        )
+        db.add(evento_timeline)
+        db.commit()
+
+        return {"success": True}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore invio mail: {str(e)}")
