@@ -483,42 +483,30 @@ async def genera_link_preventivo(
 
 
 @router.get("/preventivi/download/{token}")
-async def scarica_preventivo_con_token(
-    token: str,
-    db: Session = Depends(get_db)
-):
-    # 🔍 verifica il token
-    link = db.query(NltPreventiviLinks).filter(
-        NltPreventiviLinks.token == token
-    ).first()
-
-    if not link:
-        raise HTTPException(status_code=404, detail="Link non valido o scaduto")
-
-    # 🔐 controlla la data di scadenza (16 giorni)
-    if link.data_scadenza < datetime.utcnow():
-        raise HTTPException(status_code=410, detail="Questo link è scaduto")
-
-    # 🔗 recupera il preventivo associato
-    preventivo = db.query(NltPreventivi).filter(
-        NltPreventivi.id == link.preventivo_id
-    ).first()
-
-    if not preventivo:
-        raise HTTPException(status_code=404, detail="Preventivo non trovato")
-
-    # 📝 registra evento nella timeline ad ogni download
-    evento_timeline = NltPreventiviTimeline(
-        preventivo_id=preventivo.id,
-        evento="scaricato",
-        descrizione=f"Preventivo scaricato tramite link (token={token})",
-        utente_id=preventivo.preventivo_assegnato_a or preventivo.creato_da
-    )
-    db.add(evento_timeline)
+async def download_preventivo(token: str, db: Session = Depends(get_db)):
+    link = db.query(NltPreventiviLinks).filter_by(token=token).first()
+    
+    if not link or link.data_scadenza < datetime.utcnow():
+        raise HTTPException(status_code=404, detail="Link scaduto o invalido")
+    
+    # 👇 Aggiungi questo se manca!
+    link.usato = True
     db.commit()
 
-    # 🚀 Redirect diretto al file PDF
-    return RedirectResponse(url=preventivo.file_url)
+    # 👇 Aggiungi anche il log nella timeline se manca
+    evento = NltPreventiviTimeline(
+        preventivo_id=link.preventivo_id,
+        evento="scaricato",
+        descrizione=f"Preventivo scaricato tramite link (token={token})",
+        utente_id=15  # oppure recupera utente reale/loggato se disponibile
+    )
+    db.add(evento)
+    db.commit()
+
+    # Redirect al file
+    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == link.preventivo_id).first()
+    return RedirectResponse(preventivo.file_url)
+
 
 
 @router.post("/preventivi/{preventivo_id}/invia-mail")
