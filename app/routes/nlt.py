@@ -395,6 +395,7 @@ async def get_preventivo_completo(preventivo_id: str, dealerId: Optional[int] = 
         "CustomerCompanyName": cliente.ragione_sociale,
         "TipoCliente": cliente.tipo_cliente,
         "CustomerEmail": cliente.email,   # <-- Aggiunto
+        "ClienteId": preventivo.cliente_id,
         "NoteAuto": preventivo.note,
         "Player": preventivo.player,
         "DocumentiNecessari": documenti,
