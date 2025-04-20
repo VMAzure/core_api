@@ -284,6 +284,15 @@ async def get_miei_preventivi(
     for p in preventivi:
         cliente = p.cliente
 
+        email_evento = db.query(NltPreventiviTimeline).filter(
+            NltPreventiviTimeline.preventivo_id == p.id,
+            NltPreventiviTimeline.evento == "email_inviata"
+        ).order_by(NltPreventiviTimeline.data_evento.desc()).first()
+
+        email_inviata = bool(email_evento)
+        data_email = email_evento.data_evento if email_evento else None
+
+
         if cliente.tipo_cliente == "Società":
             nome_cliente = cliente.ragione_sociale or "NN"
         else:
@@ -311,7 +320,10 @@ async def get_miei_preventivi(
             "preventivo_assegnato_a": p.preventivo_assegnato_a,
             "preventivo_assegnato_nome": nome_assegnato,  # ✅ Aggiunto nome assegnato
             "note": p.note,
-            "player": p.player
+            "player": p.player,
+            "email_inviata": email_inviata,
+            "data_email": data_email
+
         })
 
     return {"preventivi": risultati}
