@@ -161,6 +161,8 @@ class Cliente(Base):
 
     admin = relationship("User", foreign_keys=[admin_id])
     dealer = relationship("User", foreign_keys=[dealer_id])
+    consensi = relationship("ClienteConsenso", back_populates="cliente", cascade="all, delete-orphan")
+
 
 class NltService(Base):
     __tablename__ = "nlt_services"
@@ -640,20 +642,21 @@ class NltPreventiviLinks(Base):
 
 
 
-class ClienteConsensi(Base):
-    __tablename__ = "clienti_consensi"
-    __table_args__ = {"schema": "public"}
+class ClienteConsenso(Base):
+    __tablename__ = 'cliente_consensi'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    cliente_id = Column(Integer, ForeignKey("public.clienti.id"))
+    cliente_id = Column(Integer, ForeignKey('clienti.id'), nullable=False)
     privacy = Column(Boolean, nullable=False, default=False)
-    newsletter = Column(Boolean, nullable=False, default=False)
-    marketing = Column(Boolean, nullable=False, default=False)
-    data_consenso = Column(DateTime, default=datetime.utcnow)
-    ip_cliente = Column(String(45))
-    attivo = Column(Boolean, default=True)  # <-- aggiunto ✅
+    newsletter = Column(Boolean, nullable=True, default=False)
+    marketing = Column(Boolean, nullable=True, default=False)
+    ip = Column(String(50), nullable=True)
+    note = Column(Text, nullable=True)
+    attivo = Column(Boolean, nullable=False, default=True)
+    data_consenso = Column(DateTime, nullable=False, default=datetime.utcnow)
 
-    cliente = relationship("Cliente", backref="consensi")
+    cliente = relationship("Cliente", back_populates="consensi")
+
 
 
 
