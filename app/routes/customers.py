@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from datetime import datetime
 from app.database import get_db
-from app.models import User, Cliente, ClienteModifica
+from app.models import User, Cliente, ClienteModifica, NltPreventivi, NltPreventiviLinks
 from fastapi_jwt_auth import AuthJWT
 from typing import List, Optional
 from app.schemas import ClienteResponse, ClienteCreateRequest
@@ -386,26 +386,37 @@ def revoca_consenso_cliente(
 
     return {"detail": "Consenso revocato correttamente"}
 
-@router.get("/clienti/{id_cliente}/consensi", response_model=Optional[ClienteConsensoResponse])
-def get_consensi_cliente(
-    id_cliente: int,
-    Authorize: AuthJWT = Depends(),
+
+@router.post("/public/clienti/{cliente_id}/consensi")
+def registra_consenso_pubblico(
+    cliente_id: int,
+    token: str = Query(...),
+    consensi: ClienteConsensoRequest = ...,
     db: Session = Depends(get_db)
 ):
-    Authorize.jwt_required()
+    # Verifica validità token
+    link = db.query(NltPreventiviLinks).filter_by(token=token).first()
+    if not link or link.data_scadenza < datetime.utcnow():
+        raise HTTPException(status_code=403, detail="Link non valido o scaduto")
 
-    cliente = db.query(Cliente).filter(Cliente.id == id_cliente).first()
-    if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente non trovato")
+    # Verifica che il preventivo collegato appartenga al cliente
+    preventivo = db.query(NltPreventivi).filter_by(id=link.preventivo_id, cliente_id=cliente_id).first()
+    if not preventivo:
+        raise HTTPException(status_code=404, detail="Preventivo non trovato per questo cliente")
 
-    consenso = (db.query(ClienteConsenso)
-                .filter(ClienteConsenso.cliente_id == id_cliente)
-                .order_by(ClienteConsenso.data_consenso.desc())
-                .first())
+    nuovo_consenso = ClienteConsenso(
+        cliente_id=cliente_id,
+        privacy=consensi.privacy,
+        newsletter=consensi.newsletter,
+        marketing=consensi.marketing,
+        ip=consensi.ip,
+        note=consensi.note,
+        attivo=True,
+        data_consenso=datetime.utcnow()
+    )
 
-    # Gestione del caso "nessun consenso presente"
-    if not consenso:
-        return None
+    db.add(nuovo_consenso)
+    db.commit()
+    db.refresh(nuovo_consenso)
 
-    return consenso
-
+    return {"success": True, "msg": "Consenso registrato"}
