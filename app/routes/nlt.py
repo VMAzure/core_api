@@ -485,27 +485,36 @@ async def genera_link_preventivo(
 
 @router.get("/preventivi/download/{token}")
 async def download_preventivo(token: str, db: Session = Depends(get_db)):
+    # Recupera il link
     link = db.query(NltPreventiviLinks).filter_by(token=token).first()
     
     if not link or link.data_scadenza < datetime.utcnow():
         raise HTTPException(status_code=404, detail="Link scaduto o invalido")
-    
-    # 👇 Aggiungi questo se manca!
-    link.usato = True
-    db.commit()
 
-    # 👇 Aggiungi anche il log nella timeline se manca
+    # Recupera il preventivo associato
+    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == link.preventivo_id).first()
+    if not preventivo:
+        raise HTTPException(status_code=404, detail="Preventivo non trovato")
+
+    # Determina l'utente responsabile (assegnato o creatore)
+    responsabile_id = preventivo.preventivo_assegnato_a or preventivo.creato_da
+
+    # Aggiorna link come usato
+    link.usato = True
+
+    # Registra evento nella timeline
     evento = NltPreventiviTimeline(
         preventivo_id=link.preventivo_id,
         evento="scaricato",
         descrizione=f"Preventivo scaricato tramite link (token={token})",
-        utente_id=15  # oppure recupera utente reale/loggato se disponibile
+        utente_id=responsabile_id,
+        data_evento=datetime.utcnow()
     )
+
     db.add(evento)
     db.commit()
 
     # Redirect al file
-    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == link.preventivo_id).first()
     return RedirectResponse(preventivo.file_url)
 
 
@@ -553,6 +562,21 @@ async def invia_mail_preventivo(
         server.send_message(msg)
         server.quit()
         print("✅ Email inviata correttamente a", email_destinatario)
+
+        # Registra evento in timeline
+        responsabile_id = preventivo.preventivo_assegnato_a or preventivo.creato_da
+
+        evento = NltPreventiviTimeline(
+            preventivo_id=preventivo.id,
+            evento="email_inviata",
+            descrizione=f"Email inviata a {cliente.email}",
+            data_evento=datetime.utcnow(),
+            utente_id=responsabile_id
+        )
+
+        db.add(evento)
+        db.commit()
+
 
     except smtplib.SMTPException as smtp_err:
         print("❌ Errore SMTP:", smtp_err)
