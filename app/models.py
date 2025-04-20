@@ -644,9 +644,11 @@ class NltPreventiviLinks(Base):
 
 class ClienteConsenso(Base):
     __tablename__ = 'cliente_consensi'
+    __table_args__ = {'schema': 'public'}  
+
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    cliente_id = Column(Integer, ForeignKey('clienti.id'), nullable=False)
+    cliente_id = Column(Integer, ForeignKey('public.clienti.id'), nullable=False)
     privacy = Column(Boolean, nullable=False, default=False)
     newsletter = Column(Boolean, nullable=True, default=False)
     marketing = Column(Boolean, nullable=True, default=False)
