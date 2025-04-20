@@ -3,9 +3,7 @@ from pydantic import BaseModel, EmailStr, root_validator
 from typing import Optional
 from datetime import datetime, date
 from pydantic import BaseModel, EmailStr, Field
-
-
-
+import uuid
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -146,3 +144,21 @@ class DealerTeamCreateRequest(BaseModel):
     nome: str
     cognome: str
     cellulare: str
+
+
+class ClienteConsensoRequest(BaseModel):
+    privacy: bool
+    newsletter: Optional[bool] = False
+    marketing: Optional[bool] = False
+    ip: Optional[str] = None
+    note: Optional[str] = None
+    attivo: Optional[bool] = True  # 👈 aggiunto
+
+class ClienteConsensoResponse(ClienteConsensoRequest):
+    id: uuid.UUID
+    cliente_id: int
+    data_consenso: datetime
+    attivo: bool  # 👈 aggiunto
+
+    class Config:
+        orm_mode = True

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional, List
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
-
+from sqlalchemy.dialects.postgresql import UUID
 
 if TYPE_CHECKING:
     from app.models import AssignedServices
@@ -639,6 +639,21 @@ class NltPreventiviLinks(Base):
     preventivo = relationship("NltPreventivi", backref="links")
 
 
+
+class ClienteConsensi(Base):
+    __tablename__ = "clienti_consensi"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cliente_id = Column(Integer, ForeignKey("public.clienti.id"))
+    privacy = Column(Boolean, nullable=False, default=False)
+    newsletter = Column(Boolean, nullable=False, default=False)
+    marketing = Column(Boolean, nullable=False, default=False)
+    data_consenso = Column(DateTime, default=datetime.utcnow)
+    ip_cliente = Column(String(45))
+    attivo = Column(Boolean, default=True)  # <-- aggiunto ✅
+
+    cliente = relationship("Cliente", backref="consensi")
 
 
 

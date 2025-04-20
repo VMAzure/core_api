@@ -7,6 +7,8 @@ from fastapi_jwt_auth import AuthJWT
 from typing import List, Optional
 from app.schemas import ClienteResponse, ClienteCreateRequest
 from pydantic import BaseModel
+import uuid
+
 
 router = APIRouter()
 from app.auth_helpers import (
@@ -265,5 +267,123 @@ def modifica_cliente(
 
     return {"msg": "Cliente modificato correttamente", "cliente": cliente}
 
+from app.models import ClienteConsenso
+from app.schemas import ClienteConsensoRequest, ClienteConsensoResponse
+
+@router.post("/clienti/{cliente_id}/consensi", response_model=ClienteConsensoResponse)
+def registra_consenso_cliente(
+    cliente_id: int,
+    consenso: ClienteConsensoRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+
+    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+
+    nuovo_consenso = ClienteConsenso(
+        cliente_id=cliente_id,
+        privacy=consenso.privacy,
+        newsletter=consenso.newsletter,
+        marketing=consenso.marketing,
+        ip=consenso.ip,
+        note=consenso.note,
+        attivo=consenso.attivo, # ✅ aggiunto campo attivo
+        data_consenso=datetime.utcnow()
+    )
+
+    db.add(nuovo_consenso)
+    db.commit()
+    db.refresh(nuovo_consenso)
+
+    return nuovo_consenso
+
+@router.get("/clienti/{cliente_id}/consensi", response_model=List[ClienteConsensoResponse])
+def get_consensi_cliente(
+    cliente_id: int,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+
+    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+
+    consensi = db.query(ClienteConsenso).filter(ClienteConsenso.cliente_id == cliente_id).all()
+
+    return consensi
+
+class ClienteConsensoUpdateRequest(BaseModel):
+    privacy: Optional[bool]
+    newsletter: Optional[bool]
+    marketing: Optional[bool]
+    attivo: Optional[bool]
+    note: Optional[str]
+
+@router.put("/clienti/consensi/{consenso_id}", response_model=ClienteConsensoResponse)
+def aggiorna_consenso_cliente(
+    consenso_id: uuid.UUID,
+    consenso: ClienteConsensoUpdateRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+
+    consenso_db = db.query(ClienteConsenso).filter(ClienteConsenso.id == consenso_id).first()
+    if not consenso_db:
+        raise HTTPException(status_code=404, detail="Consenso non trovato")
+
+    # ✅ Aggiorna i campi forniti
+    for key, value in consenso.dict(exclude_unset=True).items():
+        setattr(consenso_db, key, value)
+
+    consenso_db.data_consenso = datetime.utcnow()  # aggiorna data modifica consenso
+
+    db.commit()
+    db.refresh(consenso_db)
+
+    return consenso_db
+
+@router.delete("/clienti/consensi/{consenso_id}")
+def revoca_consenso_cliente(
+    consenso_id: uuid.UUID,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+
+    consenso_db = db.query(ClienteConsenso).filter(ClienteConsenso.id == consenso_id).first()
+    if not consenso_db:
+        raise HTTPException(status_code=404, detail="Consenso non trovato")
+
+    consenso_db.attivo = False
+    consenso_db.data_consenso = datetime.utcnow()  # aggiorna data modifica consenso
+
+    db.commit()
+
+    return {"detail": "Consenso revocato correttamente"}
 
 
