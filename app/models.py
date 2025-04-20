@@ -643,7 +643,7 @@ class NltPreventiviLinks(Base):
 
 
 class ClienteConsenso(Base):
-    __tablename__ = 'cliente_consensi'
+    __tablename__ = 'clienti_consensi'
     __table_args__ = {'schema': 'public'}  
 
 
