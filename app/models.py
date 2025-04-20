@@ -660,3 +660,4 @@ class ClienteConsenso(Base):
 
 
 
+

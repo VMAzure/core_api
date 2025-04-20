@@ -386,4 +386,26 @@ def revoca_consenso_cliente(
 
     return {"detail": "Consenso revocato correttamente"}
 
+@router.get("/clienti/{id_cliente}/consensi", response_model=Optional[ClienteConsensoResponse])
+def get_consensi_cliente(
+    id_cliente: int,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+
+    cliente = db.query(Cliente).filter(Cliente.id == id_cliente).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+
+    consenso = (db.query(ClienteConsenso)
+                .filter(ClienteConsenso.cliente_id == id_cliente)
+                .order_by(ClienteConsenso.data_consenso.desc())
+                .first())
+
+    # Gestione del caso "nessun consenso presente"
+    if not consenso:
+        return None
+
+    return consenso
 
