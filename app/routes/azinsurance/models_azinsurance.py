@@ -4,6 +4,7 @@ from app.database import Base
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
 
+
 # Modelli SQLAlchemy per Azinsurance (prefisso: ass_)
 
 class AssCompagnia(Base):
@@ -115,13 +116,23 @@ class AssPreventivo(Base):
     __table_args__ = {'schema': 'public'}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    cliente_id = Column(Integer, ForeignKey("public.clienti.id"), nullable=False)
-    prodotto_id = Column(Integer, ForeignKey("public.ass_prodotti.id"), nullable=False)
-    stato_id = Column(Integer, ForeignKey("public.ass_stato_polizza.id"), nullable=False)
-    frazionamento_id = Column(Integer, ForeignKey("public.ass_frazionamento.id"), nullable=False)
-    premio_totale = Column(Numeric(12, 2), nullable=False)
+    id_cliente = Column(Integer, ForeignKey("public.clienti.id"), nullable=False)
+    id_prodotto = Column(UUID(as_uuid=True), ForeignKey("public.ass_prodotti.id"), nullable=False)
+    id_agenzia = Column(UUID(as_uuid=True), ForeignKey("public.ass_agenzie.id"), nullable=False)
+    id_compagnia = Column(UUID(as_uuid=True), ForeignKey("public.ass_compagnie.id"), nullable=False)
+    id_ramo = Column(UUID(as_uuid=True), ForeignKey("public.ass_ramo.id"), nullable=False)
+    id_frazionamento = Column(UUID(as_uuid=True), ForeignKey("public.ass_frazionamento.id"), nullable=False)
+    premio_rata = Column(Numeric(12, 2), nullable=False)
+    premio_competenza = Column(Numeric(12, 2), nullable=False)
+    id_admin = Column(Integer, nullable=True)
+    id_team = Column(Integer, nullable=True)
     data_creazione = Column(DateTime, default=func.now())
-
+    modalita_pagamento_cliente = Column(UUID(as_uuid=True), nullable=True)
+    confermato_da_cliente = Column(Boolean, default=False)
+    data_scadenza_validita = Column(Date, nullable=True)
+    data_accettazione_cliente = Column(DateTime, nullable=True)
+    blob_url = Column(String, nullable=True)
+    stato = Column(String, nullable=True)
 
 class AssPreventivoGaranzia(Base):
     __tablename__ = "ass_preventivi_garanzie"

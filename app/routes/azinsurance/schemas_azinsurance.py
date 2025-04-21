@@ -95,12 +95,24 @@ class PreventivoCreate(BaseModel):
 # Preventivi (output)
 class PreventivoResponse(BaseModel):
     id: uuid.UUID
-    cliente_id: int
-    prodotto_id: int
-    stato_id: int
-    frazionamento_id: int
-    premio_totale: float
+    id_cliente: int
+    id_prodotto: uuid.UUID
+    id_agenzia: uuid.UUID
+    id_compagnia: uuid.UUID
+    id_ramo: uuid.UUID
+    id_frazionamento: uuid.UUID
+    premio_rata: float
+    premio_competenza: float
+    id_admin: Optional[int]
+    id_team: Optional[int]
     data_creazione: datetime
+    modalita_pagamento_cliente: Optional[uuid.UUID]
+    confermato_da_cliente: bool
+    data_scadenza_validita: Optional[date]
+    data_accettazione_cliente: Optional[datetime]
+    blob_url: Optional[str]
+    stato: Optional[str]
+
 
     class Config:
         orm_mode = True
