@@ -2,13 +2,13 @@
 from sqlalchemy.orm import Session
 from app.database import get_db
 from .schemas_azinsurance import PreventivoCreate, PreventivoResponse
-from .models_azinsurance import AssPreventivi
+from .models_azinsurance import AssPreventivo
 
 router = APIRouter(prefix="/preventivi", tags=["Azinsurance - Preventivi"])
 
 @router.post("/", response_model=PreventivoResponse)
 def crea_preventivo(preventivo: PreventivoCreate, db: Session = Depends(get_db)):
-    nuovo_preventivo = AssPreventivi(**preventivo.dict())
+    nuovo_preventivo = AssPreventivo(**preventivo.dict())
     db.add(nuovo_preventivo)
     db.commit()
     db.refresh(nuovo_preventivo)
