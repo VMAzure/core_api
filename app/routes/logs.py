@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Numeric, Boolean, text, Date, func
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 import os
+
 
 logs_router = APIRouter(prefix="/logs", tags=["Logs"])
 

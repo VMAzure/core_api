@@ -44,10 +44,7 @@ from app.routes.pdf import router as pdf_router
 from app.routes.nlt_offerte import router as nlt_offerte_router
 from app.routes import tools
 from app.routes.image import router as image_router
-
-
-
-
+from app.routes.azinsurance import preventivi
 
 
 # ✅ Configuriamo il logging
@@ -164,6 +161,8 @@ app.include_router(router_usato, prefix="/api")
 app.include_router(router_nuovo, prefix="/api")
 app.include_router(tools.router, prefix="/tools", tags=["Tools"])
 app.include_router(image_router)
+app.include_router(preventivi.router)
+
 
 
 @app.get("/")
