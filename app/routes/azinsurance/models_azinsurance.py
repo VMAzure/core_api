@@ -35,8 +35,8 @@ class AssAgenziaCompagnia(Base):
     __table_args__ = {'schema': 'public'}
 
     id = Column(Integer, primary_key=True, index=True)
-    agenzia_id = Column(Integer, ForeignKey("public.ass_agenzie.id"), nullable=False)
-    compagnia_id = Column(Integer, ForeignKey("public.ass_compagnie.id"), nullable=False)
+    agenzia_id = Column(UUID(as_uuid=True), ForeignKey("public.ass_agenzie.id"), nullable=False)
+    compagnia_id = Column(UUID(as_uuid=True), ForeignKey("public.ass_compagnie.id"), nullable=False)
 
 
 class AssRamo(Base):
@@ -89,26 +89,31 @@ class AssProdottoGaranzia(Base):
     __table_args__ = {'schema': 'public'}
 
     id = Column(Integer, primary_key=True, index=True)
-    prodotto_id = Column(Integer, ForeignKey("public.ass_prodotti.id"), nullable=False)
-    garanzia_id = Column(Integer, ForeignKey("public.ass_garanzie.id"), nullable=False)
+    prodotto_id = Column(UUID(as_uuid=True), ForeignKey("public.ass_prodotti.id"), nullable=False)
+    garanzia_id = Column(UUID(as_uuid=True), ForeignKey("public.ass_garanzie.id"), nullable=False)
+
 
 
 class AssMassimaliFranchigie(Base):
     __tablename__ = "ass_massimali_franchigie"
     __table_args__ = {'schema': 'public'}
 
-    id = Column(Integer, primary_key=True, index=True)
-    nome = Column(String(150), nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tipo = Column(String, nullable=False)
+    descrizione = Column(String, nullable=False)
     valore = Column(Numeric(12, 2), nullable=False)
+
 
 
 class AssGaranzieMF(Base):
     __tablename__ = "ass_garanzie_mf"
     __table_args__ = {'schema': 'public'}
 
-    id = Column(Integer, primary_key=True, index=True)
-    garanzia_id = Column(Integer, ForeignKey("public.ass_garanzie.id"), nullable=False)
-    mf_id = Column(Integer, ForeignKey("public.ass_massimali_franchigie.id"), nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_garanzia = Column(UUID(as_uuid=True), ForeignKey("public.ass_garanzie.id"), nullable=True)
+    id_mf = Column(UUID(as_uuid=True), ForeignKey("public.ass_massimali_franchigie.id"), nullable=True)
+
+
 
 
 class AssPreventivo(Base):
@@ -122,17 +127,18 @@ class AssPreventivo(Base):
     id_compagnia = Column(UUID(as_uuid=True), ForeignKey("public.ass_compagnie.id"), nullable=False)
     id_ramo = Column(UUID(as_uuid=True), ForeignKey("public.ass_ramo.id"), nullable=False)
     id_frazionamento = Column(UUID(as_uuid=True), ForeignKey("public.ass_frazionamento.id"), nullable=False)
-    premio_rata = Column(Numeric(12, 2), nullable=False)
-    premio_competenza = Column(Numeric(12, 2), nullable=False)
+    premio_totale = Column(Numeric(12, 2), nullable=False)
+    premio_rata = Column(Numeric(12, 2), nullable=True)
+    premio_competenza = Column(Numeric(12, 2), nullable=True)
     id_admin = Column(Integer, nullable=True)
     id_team = Column(Integer, nullable=True)
     data_creazione = Column(DateTime, default=func.now())
     modalita_pagamento_cliente = Column(UUID(as_uuid=True), nullable=True)
-    confermato_da_cliente = Column(Boolean, default=False)
     data_scadenza_validita = Column(Date, nullable=True)
     data_accettazione_cliente = Column(DateTime, nullable=True)
     blob_url = Column(String, nullable=True)
     stato = Column(String, nullable=True)
+    confermato_da_cliente = Column(Boolean, default=False)
 
 class AssPreventivoGaranzia(Base):
     __tablename__ = "ass_preventivi_garanzie"
@@ -140,7 +146,7 @@ class AssPreventivoGaranzia(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     preventivo_id = Column(UUID(as_uuid=True), ForeignKey("public.ass_preventivi.id"), nullable=False)
-    garanzia_id = Column(Integer, ForeignKey("public.ass_garanzie.id"), nullable=False)
+    garanzia_id = Column(UUID(as_uuid=True), ForeignKey("public.ass_garanzie.id"), nullable=False)
 
 
 class AssPreventivoGaranziaMF(Base):
@@ -149,7 +155,7 @@ class AssPreventivoGaranziaMF(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     prev_garanzia_id = Column(UUID(as_uuid=True), ForeignKey("public.ass_preventivi_garanzie.id"), nullable=False)
-    mf_id = Column(Integer, ForeignKey("public.ass_massimali_franchigie.id"), nullable=False)
+    mf_id = Column(UUID(as_uuid=True), ForeignKey("public.ass_massimali_franchigie.id"), nullable=False)
 
 
 class AssPreventivoRischio(Base):

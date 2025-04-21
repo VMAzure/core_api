@@ -56,22 +56,25 @@ class GaranziaResponse(GaranziaBase):
 
 # Massimali e Franchigie
 class MassimaleFranchigiaBase(BaseModel):
-    nome: str
+    tipo: str
+    descrizione: str
     valore: float
 
     class Config:
         orm_mode = True
 
 class MassimaleFranchigiaResponse(MassimaleFranchigiaBase):
-    id: int
+    id: uuid.UUID
+
 
 # Preventivi (garanzie e rischi)
 class PreventivoGaranzia(BaseModel):
-    garanzia_id: int
-    massimali_franchigie: List[int] = []
+    garanzia_id: uuid.UUID
+    massimali_franchigie: List[uuid.UUID] = []
 
     class Config:
         orm_mode = True
+
 
 class PreventivoRischio(BaseModel):
     descrizione: str
@@ -81,16 +84,29 @@ class PreventivoRischio(BaseModel):
 
 # Preventivi (input)
 class PreventivoCreate(BaseModel):
-    cliente_id: int
-    prodotto_id: int
-    stato_id: int
-    frazionamento_id: int
+    id_cliente: int
+    id_prodotto: uuid.UUID
+    id_agenzia: uuid.UUID
+    id_compagnia: uuid.UUID
+    id_ramo: uuid.UUID
+    id_frazionamento: uuid.UUID
     premio_totale: float
+    premio_rata: Optional[float]
+    premio_competenza: Optional[float]
+    id_admin: Optional[int]
+    id_team: Optional[int]
+    modalita_pagamento_cliente: Optional[uuid.UUID]
+    data_scadenza_validita: Optional[date]
+    data_accettazione_cliente: Optional[datetime]
+    blob_url: Optional[str]
+    stato: Optional[str]
+    confermato_da_cliente: Optional[bool]
     garanzie: List[PreventivoGaranzia]
     rischi: Optional[List[PreventivoRischio]]
 
     class Config:
         orm_mode = True
+
 
 # Preventivi (output)
 class PreventivoResponse(BaseModel):
@@ -101,21 +117,24 @@ class PreventivoResponse(BaseModel):
     id_compagnia: uuid.UUID
     id_ramo: uuid.UUID
     id_frazionamento: uuid.UUID
-    premio_rata: float
-    premio_competenza: float
+    premio_totale: float
+    premio_rata: Optional[float]
+    premio_competenza: Optional[float]
     id_admin: Optional[int]
     id_team: Optional[int]
     data_creazione: datetime
     modalita_pagamento_cliente: Optional[uuid.UUID]
-    confermato_da_cliente: bool
+    confermato_da_cliente: Optional[bool]
     data_scadenza_validita: Optional[date]
     data_accettazione_cliente: Optional[datetime]
     blob_url: Optional[str]
     stato: Optional[str]
-
+    garanzie: List[PreventivoGaranzia]
+    rischi: Optional[List[PreventivoRischio]]
 
     class Config:
         orm_mode = True
+
 
 # Conferma preventivo
 class ConfermaPreventivo(BaseModel):
@@ -152,17 +171,14 @@ class IncassoCreate(BaseModel):
     polizza_id: uuid.UUID
     importo: float
     metodo_pagamento: Optional[str]
+    data_incasso: Optional[datetime] = None
 
     class Config:
         orm_mode = True
 
-# Incasso (output)
-class IncassoResponse(BaseModel):
+class IncassoResponse(IncassoCreate):
     id: uuid.UUID
-    polizza_id: uuid.UUID
-    importo: float
-    metodo_pagamento: Optional[str]
-    data_incasso: datetime
 
     class Config:
         orm_mode = True
+
