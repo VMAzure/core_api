@@ -17,7 +17,7 @@ def check_admin_or_admin_team(Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     user_claims = Authorize.get_raw_jwt()
     user_role = user_claims.get('role')
-    if user_role not in ["Admin", "Admin_Team"]:
+    if user_role not in ["admin", "admin_team"]:
         raise HTTPException(status_code=403, detail="Non autorizzato")
 
 router = APIRouter(
