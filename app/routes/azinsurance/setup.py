@@ -10,7 +10,7 @@ from app.routes.azinsurance.schemas_azinsurance import (
 )
 from typing import List
 
-router = APIRouter(prefix="/setup", tags=["Azinsurance - Setup"])
+router = APIRouter
 
 # ----------------- COMPAGNIE -----------------
 

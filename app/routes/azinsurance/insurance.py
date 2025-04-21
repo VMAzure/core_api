@@ -13,7 +13,7 @@ from app.routes.azinsurance.schemas_azinsurance import (
 )
 import uuid
 
-router = APIRouter(prefix="/insurance", tags=["Azinsurance - Operativo"])
+router = APIRouter
 
 # 🟢 Creazione Preventivo
 @router.post("/preventivi", response_model=PreventivoResponse)
