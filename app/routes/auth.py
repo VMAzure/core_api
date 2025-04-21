@@ -103,11 +103,12 @@ def login(
                 "admin_info": {
                     "email": user.email,
                     "logo_url": user.logo_url or "",
-                     "ragione_sociale": admin_user.ragione_sociale or ""  
+                    "ragione_sociale": user.ragione_sociale or ""  # ✅ corretto!
                 }
             },
             expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         )
+
 
         return {"access_token": access_token, "token_type": "bearer"}
 
