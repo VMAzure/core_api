@@ -4,7 +4,7 @@ from app.database import get_db
 from .schemas_azinsurance import PreventivoCreate, PreventivoResponse
 from .models_azinsurance import AssPreventivo
 
-router = APIRouter
+router = APIRouter()
 
 @router.post("/", response_model=PreventivoResponse)
 def crea_preventivo(preventivo: PreventivoCreate, db: Session = Depends(get_db)):
