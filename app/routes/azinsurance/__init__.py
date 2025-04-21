@@ -1,7 +1,1 @@
-﻿from fastapi import APIRouter
-from . import setup, insurance
-
-router = APIRouter(prefix="/azinsurance")
-
-router.include_router(setup.router)
-router.include_router(insurance.router)
+﻿
