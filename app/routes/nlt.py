@@ -17,8 +17,6 @@ import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
 
-
-
 from app.auth_helpers import (
     get_admin_id,
     get_dealer_id,

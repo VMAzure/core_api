@@ -7,6 +7,13 @@ from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_de
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
 
+from app.auth_helpers import (
+    get_admin_id,
+    get_dealer_id,
+    is_admin_user,
+    is_dealer_user
+)
+
 router = APIRouter(
     prefix="/nlt/offerte",
     tags=["nlt-offerte"]
@@ -34,8 +41,14 @@ async def get_offerte(
         selectinload(NltOfferte.player)
     )
 
-    if is_admin_user(current_user):
-        query = query.filter(NltOfferte.id_admin == current_user.id)
+    # 👇 Inserisci qui la logica aggiornata
+    if current_user.role == "superadmin":
+        pass  # nessun filtro, vede tutte le offerte
+
+    elif is_admin_user(current_user):
+        admin_id = get_admin_id(current_user)
+        query = query.filter(NltOfferte.id_admin == admin_id)
+
     elif is_dealer_user(current_user):
         admin_id = get_admin_id(current_user)
         query = query.filter(NltOfferte.id_admin == admin_id)
@@ -53,7 +66,7 @@ async def get_offerte(
             "modello": o.modello,
             "versione": o.versione,
             "codice_motornet": o.codice_motornet,
-            "codice_modello": o.codice_modello,  # 👈 Campo aggiunto
+            "codice_modello": o.codice_modello,
 
             "id_player": o.id_player,
             "player": {
@@ -103,6 +116,7 @@ async def get_offerte(
         })
 
     return {"success": True, "offerte": risultati}
+
 
 
 @router.post("/")
