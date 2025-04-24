@@ -6,8 +6,9 @@ from app.models import SmtpSettings, User, SiteAdminSettings
 from pydantic import BaseModel
 from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
 import re, unidecode
-from supabase import create_client
+from supabase import create_client, Client
 import uuid, os
+from dotenv import load_dotenv
 
 
 
@@ -163,12 +164,17 @@ async def create_or_update_site_settings(
         "id": settings.id
     }
 
-# Inizializza Supabase Client
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
-SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET_LOGO_WEB")
+if os.getenv("ENV") != "production":
+    load_dotenv()
 
-supabase = create_client(SUPABASE_URL, SUPABASE_API_KEY)
+# Variabili ambiente Supabase già configurate e funzionanti
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_BUCKET_LOGO_WEB = "logo-web"
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+router = APIRouter()
 
 @router.post("/site-settings/logo-web")
 async def upload_logo_web(
@@ -186,36 +192,39 @@ async def upload_logo_web(
 
     admin_id = get_admin_id(current_user)
 
-    # Ottieni il file e definisci il percorso unico
-    file_content = await file.read()
+    allowed_extensions = {"png", "jpg", "jpeg", "webp"}
     file_extension = file.filename.split(".")[-1].lower()
-    filename = f"{uuid.uuid4()}.{file_extension}"
+    if file_extension not in allowed_extensions:
+        raise HTTPException(status_code=400, detail="Formato file non valido!")
 
-    storage_path = f"{admin_id}/{filename}"  # usa cartelle distinte per ogni admin
+    file_content = await file.read()
+    if len(file_content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File troppo grande! Dimensione massima: 5MB.")
 
-    # Carica file in Supabase
-    response = supabase.storage.from_(SUPABASE_BUCKET).upload(storage_path, file_content, {"content-type": file.content_type})
+    # Caricamento file su Supabase
+    try:
+        file_name = f"{admin_id}/{uuid.uuid4()}_{file.filename}"
+        response = supabase.storage.from_(SUPABASE_BUCKET_LOGO_WEB).upload(
+            file_name, file_content, {"content-type": file.content_type}
+        )
+        logo_web_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_LOGO_WEB}/{file_name}"
 
-    if response.status_code != 200 and response.status_code != 201:
-        raise HTTPException(status_code=500, detail="Errore upload file su Supabase")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore upload file: {str(e)}")
 
-    # URL pubblico del file
-    public_url = supabase.storage.from_(SUPABASE_BUCKET).get_public_url(storage_path)
-
-    # Aggiorna campo logo_web nel DB
+    # Aggiornamento automatico della tabella
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == admin_id).first()
 
     if not settings:
-        # Se non ci sono impostazioni, creale
-        settings = SiteAdminSettings(admin_id=admin_id, logo_web=public_url)
+        settings = SiteAdminSettings(admin_id=admin_id, logo_web=logo_web_url)
         db.add(settings)
     else:
-        settings.logo_web = public_url
+        settings.logo_web = logo_web_url
 
     db.commit()
     db.refresh(settings)
 
     return {
         "status": "success",
-        "logo_web": public_url
+        "logo_web": logo_web_url
     }
