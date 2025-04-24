@@ -1,11 +1,14 @@
 ﻿from sqlalchemy.orm import Session
-from fastapi import Depends, APIRouter, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db
 from app.models import SmtpSettings, User, SiteAdminSettings
 from pydantic import BaseModel
 from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
 import re, unidecode
+from supabase import create_client
+import uuid, os
+
 
 
 router = APIRouter()
@@ -158,4 +161,61 @@ async def create_or_update_site_settings(
         "status": "success",
         "slug": settings.slug,
         "id": settings.id
+    }
+
+# Inizializza Supabase Client
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET_LOGO_WEB")
+
+supabase = create_client(SUPABASE_URL, SUPABASE_API_KEY)
+
+@router.post("/site-settings/logo-web")
+async def upload_logo_web(
+    file: UploadFile = File(...),
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    current_user = db.query(User).filter(User.email == user_email).first()
+
+    if not current_user or not (is_admin_user(current_user) or is_dealer_user(current_user)):
+        raise HTTPException(status_code=403, detail="Non autorizzato")
+
+    admin_id = get_admin_id(current_user)
+
+    # Ottieni il file e definisci il percorso unico
+    file_content = await file.read()
+    file_extension = file.filename.split(".")[-1].lower()
+    filename = f"{uuid.uuid4()}.{file_extension}"
+
+    storage_path = f"{admin_id}/{filename}"  # usa cartelle distinte per ogni admin
+
+    # Carica file in Supabase
+    response = supabase.storage.from_(SUPABASE_BUCKET).upload(storage_path, file_content, {"content-type": file.content_type})
+
+    if response.status_code != 200 and response.status_code != 201:
+        raise HTTPException(status_code=500, detail="Errore upload file su Supabase")
+
+    # URL pubblico del file
+    public_url = supabase.storage.from_(SUPABASE_BUCKET).get_public_url(storage_path)
+
+    # Aggiorna campo logo_web nel DB
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == admin_id).first()
+
+    if not settings:
+        # Se non ci sono impostazioni, creale
+        settings = SiteAdminSettings(admin_id=admin_id, logo_web=public_url)
+        db.add(settings)
+    else:
+        settings.logo_web = public_url
+
+    db.commit()
+    db.refresh(settings)
+
+    return {
+        "status": "success",
+        "logo_web": public_url
     }
