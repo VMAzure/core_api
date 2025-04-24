@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
 
+
 if TYPE_CHECKING:
     from app.models import AssignedServices
 # Configurazione hashing password
@@ -229,25 +230,35 @@ class SmtpSettings(Base):
 
 
 class SiteAdminSettings(Base):
-    __tablename__ = "site_admin_settings"
-    __table_args__ = {"schema": "public"}
+    __tablename__ = 'site_admin_settings'
 
     id = Column(Integer, primary_key=True, index=True)
-    admin_id = Column(Integer, ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False)
-    primary_color = Column(String(7))
-    secondary_color = Column(String(7))
-    tertiary_color = Column(String(7))
-    font_family = Column(String(255))
-    favicon_url = Column(String(255))
-    custom_css = Column(Text)
-    custom_js = Column(Text)
-    dark_mode_enabled = Column(Boolean, default=False)
-    menu_style = Column(String(50))
-    footer_text = Column(Text)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    admin_id = Column(Integer, nullable=False, index=True)
+    slug = Column(String(255), unique=True, nullable=False, index=True)
+    
+    primary_color = Column(String(7), nullable=True)
+    secondary_color = Column(String(7), nullable=True)
+    tertiary_color = Column(String(7), nullable=True)
+    font_family = Column(String(255), nullable=True)
+    favicon_url = Column(String(255), nullable=True)
+    
+    custom_css = Column(Text, nullable=True)
+    custom_js = Column(Text, nullable=True)
+    
+    dark_mode_enabled = Column(Boolean, default=False, nullable=True)
+    menu_style = Column(String(50), nullable=True)
+    footer_text = Column(Text, nullable=True)
+    
+    meta_title = Column(String(255), nullable=True)
+    meta_description = Column(String(255), nullable=True)
+    
+    logo_web = Column(String(255), nullable=True)
+    contact_email = Column(String(255), nullable=True)
+    contact_phone = Column(String(50), nullable=True)
+    contact_address = Column(String(255), nullable=True)
 
-    admin = relationship("User", backref="site_settings")
+    created_at = Column(DateTime, default=func.now(), nullable=True)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=True)
 
 
 class SitePages(Base):
