@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db
-from app.models import SiteAdminSettings, User, NltOfferte, NltQuotazioni, SmtpSettings
+from app.models import SiteAdminSettings, User, NltOfferte, NltQuotazioni, SmtpSettings, Quotazione, Offerta
 from pydantic import BaseModel
 from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
 import re, unidecode
@@ -11,6 +11,8 @@ import uuid, os
 from dotenv import load_dotenv
 from datetime import datetime
 from fastapi_jwt_auth import AuthJWT
+
+
 
 router = APIRouter()
 
