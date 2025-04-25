@@ -249,36 +249,34 @@ async def get_site_settings(
     if not settings:
         raise HTTPException(status_code=404, detail="Impostazioni non trovate")
 
-    # Genera titolo predefinito se meta_title non impostato
     mese_corrente = datetime.now().strftime('%B %Y').capitalize()
     meta_title = settings.meta_title or f"Offerte Noleggio Lungo Termine {mese_corrente} | {current_user.ragione_sociale}"
 
-    # ✅ Genera meta description automatica con calcolo preciso richiesto
+    # ✅ Meta Description dinamica con 2 esempi di offerte più economiche
     if not settings.meta_description:
 
-        # Trova l'offerta con il canone più basso (mesi36_10)
-        offerta_minima = db.query(NltOfferte, NltQuotazioni).join(
+        offerte_minime = db.query(NltOfferte, NltQuotazioni).join(
             NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
         ).filter(
             NltOfferte.id_admin == admin_id,
             NltQuotazioni.mesi_36_10.isnot(None),
             NltOfferte.prezzo_listino.isnot(None)
-        ).order_by(NltQuotazioni.mesi_36_10.asc()).first()
+        ).order_by(NltQuotazioni.mesi_36_10.asc()).limit(2).all()
 
-        if offerta_minima:
-            offerta, quotazione = offerta_minima
-
-            # Calcolo esatto come da tua richiesta
+        descrizioni_auto = []
+        for offerta, quotazione in offerte_minime:
             canone_calcolato = quotazione.mesi_36_10 - (offerta.prezzo_listino * 0.25 / 36)
-            canone_calcolato = round(canone_calcolato, 2)  # arrotonda a 2 decimali
+            canone_calcolato = round(canone_calcolato, 2)
+            descrizioni_auto.append(f"{offerta.marca} {offerta.modello} da {canone_calcolato}€/mese")
 
+        if descrizioni_auto:
+            esempi_auto = ", ".join(descrizioni_auto)
             meta_description = (
-                f"{offerta.marca} {offerta.modello} a partire da {canone_calcolato}€/mese. "
-                f"Scopri tutte le offerte di {current_user.ragione_sociale}."
+                f"Scopri tutte le offerte di noleggio lungo termine da {current_user.ragione_sociale}. "
+                f"Es. {esempi_auto}. Preventivi immediati online."
             )
         else:
-            # fallback se non ci sono offerte disponibili
-            meta_description = f"Scopri tutte le migliori offerte di noleggio lungo termine da {current_user.ragione_sociale}."
+            meta_description = f"Scopri le migliori offerte di noleggio lungo termine da {current_user.ragione_sociale}. Preventivi immediati online."
 
     else:
         meta_description = settings.meta_description
@@ -297,4 +295,3 @@ async def get_site_settings(
         "contact_address": settings.contact_address,
         "slug": settings.slug
     }
-
