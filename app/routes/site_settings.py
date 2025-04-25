@@ -290,16 +290,16 @@ async def get_site_settings(
             NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
         ).filter(
             NltOfferte.id_admin == admin_id,
+            NltOfferte.attivo == True,  # ✅ filtro per offerte attive
             NltQuotazioni.mesi_36_10.isnot(None),
             NltOfferte.prezzo_listino.isnot(None)
         ).order_by(NltQuotazioni.mesi_36_10.asc()).limit(2).all()
 
         descrizioni_auto = []
         for offerta, quotazione in offerte_minime:
-            if quotazione.mesi_36_10 is not None and offerta.prezzo_listino is not None:
-                canone_calcolato = float(quotazione.mesi_36_10) - (float(offerta.prezzo_listino) * 0.25 / 36)
-                canone_calcolato = round(canone_calcolato, 2)
-                descrizioni_auto.append(f"{offerta.marca} {offerta.modello} da {canone_calcolato}€/mese")
+            canone_calcolato = float(quotazione.mesi_36_10) - (float(offerta.prezzo_listino) * 0.25 / 36)
+            canone_calcolato = round(canone_calcolato, 2)
+            descrizioni_auto.append(f"{offerta.marca} {offerta.modello} da {canone_calcolato}€/mese")
 
 
         if descrizioni_auto:
