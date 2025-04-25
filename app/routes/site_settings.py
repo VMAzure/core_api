@@ -334,6 +334,7 @@ async def get_site_settings(
         db.refresh(settings)
 
     # Restituisci sempre il record (appena creato o già presente)
+    
     return {
         "primary_color": settings.primary_color,
         "secondary_color": settings.secondary_color,
@@ -346,5 +347,12 @@ async def get_site_settings(
         "contact_email": settings.contact_email,
         "contact_phone": settings.contact_phone,
         "contact_address": settings.contact_address,
-        "slug": settings.slug
+        "slug": settings.slug,
+        "custom_css": settings.custom_css,
+        "custom_js": settings.custom_js,
+        "dark_mode_enabled": settings.dark_mode_enabled,
+        "menu_style": settings.menu_style,
+        "footer_text": settings.footer_text,
+        "created_at": settings.created_at,
+        "updated_at": settings.updated_at
     }
