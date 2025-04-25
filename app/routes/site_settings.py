@@ -296,9 +296,11 @@ async def get_site_settings(
 
         descrizioni_auto = []
         for offerta, quotazione in offerte_minime:
-            canone_calcolato = quotazione.mesi_36_10 - (offerta.prezzo_listino * 0.25 / 36)
-            canone_calcolato = round(canone_calcolato, 2)
-            descrizioni_auto.append(f"{offerta.marca} {offerta.modello} da {canone_calcolato}€/mese")
+            if quotazione.mesi_36_10 is not None and offerta.prezzo_listino is not None:
+                canone_calcolato = float(quotazione.mesi_36_10) - (float(offerta.prezzo_listino) * 0.25 / 36)
+                canone_calcolato = round(canone_calcolato, 2)
+                descrizioni_auto.append(f"{offerta.marca} {offerta.modello} da {canone_calcolato}€/mese")
+
 
         if descrizioni_auto:
             esempi_auto = ", ".join(descrizioni_auto)
