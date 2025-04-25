@@ -620,7 +620,7 @@ async def get_messa_su_strada(codice_univoco: str, Authorize: AuthJWT = Depends(
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero messa su strada")
 
-@router_nuovo.get("/api/usato/motornet/modelli")
+@router_nuovo.get("/modelli", tags=["Motornet"])
 async def get_tutti_modelli(db: Session = Depends(get_db)):
     modelli = db.query(
         MnetModelli.codice_modello,
