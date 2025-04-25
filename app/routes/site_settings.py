@@ -367,18 +367,21 @@ async def get_site_settings_public(
     if not settings:
         raise HTTPException(status_code=404, detail="Impostazioni non trovate.")
 
-    return {
-        "primary_color": settings.primary_color,
-        "secondary_color": settings.secondary_color,
-        "tertiary_color": settings.tertiary_color,
-        "font_family": settings.font_family,
-        "favicon_url": settings.favicon_url,
-        "meta_title": settings.meta_title,
-        "meta_description": settings.meta_description,
-        "logo_web": settings.logo_web,
-        "footer_text": settings.footer_text,
-        "dark_mode_enabled": settings.dark_mode_enabled,
-        "custom_css": settings.custom_css,
-        "custom_js": settings.custom_js
+     return {
+        "primary_color": settings.primary_color or "#ffffff",
+        "secondary_color": settings.secondary_color or "#000000",
+        "tertiary_color": settings.tertiary_color or "#dddddd",
+        "font_family": settings.font_family or "Roboto, sans-serif",
+        "favicon_url": settings.favicon_url or "",
+        "meta_title": settings.meta_title or "",
+        "meta_description": settings.meta_description or "",
+        "logo_web": settings.logo_web or "/images/logo-default.png",
+        "footer_text": settings.footer_text or "",
+        "contact_email": settings.contact_email or "info@tuodominio.it",
+        "contact_phone": settings.contact_phone or "+39 000 0000000",
+        "contact_address": settings.contact_address or "Indirizzo non configurato",
+        "dark_mode_enabled": settings.dark_mode_enabled or False,
+        "custom_css": settings.custom_css or "",
+        "custom_js": settings.custom_js or ""
     }
 
