@@ -235,23 +235,23 @@ class SiteAdminSettings(Base):
     id = Column(Integer, primary_key=True, index=True)
     admin_id = Column(Integer, nullable=False, index=True)
     slug = Column(String(255), unique=True, nullable=False, index=True)
-    
+
     primary_color = Column(String(7), nullable=True)
     secondary_color = Column(String(7), nullable=True)
     tertiary_color = Column(String(7), nullable=True)
     font_family = Column(String(255), nullable=True)
     favicon_url = Column(String(255), nullable=True)
-    
+
     custom_css = Column(Text, nullable=True)
     custom_js = Column(Text, nullable=True)
-    
+
     dark_mode_enabled = Column(Boolean, default=False, nullable=True)
     menu_style = Column(String(50), nullable=True)
     footer_text = Column(Text, nullable=True)
-    
+
     meta_title = Column(String(255), nullable=True)
     meta_description = Column(String(255), nullable=True)
-    
+
     logo_web = Column(String(255), nullable=True)
     contact_email = Column(String(255), nullable=True)
     contact_phone = Column(String(50), nullable=True)
