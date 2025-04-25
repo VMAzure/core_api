@@ -2,15 +2,15 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db
-from app.models import SmtpSettings, User, SiteAdminSettings
+from app.models import SiteAdminSettings, User, NltOfferte, NltQuotazioni, SmtpSettings
 from pydantic import BaseModel
 from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
 import re, unidecode
 from supabase import create_client, Client
 import uuid, os
 from dotenv import load_dotenv
-
-
+from datetime import datetime
+from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter()
 
@@ -229,6 +229,8 @@ async def upload_logo_web(
         "logo_web": logo_web_url
     }
 
+
+
 @router.get("/site-settings")
 async def get_site_settings(
     Authorize: AuthJWT = Depends(),
@@ -247,17 +249,52 @@ async def get_site_settings(
     if not settings:
         raise HTTPException(status_code=404, detail="Impostazioni non trovate")
 
+    # Genera titolo predefinito se meta_title non impostato
+    mese_corrente = datetime.now().strftime('%B %Y').capitalize()
+    meta_title = settings.meta_title or f"Offerte Noleggio Lungo Termine {mese_corrente} | {current_user.ragione_sociale}"
+
+    # ✅ Genera meta description automatica con calcolo preciso richiesto
+    if not settings.meta_description:
+
+        # Trova l'offerta con il canone più basso (mesi36_10)
+        offerta_minima = db.query(NltOfferte, NltQuotazioni).join(
+            NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
+        ).filter(
+            NltOfferte.id_admin == admin_id,
+            NltQuotazioni.mesi_36_10.isnot(None),
+            NltOfferte.prezzo_listino.isnot(None)
+        ).order_by(NltQuotazioni.mesi_36_10.asc()).first()
+
+        if offerta_minima:
+            offerta, quotazione = offerta_minima
+
+            # Calcolo esatto come da tua richiesta
+            canone_calcolato = quotazione.mesi_36_10 - (offerta.prezzo_listino * 0.25 / 36)
+            canone_calcolato = round(canone_calcolato, 2)  # arrotonda a 2 decimali
+
+            meta_description = (
+                f"{offerta.marca} {offerta.modello} a partire da {canone_calcolato}€/mese. "
+                f"Scopri tutte le offerte di {current_user.ragione_sociale}."
+            )
+        else:
+            # fallback se non ci sono offerte disponibili
+            meta_description = f"Scopri tutte le migliori offerte di noleggio lungo termine da {current_user.ragione_sociale}."
+
+    else:
+        meta_description = settings.meta_description
+
     return {
         "primary_color": settings.primary_color,
         "secondary_color": settings.secondary_color,
         "tertiary_color": settings.tertiary_color,
         "font_family": settings.font_family,
         "favicon_url": settings.favicon_url,
-        "meta_title": settings.meta_title,
-        "meta_description": settings.meta_description,
+        "meta_title": meta_title,
+        "meta_description": meta_description,
         "logo_web": settings.logo_web,
         "contact_email": settings.contact_email,
         "contact_phone": settings.contact_phone,
         "contact_address": settings.contact_address,
         "slug": settings.slug
     }
+
