@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.routes.auth import get_current_user
 from app.database import get_db  # ✅ Import corretto per il DB
-from app.models import User  # ✅ Import del modello User se necessario
+from app.models import User, MnetModelli
 from datetime import datetime
 import httpx
 from app.utils.modelli import pulisci_modello
@@ -620,8 +620,22 @@ async def get_messa_su_strada(codice_univoco: str, Authorize: AuthJWT = Depends(
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero messa su strada")
 
+@router_nuovo.get("/api/usato/motornet/modelli")
+async def get_tutti_modelli(db: Session = Depends(get_db)):
+    modelli = db.query(
+        MnetModelli.codice_modello,
+        MnetModelli.marca_acronimo,
+        MnetModelli.gruppo_storico_descrizione
+    ).all()
 
-
+    return [
+        {
+            "codice_modello": modello.codice_modello,
+            "marca_acronimo": modello.marca_acronimo,
+            "gruppo_storico": modello.gruppo_storico_descrizione
+        }
+        for modello in modelli
+    ]
 
 
 
