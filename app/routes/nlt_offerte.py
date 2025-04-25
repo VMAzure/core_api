@@ -2,10 +2,12 @@
 from sqlalchemy.orm import Session, selectinload
 from typing import Optional, List
 from app.database import get_db
-from app.models import NltOfferte, NltQuotazioni, NltPlayers, NltImmagini, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori
+from app.models import NltQuotazioni, NltPlayers, NltImmagini, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
+
+
 
 from app.auth_helpers import (
     get_admin_id,
