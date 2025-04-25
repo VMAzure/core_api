@@ -265,3 +265,49 @@ async def get_tags(db: Session = Depends(get_db)):
     tags = db.query(NltOfferteTag).order_by(NltOfferteTag.nome).all()
     return {"success": True, "tags": tags}
 
+
+@router.get("/offerte-nlt-pubbliche/{slug}")
+async def offerte_nlt_pubbliche(
+    slug: str,
+    db: Session = Depends(get_db)
+):
+    # Controlla admin da slug
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail=f"Slug '{slug}' non trovato.")
+
+    admin_id = settings.admin_id
+
+    # Ottieni offerte attive con quotazione
+    offerte = db.query(NltOfferte, NltQuotazioni).join(
+        NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
+    ).filter(
+        NltOfferte.id_admin == admin_id,
+        NltOfferte.attivo == True,
+        NltQuotazioni.mesi_36_10.isnot(None),
+        NltOfferte.prezzo_listino.isnot(None)
+    ).order_by(
+        (NltQuotazioni.mesi_36_10 - (NltOfferte.prezzo_listino * 0.25 / 36)).asc()
+    ).all()
+
+    risultato = []
+    for offerta, quotazione in offerte:
+        canone_minimo = float(quotazione.mesi_36_10) - (float(offerta.prezzo_listino) * 0.25 / 36)
+
+        # 🔥 Recupera dinamicamente immagine CDN con rotta esistente
+        immagine_url = f"https://coreapi-production-ca29.up.railway.app/api/image/{offerta.codice_modello}?angle=29&width=600&return_url=true"
+
+        risultato.append({
+            "id_offerta": offerta.id_offerta,
+            "immagine": immagine_url,  # URL CDN dinamico
+            "marca": offerta.marca,
+            "modello": offerta.modello,
+            "versione": offerta.versione,
+            "cambio": offerta.cambio,
+            "alimentazione": offerta.alimentazione,
+            "canone_mensile": round(canone_minimo, 2),
+            "prezzo_listino": float(offerta.prezzo_listino)
+        })
+
+    return risultato
+
