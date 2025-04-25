@@ -43,9 +43,14 @@ async def get_offerte(
         selectinload(NltOfferte.player)
     )
 
-    # 👇 Inserisci qui la logica aggiornata
+    # 👇 Logica aggiornata con filtro attivo=True di default se non specificato
+    if attivo is None:
+        query = query.filter(NltOfferte.attivo.is_(True))
+    else:
+        query = query.filter(NltOfferte.attivo == attivo)
+
     if current_user.role == "superadmin":
-        pass  # nessun filtro, vede tutte le offerte
+        pass  # nessun filtro, vede tutte le offerte (solo filtro attivo)
 
     elif is_admin_user(current_user):
         admin_id = get_admin_id(current_user)
@@ -55,10 +60,8 @@ async def get_offerte(
         admin_id = get_admin_id(current_user)
         query = query.filter(NltOfferte.id_admin == admin_id)
 
-    if attivo is not None:
-        query = query.filter(NltOfferte.attivo == attivo)
-
-    offerte = query.order_by(NltOfferte.data_inserimento.desc()).all()
+    # 👇 Ordinamento per prezzo_listino ASC (prezzo più basso prima)
+    offerte = query.order_by(NltOfferte.prezzo_listino.asc()).all()
 
     risultati = []
     for o in offerte:
@@ -69,7 +72,6 @@ async def get_offerte(
             "versione": o.versione,
             "codice_motornet": o.codice_motornet,
             "codice_modello": o.codice_modello,
-
             "id_player": o.id_player,
             "player": {
                 "nome": o.player.nome,
@@ -118,6 +120,7 @@ async def get_offerte(
         })
 
     return {"success": True, "offerte": risultati}
+
 
 
 

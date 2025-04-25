@@ -76,7 +76,7 @@ async def get_vehicle_image(
 
     return Response(content=response.content, media_type=response.headers['Content-Type'])
 
-@router.get("public/{codice_modello}")
+@router.get("/public/{codice_modello}")
 async def get_vehicle_image_public(
     codice_modello: str,
     angle: int = Query(29, ge=0, le=360),  # 🔥 angolo libero personalizzabile
