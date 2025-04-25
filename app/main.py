@@ -45,9 +45,6 @@ from app.routes.nlt_offerte import router as nlt_offerte_router
 from app.routes import tools
 from app.routes.image import router as image_router
 from app.routes.azinsurance import insurance, setup
-from app.routes.site_settings import router as site_settings_router
-
-
 
 # ✅ Configuriamo il logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
@@ -153,7 +150,6 @@ app.include_router(customers_router, prefix="/customers", tags=["Customers"])
 app.include_router(nlt_router, prefix="")
 app.include_router(status.router, prefix="/api")
 app.include_router(smtp_router, prefix="/api")
-app.include_router(site_settings_router, prefix="/api")
 app.include_router(azlease_router, prefix="/api/azlease")
 app.include_router(openapi_router, prefix="/api")
 app.include_router(pdf_router, prefix="/pdf",tags=["PDF"])
