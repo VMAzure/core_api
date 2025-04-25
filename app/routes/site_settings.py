@@ -229,7 +229,15 @@ async def upload_logo_web(
         "logo_web": logo_web_url
     }
 
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.models import SiteAdminSettings, User, NltOfferte, NltQuotazioni
+from app.database import get_db
+from app.auth_helpers import get_admin_id, is_admin_user, is_dealer_user
+from fastapi_jwt_auth import AuthJWT
 
+router = APIRouter()
 
 @router.get("/site-settings")
 async def get_site_settings(
@@ -246,15 +254,15 @@ async def get_site_settings(
     admin_id = get_admin_id(current_user)
 
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == admin_id).first()
+
+    # ✅ Creazione automatica impostazioni default se non presenti
     if not settings:
-        raise HTTPException(status_code=404, detail="Impostazioni non trovate")
+        mese_corrente = datetime.now().strftime('%B %Y').capitalize()
 
-    mese_corrente = datetime.now().strftime('%B %Y').capitalize()
-    meta_title = settings.meta_title or f"Offerte Noleggio Lungo Termine {mese_corrente} | {current_user.ragione_sociale}"
+        # Genera titolo predefinito
+        meta_title = f"Offerte Noleggio Lungo Termine {mese_corrente} | {current_user.ragione_sociale}"
 
-    # ✅ Meta Description dinamica con 2 esempi di offerte più economiche
-    if not settings.meta_description:
-
+        # Calcola meta description automatica con due offerte più economiche
         offerte_minime = db.query(NltOfferte, NltQuotazioni).join(
             NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
         ).filter(
@@ -278,17 +286,37 @@ async def get_site_settings(
         else:
             meta_description = f"Scopri le migliori offerte di noleggio lungo termine da {current_user.ragione_sociale}. Preventivi immediati online."
 
-    else:
-        meta_description = settings.meta_description
+        # ✅ Crea record di default
+        settings = SiteAdminSettings(
+            admin_id=admin_id,
+            slug=f"{current_user.ragione_sociale.lower().replace(' ', '-')}",
+            meta_title=meta_title,
+            meta_description=meta_description,
+            primary_color="#ffffff",
+            secondary_color="#000000",
+            tertiary_color="#dddddd",
+            font_family="Roboto, sans-serif",
+            favicon_url="https://example.com/favicon.ico",
+            contact_email=current_user.email,
+            contact_phone=current_user.cellulare,
+            contact_address=f"{current_user.indirizzo}, {current_user.cap} {current_user.citta}",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
 
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+
+    # restituisci sempre il record (appena creato o già presente)
     return {
         "primary_color": settings.primary_color,
         "secondary_color": settings.secondary_color,
         "tertiary_color": settings.tertiary_color,
         "font_family": settings.font_family,
         "favicon_url": settings.favicon_url,
-        "meta_title": meta_title,
-        "meta_description": meta_description,
+        "meta_title": settings.meta_title,
+        "meta_description": settings.meta_description,
         "logo_web": settings.logo_web,
         "contact_email": settings.contact_email,
         "contact_phone": settings.contact_phone,
