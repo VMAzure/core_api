@@ -365,26 +365,32 @@ async def get_site_settings_public(
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
 
     if not settings:
-        raise HTTPException(status_code=404, detail="Impostazioni non trovate.")
+        raise HTTPException(status_code=404, detail=f"Slug '{slug}' non trovato.")
 
     admin_user = db.query(User).filter(User.id == settings.admin_id).first()
 
+    # Controlla esplicitamente i valori con fallback chiaramente stringa
+    contact_email = settings.contact_email or (admin_user.email if admin_user else "")
+    contact_phone = settings.contact_phone or (admin_user.cellulare if admin_user else "")
+    contact_address = settings.contact_address or (
+        f"{admin_user.indirizzo}, {admin_user.cap} {admin_user.citta}" if admin_user else ""
+    )
+
+    # risposta esplicitamente serializzabile
     return {
-        "primary_color": settings.primary_color,
-        "secondary_color": settings.secondary_color,
-        "tertiary_color": settings.tertiary_color,
-        "font_family": settings.font_family,
-        "favicon_url": settings.favicon_url,
-        "meta_title": settings.meta_title,
-        "meta_description": settings.meta_description,
-        "logo_web": settings.logo_web,
-        "footer_text": settings.footer_text,
-        "dark_mode_enabled": settings.dark_mode_enabled,
-        "custom_css": settings.custom_css,
-        "custom_js": settings.custom_js,
-        "contact_email": settings.contact_email or admin_user.email,
-        "contact_phone": settings.contact_phone or admin_user.cellulare,
-        "contact_address": settings.contact_address or f"{admin_user.indirizzo}, {admin_user.cap} {admin_user.citta}"
+        "primary_color": settings.primary_color or "",
+        "secondary_color": settings.secondary_color or "",
+        "tertiary_color": settings.tertiary_color or "",
+        "font_family": settings.font_family or "",
+        "favicon_url": settings.favicon_url or "",
+        "meta_title": settings.meta_title or "",
+        "meta_description": settings.meta_description or "",
+        "logo_web": settings.logo_web or "",
+        "footer_text": settings.footer_text or "",
+        "dark_mode_enabled": settings.dark_mode_enabled if settings.dark_mode_enabled is not None else False,
+        "custom_css": settings.custom_css or "",
+        "custom_js": settings.custom_js or "",
+        "contact_email": contact_email,
+        "contact_phone": contact_phone,
+        "contact_address": contact_address
     }
-
-
