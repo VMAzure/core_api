@@ -177,8 +177,6 @@ SUPABASE_BUCKET_LOGO_WEB = "logo-web"
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-router = APIRouter()
-
 @router.post("/site-settings/logo-web")
 async def upload_logo_web(
     file: UploadFile = File(...),
