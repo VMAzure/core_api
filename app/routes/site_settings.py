@@ -261,3 +261,88 @@ def calcola_canone(id_offerta: int, db: Session = Depends(get_db)):
             )
 
     return {"id_offerta": id_offerta, "quotazioni_calcolate": risultati}
+
+@router.get("/site-settings")
+async def get_site_settings(
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    current_user = db.query(User).filter(User.email == user_email).first()
+    if not current_user or not (is_admin_user(current_user) or is_dealer_user(current_user)):
+        raise HTTPException(status_code=403, detail="Non autorizzato")
+
+    admin_id = get_admin_id(current_user)
+
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == admin_id).first()
+
+    # ✅ Creazione automatica impostazioni default se non presenti
+    if not settings:
+        mese_corrente = datetime.now().strftime('%B %Y').capitalize()
+
+        # Genera titolo predefinito
+        meta_title = f"Offerte Noleggio Lungo Termine {mese_corrente} | {current_user.ragione_sociale}"
+
+        # Calcola meta description automatica con due offerte più economiche
+        offerte_minime = db.query(NltOfferte, NltQuotazioni).join(
+            NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
+        ).filter(
+            NltOfferte.id_admin == admin_id,
+            NltQuotazioni.mesi_36_10.isnot(None),
+            NltOfferte.prezzo_listino.isnot(None)
+        ).order_by(NltQuotazioni.mesi_36_10.asc()).limit(2).all()
+
+        descrizioni_auto = []
+        for offerta, quotazione in offerte_minime:
+            canone_calcolato = quotazione.mesi_36_10 - (offerta.prezzo_listino * 0.25 / 36)
+            canone_calcolato = round(canone_calcolato, 2)
+            descrizioni_auto.append(f"{offerta.marca} {offerta.modello} da {canone_calcolato}€/mese")
+
+        if descrizioni_auto:
+            esempi_auto = ", ".join(descrizioni_auto)
+            meta_description = (
+                f"Scopri tutte le offerte di noleggio lungo termine da {current_user.ragione_sociale}. "
+                f"Es. {esempi_auto}. Preventivi immediati online."
+            )
+        else:
+            meta_description = f"Scopri le migliori offerte di noleggio lungo termine da {current_user.ragione_sociale}. Preventivi immediati online."
+
+        # ✅ Crea record di default
+        settings = SiteAdminSettings(
+            admin_id=admin_id,
+            slug=f"{current_user.ragione_sociale.lower().replace(' ', '-')}",
+            meta_title=meta_title,
+            meta_description=meta_description,
+            primary_color="#ffffff",
+            secondary_color="#000000",
+            tertiary_color="#dddddd",
+            font_family="Roboto, sans-serif",
+            favicon_url="https://example.com/favicon.ico",
+            contact_email=current_user.email,
+            contact_phone=current_user.cellulare,
+            contact_address=f"{current_user.indirizzo}, {current_user.cap} {current_user.citta}",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+
+    # Restituisci sempre il record (appena creato o già presente)
+    return {
+        "primary_color": settings.primary_color,
+        "secondary_color": settings.secondary_color,
+        "tertiary_color": settings.tertiary_color,
+        "font_family": settings.font_family,
+        "favicon_url": settings.favicon_url,
+        "meta_title": settings.meta_title,
+        "meta_description": settings.meta_description,
+        "logo_web": settings.logo_web,
+        "contact_email": settings.contact_email,
+        "contact_phone": settings.contact_phone,
+        "contact_address": settings.contact_address,
+        "slug": settings.slug
+    }
