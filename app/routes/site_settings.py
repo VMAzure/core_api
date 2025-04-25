@@ -228,3 +228,36 @@ async def upload_logo_web(
         "status": "success",
         "logo_web": logo_web_url
     }
+
+@router.get("/site-settings")
+async def get_site_settings(
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    current_user = db.query(User).filter(User.email == user_email).first()
+    if not current_user or not (is_admin_user(current_user) or is_dealer_user(current_user)):
+        raise HTTPException(status_code=403, detail="Non autorizzato")
+
+    admin_id = get_admin_id(current_user)
+
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == admin_id).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail="Impostazioni non trovate")
+
+    return {
+        "primary_color": settings.primary_color,
+        "secondary_color": settings.secondary_color,
+        "tertiary_color": settings.tertiary_color,
+        "font_family": settings.font_family,
+        "favicon_url": settings.favicon_url,
+        "meta_title": settings.meta_title,
+        "meta_description": settings.meta_description,
+        "logo_web": settings.logo_web,
+        "contact_email": settings.contact_email,
+        "contact_phone": settings.contact_phone,
+        "contact_address": settings.contact_address,
+        "slug": settings.slug
+    }
