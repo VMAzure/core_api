@@ -2,7 +2,8 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db
-from app.models import SiteAdminSettings, User, NltOfferte, NltQuotazioni, SmtpSettings, Quotazione, Offerta
+from app.models import SiteAdminSettings, User, NltOfferte, NltQuotazioni, SmtpSettings
+
 from pydantic import BaseModel
 from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
 import re, unidecode
@@ -231,50 +232,34 @@ async def upload_logo_web(
         "logo_web": logo_web_url
     }
 
-from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from app.models import SiteAdminSettings, User, NltOfferte, NltQuotazioni
-from app.database import get_db
-from app.auth_helpers import get_admin_id, is_admin_user, is_dealer_user
-from fastapi_jwt_auth import AuthJWT
-
-router = APIRouter()
-
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from models import Quotazione, Offerta
-from database import get_db
 import logging
 
-router = APIRouter()
 logger = logging.getLogger(__name__)
 
 @router.get("/calcola_canone/{id_offerta}")
 def calcola_canone(id_offerta: int, db: Session = Depends(get_db)):
-    offerta = db.query(Offerta).filter(Offerta.id == id_offerta).first()
+    offerta = db.query(NltOfferte).filter(NltOfferte.id_offerta == id_offerta).first()
 
     if not offerta:
         raise HTTPException(status_code=404, detail="Offerta non trovata")
 
-    quotazioni = db.query(Quotazione).filter(
-        Quotazione.codice_motornet == offerta.codice_motornet
+    quotazioni = db.query(NltQuotazioni).filter(
+        NltQuotazioni.id_offerta == offerta.id_offerta
     ).all()
 
     risultati = []
 
     for quotazione in quotazioni:
         if quotazione.mesi_36_10 is not None and offerta.prezzo_listino is not None:
-            anticipo = offerta.prezzo_listino * 0.25
-            canone_calcolato = quotazione.mesi_36_10 - (anticipo / 36)
+            anticipo = float(offerta.prezzo_listino) * 0.25
+            canone_calcolato = float(quotazione.mesi_36_10) - (anticipo / 36)
             risultati.append({
-                "id_quotazione": quotazione.id,
+                "id_quotazione": quotazione.id_quotazione,
                 "canone_calcolato": round(canone_calcolato, 2)
             })
         else:
             logger.info(
-                f"Quotazione saltata per dati mancanti (quotazione.id={quotazione.id}, "
-                f"mesi_36_10={quotazione.mesi_36_10}, prezzo_listino={offerta.prezzo_listino})"
+                f"Quotazione saltata (id={quotazione.id_quotazione}, mesi_36_10={quotazione.mesi_36_10}, prezzo_listino={offerta.prezzo_listino})"
             )
 
     return {"id_offerta": id_offerta, "quotazioni_calcolate": risultati}
