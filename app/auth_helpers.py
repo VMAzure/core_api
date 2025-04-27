@@ -29,3 +29,9 @@ def is_dealer_user(user):
 def is_team_user(user):
     """True se l'utente è parte di un team"""
     return user.role in ["admin_team", "dealer_team"]
+
+def get_settings_owner_id(user):
+    if is_admin_user(user) or is_dealer_user(user):
+        return user.id
+    raise Exception("Ruolo non supportato per site-settings")
+

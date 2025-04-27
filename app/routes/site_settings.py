@@ -5,7 +5,7 @@ from app.database import get_db
 from app.models import SiteAdminSettings, User, NltOfferte, NltQuotazioni, SmtpSettings
 
 from pydantic import BaseModel
-from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
+from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user, get_settings_owner_id
 import re, unidecode
 from supabase import create_client, Client
 import uuid, os
@@ -32,12 +32,12 @@ async def set_smtp_settings(
 ):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
-
     user = db.query(User).filter(User.email == user_email).first()
-    if not user or not is_admin_user(user):
-        raise HTTPException(status_code=403, detail="Non autorizzato")
 
-    admin_id = get_admin_id(user)  # ✅ sempre riferito all'admin principale
+    if not user or not is_admin_user(user):
+        raise HTTPException(status_code=403, detail="Accesso consentito solo agli Admin")
+
+    admin_id = user.id  # Solo admin.id
 
     existing_settings = db.query(SmtpSettings).filter(SmtpSettings.admin_id == admin_id).first()
 
@@ -118,21 +118,17 @@ async def create_or_update_site_settings(
 ):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
-
     current_user = db.query(User).filter(User.email == user_email).first()
+
     if not current_user or not (is_admin_user(current_user) or is_dealer_user(current_user)):
         raise HTTPException(status_code=403, detail="Non autorizzato")
 
-    # Usa get_admin_id per assicurare sempre riferimento all'admin principale
-    admin_id = get_admin_id(current_user)
+    owner_id = get_settings_owner_id(current_user)
 
-    # Verifica se esistono già settings per admin_id
-    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == admin_id).first()
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == owner_id).first()
 
-    # Se non fornisce slug, lo genero automaticamente
     if not payload.slug:
         payload.slug = generate_slug(current_user.ragione_sociale)
-        # Controllo unicità slug
         existing_slug = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == payload.slug).first()
         counter = 1
         base_slug = payload.slug
@@ -141,31 +137,24 @@ async def create_or_update_site_settings(
             existing_slug = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == payload.slug).first()
             counter += 1
     else:
-        # Controlla manualmente unicità dello slug fornito
         existing_slug = db.query(SiteAdminSettings).filter(
-            SiteAdminSettings.slug == payload.slug, 
-            SiteAdminSettings.admin_id != admin_id
+            SiteAdminSettings.slug == payload.slug,
+            SiteAdminSettings.admin_id != owner_id
         ).first()
         if existing_slug:
             raise HTTPException(status_code=409, detail="Slug già in uso")
 
     if settings:
-        # Aggiorna impostazioni esistenti
         for key, value in payload.dict(exclude_unset=True).items():
             setattr(settings, key, value)
     else:
-        # Crea nuove impostazioni
-        settings = SiteAdminSettings(admin_id=admin_id, **payload.dict())
+        settings = SiteAdminSettings(admin_id=owner_id, **payload.dict())
 
     db.add(settings)
     db.commit()
     db.refresh(settings)
 
-    return {
-        "status": "success",
-        "slug": settings.slug,
-        "id": settings.id
-    }
+    return {"status": "success", "slug": settings.slug, "id": settings.id}
 
 if os.getenv("ENV") != "production":
     load_dotenv()
@@ -191,7 +180,7 @@ async def upload_logo_web(
     if not current_user or not (is_admin_user(current_user) or is_dealer_user(current_user)):
         raise HTTPException(status_code=403, detail="Non autorizzato")
 
-    admin_id = get_admin_id(current_user)
+    owner_id = get_settings_owner_id(current_user)  # 👈 qui cambiato!
 
     allowed_extensions = {"png", "jpg", "jpeg", "webp"}
     file_extension = file.filename.split(".")[-1].lower()
@@ -204,7 +193,7 @@ async def upload_logo_web(
 
     # Caricamento file su Supabase
     try:
-        file_name = f"{admin_id}/{uuid.uuid4()}_{file.filename}"
+        file_name = f"{owner_id}/{uuid.uuid4()}_{file.filename}"  # 👈 qui cambiato!
         response = supabase.storage.from_(SUPABASE_BUCKET_LOGO_WEB).upload(
             file_name, file_content, {"content-type": file.content_type}
         )
@@ -214,10 +203,10 @@ async def upload_logo_web(
         raise HTTPException(status_code=500, detail=f"Errore upload file: {str(e)}")
 
     # Aggiornamento automatico della tabella
-    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == admin_id).first()
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == owner_id).first()  # 👈 qui cambiato!
 
     if not settings:
-        settings = SiteAdminSettings(admin_id=admin_id, logo_web=logo_web_url)
+        settings = SiteAdminSettings(admin_id=owner_id, logo_web=logo_web_url)  # 👈 qui cambiato!
         db.add(settings)
     else:
         settings.logo_web = logo_web_url
@@ -229,6 +218,7 @@ async def upload_logo_web(
         "status": "success",
         "logo_web": logo_web_url
     }
+
 
 import logging
 
@@ -269,54 +259,23 @@ async def get_site_settings(
 ):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
-
     current_user = db.query(User).filter(User.email == user_email).first()
+
     if not current_user or not (is_admin_user(current_user) or is_dealer_user(current_user)):
         raise HTTPException(status_code=403, detail="Non autorizzato")
 
-    admin_id = get_admin_id(current_user)
+    owner_id = get_settings_owner_id(current_user)
 
-    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == admin_id).first()
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == owner_id).first()
 
-    # ✅ Creazione automatica impostazioni default se non presenti
     if not settings:
+        # creare settings di default come nel tuo codice
         mese_corrente = datetime.now().strftime('%B %Y').capitalize()
-
-        # Genera titolo predefinito
-        meta_title = f"Offerte Noleggio Lungo Termine {mese_corrente} | {current_user.ragione_sociale}"
-
-        # Calcola meta description automatica con due offerte più economiche
-        offerte_minime = db.query(NltOfferte, NltQuotazioni).join(
-            NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
-        ).filter(
-            NltOfferte.id_admin == admin_id,
-            NltOfferte.attivo == True,  # ✅ filtro per offerte attive
-            NltQuotazioni.mesi_36_10.isnot(None),
-            NltOfferte.prezzo_listino.isnot(None)
-        ).order_by(NltQuotazioni.mesi_36_10.asc()).limit(2).all()
-
-        descrizioni_auto = []
-        for offerta, quotazione in offerte_minime:
-            canone_calcolato = float(quotazione.mesi_36_10) - (float(offerta.prezzo_listino) * 0.25 / 36)
-            canone_calcolato = round(canone_calcolato, 2)
-            descrizioni_auto.append(f"{offerta.marca} {offerta.modello} da {canone_calcolato}€/mese")
-
-
-        if descrizioni_auto:
-            esempi_auto = ", ".join(descrizioni_auto)
-            meta_description = (
-                f"Scopri tutte le offerte di noleggio lungo termine da {current_user.ragione_sociale}. "
-                f"Es. {esempi_auto}. Preventivi immediati online."
-            )
-        else:
-            meta_description = f"Scopri le migliori offerte di noleggio lungo termine da {current_user.ragione_sociale}. Preventivi immediati online."
-
-        # ✅ Crea record di default
         settings = SiteAdminSettings(
-            admin_id=admin_id,
+            admin_id=owner_id,
             slug=f"{current_user.ragione_sociale.lower().replace(' ', '-')}",
-            meta_title=meta_title,
-            meta_description=meta_description,
+            meta_title=f"Offerte Noleggio Lungo Termine {mese_corrente} | {current_user.ragione_sociale}",
+            meta_description=f"Scopri le migliori offerte di noleggio lungo termine da {current_user.ragione_sociale}.",
             primary_color="#ffffff",
             secondary_color="#000000",
             tertiary_color="#dddddd",
@@ -333,8 +292,7 @@ async def get_site_settings(
         db.commit()
         db.refresh(settings)
 
-    # Restituisci sempre il record (appena creato o già presente)
-    
+    # ✅ Ritorniamo un dict come fai ora tu!
     return {
         "primary_color": settings.primary_color,
         "secondary_color": settings.secondary_color,
@@ -356,6 +314,8 @@ async def get_site_settings(
         "created_at": settings.created_at,
         "updated_at": settings.updated_at
     }
+
+
 
 @router.get("/site-settings-public/{slug}")
 async def get_site_settings_public(
