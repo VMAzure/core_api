@@ -276,14 +276,25 @@ async def offerte_nlt_pubbliche(
     slug: str,
     db: Session = Depends(get_db)
 ):
-    # Controlla admin da slug
+    # 1. Controlla settings da slug
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
         raise HTTPException(status_code=404, detail=f"Slug '{slug}' non trovato.")
 
-    admin_id = settings.admin_id
+    # 2. Carica utente legato a settings
+    user = db.query(User).filter(User.id == settings.admin_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato per questo slug.")
 
-    # Ottieni offerte attive con quotazione
+    # 3. Determina admin_id corretto
+    if user.role == "dealer":
+        if user.parent_id is None:
+            raise HTTPException(status_code=400, detail="Dealer senza admin principale associato.")
+        admin_id = user.parent_id  # admin principale
+    else:
+        admin_id = user.id  # admin stesso
+
+    # 4. Ottieni offerte pubbliche legate all'admin_id corretto
     offerte = db.query(NltOfferte, NltQuotazioni).join(
         NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
     ).filter(
@@ -299,12 +310,11 @@ async def offerte_nlt_pubbliche(
     for offerta, quotazione in offerte:
         canone_minimo = float(quotazione.mesi_36_10) - (float(offerta.prezzo_listino) * 0.25 / 36)
 
-        # 🔥 Recupera dinamicamente immagine CDN con rotta esistente
         immagine_url = f"https://coreapi-production-ca29.up.railway.app/api/image/{offerta.codice_modello}?angle=29&width=600&return_url=true"
 
         risultato.append({
             "id_offerta": offerta.id_offerta,
-            "immagine": immagine_url,  # URL CDN dinamico
+            "immagine": immagine_url,
             "marca": offerta.marca,
             "modello": offerta.modello,
             "versione": offerta.versione,
@@ -315,4 +325,3 @@ async def offerte_nlt_pubbliche(
         })
 
     return risultato
-
