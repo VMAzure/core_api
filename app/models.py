@@ -440,6 +440,8 @@ class MnetModelli(Base):
     prezzo_minimo = Column(String, nullable=True)
     modello_breve_carrozzeria = Column(String, nullable=True)
     ultima_modifica = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    default_img = Column(String(1000), nullable=True)
+
 
 class MnetAllestimenti(Base):
     __tablename__ = "mnet_allestimenti"
