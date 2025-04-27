@@ -337,6 +337,8 @@ class NltOfferte(Base):
     cambio = Column(String, nullable=True)
     alimentazione = Column(String, nullable=True)
     segmento = Column(String, nullable=True)
+    default_img = Column(String(1000), nullable=True)  # 🔥 AGGIUNGI QUESTO
+
 
 
 class NltQuotazioni(Base):

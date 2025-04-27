@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session, selectinload
 from typing import Optional, List
 from app.database import get_db
-from app.models import NltQuotazioni, NltPlayers, NltImmagini, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings
+from app.models import NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
@@ -87,6 +87,8 @@ async def get_offerte(
             "prezzo_accessori": o.prezzo_accessori,
             "prezzo_mss": o.prezzo_mss,
             "prezzo_totale": o.prezzo_totale,
+            "default_img": o.default_img,  # 🔥 Qui aggiunto
+
             "accessori": [
                 {
                     "codice": a.codice,
@@ -116,7 +118,7 @@ async def get_offerte(
                 "48_30": o.quotazioni[0].mesi_48_30 if o.quotazioni else None,
                 "48_40": o.quotazioni[0].mesi_48_40 if o.quotazioni else None,
             },
-            "immagine": next((img.url_imagin for img in o.immagini if img.principale), None)
+                "immagine": next((img.url_imagin for img in o.immagini if img.principale), None)
         })
 
     return {"success": True, "offerte": risultati}
@@ -156,6 +158,14 @@ async def crea_offerta(
     if not valido_da:
         valido_da = datetime.utcnow().date()
 
+    default_img_value = None
+
+    if codice_modello:
+        modello_data = db.query(MnetModelli).filter(MnetModelli.codice_modello == codice_modello).first()
+        if modello_data:
+            default_img_value = modello_data.default_img
+
+
     nuova_offerta = NltOfferte(
         id_admin=current_user.id,
         marca=marca,
@@ -174,7 +184,9 @@ async def crea_offerta(
         prezzo_totale=prezzo_totale,
         cambio=cambio,
         alimentazione=alimentazione,
-        segmento=segmento
+        segmento=segmento,
+        default_img=default_img_value  # 🔥 impostiamo da mnet_modelli
+
 
     )
 
