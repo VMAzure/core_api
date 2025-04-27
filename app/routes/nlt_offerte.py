@@ -322,6 +322,8 @@ async def offerte_nlt_pubbliche(
             "alimentazione": offerta.alimentazione,
             "canone_mensile": round(canone_minimo, 2),
             "prezzo_listino": float(offerta.prezzo_listino)
+            "default_img": offerta.default_img
+
         })
 
     return risultato
