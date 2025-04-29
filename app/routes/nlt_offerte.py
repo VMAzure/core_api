@@ -370,33 +370,16 @@ async def offerte_nlt_pubbliche(
 
     return risultato
 
-@router.get("/offerte-nlt-pubbliche/{slug}/{slug_offerta}")
-async def offerta_nlt_pubblica(
-    slug: str,
-    slug_offerta: str,
-    db: Session = Depends(get_db)
-):
+@router.get("/offerte-nlt-pubbliche/{slug_dealer}/{slug_offerta}")
+async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session = Depends(get_db)):
     # 1. Recupera settings dal dealer
-    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug_dealer).first()
     if not settings:
-        raise HTTPException(status_code=404, detail=f"Slug dealer '{slug}' non trovato.")
+        raise HTTPException(status_code=404, detail=f"Dealer '{slug_dealer}' non trovato.")
 
-    # 2. Recupera user associato
-    user = db.query(User).filter(User.id == settings.admin_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Utente non trovato per questo dealer.")
-
-    # 3. Determina admin_id corretto
-    if user.role == "dealer":
-        if user.parent_id is None:
-            raise HTTPException(status_code=400, detail="Dealer senza admin principale associato.")
-        admin_id = user.parent_id
-    else:
-        admin_id = user.id
-
-    # 4. Cerca l'offerta precisa
-    offerta = db.query(NltOfferte).filter(
-        NltOfferte.id_admin == admin_id,
+    # 2. Cerca direttamente l'offerta associata al dealer
+    offerta = db.query(NltOfferte).join(User, NltOfferte.id_admin == User.id).filter(
+        User.id == settings.admin_id,
         NltOfferte.slug == slug_offerta,
         NltOfferte.attivo == True
     ).first()
@@ -404,7 +387,6 @@ async def offerta_nlt_pubblica(
     if not offerta:
         raise HTTPException(status_code=404, detail="Offerta non trovata.")
 
-    # 5. Costruisci risposta
     immagine_url = f"https://coreapi-production-ca29.up.railway.app/api/image/{offerta.codice_modello}?angle=29&width=600&return_url=true"
 
     risultato = {
@@ -423,4 +405,3 @@ async def offerta_nlt_pubblica(
     }
 
     return risultato
-
