@@ -370,14 +370,16 @@ async def offerte_nlt_pubbliche(
 
     return risultato
 
+import requests
+
 @router.get("/offerte-nlt-pubbliche/{slug_dealer}/{slug_offerta}")
 async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session = Depends(get_db)):
-    # 1. Recupera settings dal dealer
+    # 1. Recupera settings
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug_dealer).first()
     if not settings:
         raise HTTPException(status_code=404, detail=f"Dealer '{slug_dealer}' non trovato.")
 
-    # 2. Cerca direttamente l'offerta associata al dealer
+    # 2. Cerca l'offerta
     offerta = db.query(NltOfferte).join(User, NltOfferte.id_admin == User.id).filter(
         User.id == settings.admin_id,
         NltOfferte.slug == slug_offerta,
@@ -387,7 +389,17 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
     if not offerta:
         raise HTTPException(status_code=404, detail="Offerta non trovata.")
 
-    immagine_url = f"https://coreapi-production-ca29.up.railway.app/api/image/public/{offerta.codice_modello}?angle=29&width=600&return_url=true"
+    # 3. 🔥 Fai la richiesta al vero endpoint per ottenere l'immagine reale
+    try:
+        response = requests.get(
+            f"https://coreapi-production-ca29.up.railway.app/api/image/public/{offerta.codice_modello}?angle=29&width=600&return_url=true"
+        )
+        response.raise_for_status()
+        img_data = response.json()
+        immagine_url = img_data.get('url', None)
+    except Exception as e:
+        immagine_url = None
+        print(f"Errore caricamento immagine: {e}")
 
     risultato = {
         "id_offerta": offerta.id_offerta,
@@ -405,3 +417,4 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
     }
 
     return risultato
+
