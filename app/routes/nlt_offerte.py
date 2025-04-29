@@ -6,8 +6,8 @@ from app.models import NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOf
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
-
-
+import unidecode
+import re
 
 from app.auth_helpers import (
     get_admin_id,
@@ -20,6 +20,26 @@ router = APIRouter(
     prefix="/nlt/offerte",
     tags=["nlt-offerte"]
 )
+
+
+def generate_slug(marca: str, modello: str, versione: str) -> str:
+    text = f"{marca}-{modello}-{versione}"
+    text = unidecode.unidecode(text.lower())  # elimina accenti
+    text = re.sub(r'[^a-z0-9]+', '-', text)   # sostituisce spazi e simboli con "-"
+    return text.strip('-')
+
+def generate_unique_slug(marca: str, modello: str, versione: str, db: Session) -> str:
+    base_slug = generate_slug(marca, modello, versione)
+    slug = base_slug
+    counter = 1
+
+    while db.query(NltOfferte).filter(NltOfferte.slug == slug).first() is not None:
+        slug = f"{base_slug}-{counter}"
+        counter += 1
+
+    return slug
+
+
 
 # Verifica ruolo admin o superadmin per inserire/modificare
 def verify_admin_or_superadmin(user: User):
@@ -165,15 +185,14 @@ async def crea_offerta(
         if modello_data:
             default_img_value = modello_data.default_img
 
-
+    # Ora crei sempre nuova_offerta, anche se codice_modello è None
     nuova_offerta = NltOfferte(
         id_admin=current_user.id,
         marca=marca,
         modello=modello,
         versione=versione,
         codice_motornet=codice_motornet,
-        codice_modello=codice_modello,  # 👈 Campo aggiunto
-
+        codice_modello=codice_modello,
         id_player=id_player,
         descrizione_breve=descrizione_breve,
         valido_da=valido_da,
@@ -185,10 +204,19 @@ async def crea_offerta(
         cambio=cambio,
         alimentazione=alimentazione,
         segmento=segmento,
-        default_img=default_img_value  # 🔥 impostiamo da mnet_modelli
-
-
+        default_img=default_img_value
     )
+
+
+    # 🔥 Genera slug subito dopo aver creato nuova_offerta
+    nuova_offerta.slug = generate_unique_slug(
+        nuova_offerta.marca,
+        nuova_offerta.modello,
+        nuova_offerta.versione,
+        db
+    )
+
+
 
     db.add(nuova_offerta)
     db.commit()
@@ -339,3 +367,58 @@ async def offerte_nlt_pubbliche(
         })
 
     return risultato
+
+@router.get("/offerte-nlt-pubbliche/{slug}/{slug_offerta}")
+async def offerta_nlt_pubblica(
+    slug: str,
+    slug_offerta: str,
+    db: Session = Depends(get_db)
+):
+    # 1. Recupera settings dal dealer
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail=f"Slug dealer '{slug}' non trovato.")
+
+    # 2. Recupera user associato
+    user = db.query(User).filter(User.id == settings.admin_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato per questo dealer.")
+
+    # 3. Determina admin_id corretto
+    if user.role == "dealer":
+        if user.parent_id is None:
+            raise HTTPException(status_code=400, detail="Dealer senza admin principale associato.")
+        admin_id = user.parent_id
+    else:
+        admin_id = user.id
+
+    # 4. Cerca l'offerta precisa
+    offerta = db.query(NltOfferte).filter(
+        NltOfferte.id_admin == admin_id,
+        NltOfferte.slug == slug_offerta,
+        NltOfferte.attivo == True
+    ).first()
+
+    if not offerta:
+        raise HTTPException(status_code=404, detail="Offerta non trovata.")
+
+    # 5. Costruisci risposta
+    immagine_url = f"https://coreapi-production-ca29.up.railway.app/api/image/{offerta.codice_modello}?angle=29&width=600&return_url=true"
+
+    risultato = {
+        "id_offerta": offerta.id_offerta,
+        "immagine": immagine_url,
+        "marca": offerta.marca,
+        "modello": offerta.modello,
+        "versione": offerta.versione,
+        "cambio": offerta.cambio,
+        "alimentazione": offerta.alimentazione,
+        "prezzo_listino": float(offerta.prezzo_listino) if offerta.prezzo_listino else None,
+        "prezzo_totale": float(offerta.prezzo_totale) if offerta.prezzo_totale else None,
+        "descrizione_breve": offerta.descrizione_breve,
+        "default_img": offerta.default_img,
+        "slug": offerta.slug
+    }
+
+    return risultato
+
