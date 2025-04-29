@@ -387,7 +387,7 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
     if not offerta:
         raise HTTPException(status_code=404, detail="Offerta non trovata.")
 
-    immagine_url = f"https://coreapi-production-ca29.up.railway.app/api/image/{offerta.codice_modello}?angle=29&width=600&return_url=true"
+    immagine_url = f"https://coreapi-production-ca29.up.railway.app/api/imagepublic/{offerta.codice_modello}?angle=29&width=600&return_url=true"
 
     risultato = {
         "id_offerta": offerta.id_offerta,
