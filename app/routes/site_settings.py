@@ -301,8 +301,27 @@ async def get_site_settings(
         db.commit()
         db.refresh(settings)
 
+    # 👇 FONDAMENTALE! Restituisci esplicitamente TUTTI i campi:
     return {
-        # ... tuoi campi esistenti ...
+        "primary_color": settings.primary_color or "",
+        "secondary_color": settings.secondary_color or "",
+        "tertiary_color": settings.tertiary_color or "",
+        "font_family": settings.font_family or "",
+        "favicon_url": settings.favicon_url or "",
+        "meta_title": settings.meta_title or "",
+        "meta_description": settings.meta_description or "",
+        "logo_web": settings.logo_web or "",
+        "footer_text": settings.footer_text or "",
+        "dark_mode_enabled": settings.dark_mode_enabled if settings.dark_mode_enabled is not None else False,
+        "custom_css": settings.custom_css or "",
+        "custom_js": settings.custom_js or "",
+        "contact_email": settings.contact_email or "",
+        "contact_phone": settings.contact_phone or "",
+        "contact_address": settings.contact_address or "",
+        "slug": settings.slug or "",
+        "menu_style": settings.menu_style or "",
+        "created_at": settings.created_at,
+        "updated_at": settings.updated_at,
         "servizi_visibili": settings.servizi_visibili or {
             "NLT": False, "REWIND": False, "NOS": False, "NBT": False
         }
