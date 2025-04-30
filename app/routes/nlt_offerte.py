@@ -389,17 +389,8 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
     if not offerta:
         raise HTTPException(status_code=404, detail="Offerta non trovata.")
 
-    # 3. 🔥 Fai la richiesta al vero endpoint per ottenere l'immagine reale
-    try:
-        response = requests.get(
-            f"https://coreapi-production-ca29.up.railway.app/api/image/public/{offerta.codice_modello}?angle=29&width=600&return_url=true"
-        )
-        response.raise_for_status()
-        img_data = response.json()
-        immagine_url = img_data.get('url', None)
-    except Exception as e:
-        immagine_url = None
-        print(f"Errore caricamento immagine: {e}")
+    # ✅ Utilizza direttamente l'immagine default
+    immagine_url = offerta.default_img
 
     risultato = {
         "id_offerta": offerta.id_offerta,
@@ -412,9 +403,9 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
         "prezzo_listino": float(offerta.prezzo_listino) if offerta.prezzo_listino else None,
         "prezzo_totale": float(offerta.prezzo_totale) if offerta.prezzo_totale else None,
         "descrizione_breve": offerta.descrizione_breve,
-        "default_img": offerta.default_img,
         "slug": offerta.slug
     }
 
     return risultato
+
 
