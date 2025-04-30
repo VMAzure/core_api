@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func, Boolean, Numeric, Date, TIMESTAMP
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func, Boolean, Numeric, Date, TIMESTAMP, text
 from sqlalchemy.orm import relationship
 from datetime import datetime, date, timedelta
 from passlib.context import CryptContext
@@ -259,6 +259,10 @@ class SiteAdminSettings(Base):
 
     created_at = Column(DateTime, default=func.now(), nullable=True)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=True)
+    servizi_visibili = Column(JSONB, nullable=False, server_default=text("""
+        '{"NLT": false, "REWIND": false, "NOS": false, "NBT": false}'
+    """))
+
 
 
 class SitePages(Base):
