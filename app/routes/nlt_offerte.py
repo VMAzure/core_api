@@ -108,6 +108,7 @@ async def get_offerte(
             "prezzo_mss": o.prezzo_mss,
             "prezzo_totale": o.prezzo_totale,
             "default_img": o.default_img,  # 🔥 Qui aggiunto
+            "solo_privati": o.solo_privati,
 
             "accessori": [
                 {
@@ -137,6 +138,12 @@ async def get_offerte(
                 "48_25": o.quotazioni[0].mesi_48_25 if o.quotazioni else None,
                 "48_30": o.quotazioni[0].mesi_48_30 if o.quotazioni else None,
                 "48_40": o.quotazioni[0].mesi_48_40 if o.quotazioni else None,
+                "60_10": o.quotazioni[0].mesi_60_10 if o.quotazioni else None,
+                "60_15": o.quotazioni[0].mesi_60_15 if o.quotazioni else None,
+                "60_20": o.quotazioni[0].mesi_60_20 if o.quotazioni else None,
+                "60_25": o.quotazioni[0].mesi_60_25 if o.quotazioni else None,
+                "60_30": o.quotazioni[0].mesi_60_30 if o.quotazioni else None,
+                "60_40": o.quotazioni[0].mesi_60_40 if o.quotazioni else None,
             },
                 "immagine": next((img.url_imagin for img in o.immagini if img.principale), None)
         })
@@ -170,6 +177,8 @@ async def crea_offerta(
     cambio: Optional[str] = Body(None),
     alimentazione: Optional[str] = Body(None),
     segmento: Optional[str] = Body(None),
+    solo_privati: bool = Body(False),  # 👈 aggiungi questo, default False
+
 
     db: Session = Depends(get_db)
 ):
@@ -204,7 +213,9 @@ async def crea_offerta(
         cambio=cambio,
         alimentazione=alimentazione,
         segmento=segmento,
-        default_img=default_img_value
+        default_img=default_img_value,
+        solo_privati=solo_privati  # 👈 aggiunto qui
+
     )
 
 
@@ -256,7 +267,13 @@ async def crea_offerta(
             mesi_48_20=quotazioni.get("48_20"),
             mesi_48_25=quotazioni.get("48_25"),
             mesi_48_30=quotazioni.get("48_30"),
-            mesi_48_40=quotazioni.get("48_40")
+            mesi_48_40=quotazioni.get("48_40"),
+            mesi_60_10=quotazioni.get("60_10"),  # 👈 nuove
+            mesi_60_15=quotazioni.get("60_15"),  # 👈 nuove
+            mesi_60_20=quotazioni.get("60_20"),  # 👈 nuove
+            mesi_60_25=quotazioni.get("60_25"),  # 👈 nuove
+            mesi_60_30=quotazioni.get("60_30"),  # 👈 nuove
+            mesi_60_40=quotazioni.get("60_40")   # 👈 nuove
         ))
 
     db.commit()
@@ -363,7 +380,9 @@ async def offerte_nlt_pubbliche(
             "canone_mensile": round(canone_minimo, 2),
             "prezzo_listino": float(offerta.prezzo_listino),
             "default_img": offerta.default_img,
-            "slug": offerta.slug  
+            "slug": offerta.slug,
+            "solo_privati": offerta.solo_privati  # 👈 aggiungi solo questa riga
+
 
 
         })
@@ -403,7 +422,9 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
         "prezzo_listino": float(offerta.prezzo_listino) if offerta.prezzo_listino else None,
         "prezzo_totale": float(offerta.prezzo_totale) if offerta.prezzo_totale else None,
         "descrizione_breve": offerta.descrizione_breve,
-        "slug": offerta.slug
+        "slug": offerta.slug,
+        "solo_privati": offerta.solo_privati  # 👈 aggiungi solo questa riga
+
     }
 
     return risultato

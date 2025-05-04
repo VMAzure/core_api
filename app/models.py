@@ -343,7 +343,7 @@ class NltOfferte(Base):
     segmento = Column(String, nullable=True)
     default_img = Column(String(1000), nullable=True)
     slug = Column(String(255), nullable=False, unique=True)
-
+    solo_privati = Column(Boolean, nullable=False, default=False)
 
 
 
@@ -364,6 +364,12 @@ class NltQuotazioni(Base):
     mesi_48_25 = Column("48_25", Numeric(10, 2))
     mesi_48_30 = Column("48_30", Numeric(10, 2))
     mesi_48_40 = Column("48_40", Numeric(10, 2))
+    mesi_60_10 = Column("60_10", Numeric(10, 2))
+    mesi_60_15 = Column("60_15", Numeric(10, 2))
+    mesi_60_20 = Column("60_20", Numeric(10, 2))
+    mesi_60_25 = Column("60_25", Numeric(10, 2))
+    mesi_60_30 = Column("60_30", Numeric(10, 2))
+    mesi_60_40 = Column("60_40", Numeric(10, 2))
 
     offerta = relationship("NltOfferte", back_populates="quotazioni")
 
