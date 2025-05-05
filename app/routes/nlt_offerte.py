@@ -6,7 +6,7 @@ from app.models import NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOf
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
-from motornet import get_motornet_token
+from .motornet import get_motornet_token
 
 import unidecode
 import re
