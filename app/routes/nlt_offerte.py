@@ -6,8 +6,13 @@ from app.models import NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOf
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
+from motornet import get_motornet_token
+
 import unidecode
 import re
+
+import requests
+import httpx
 
 from app.auth_helpers import (
     get_admin_id,
@@ -389,7 +394,7 @@ async def offerte_nlt_pubbliche(
 
     return risultato
 
-import requests
+
 
 @router.get("/offerte-nlt-pubbliche/{slug_dealer}/{slug_offerta}")
 async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session = Depends(get_db)):
@@ -408,9 +413,23 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
     if not offerta:
         raise HTTPException(status_code=404, detail="Offerta non trovata.")
 
-    # ✅ Utilizza direttamente l'immagine default
     immagine_url = offerta.default_img
 
+    # 3. Token Motornet
+    token = get_motornet_token()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/dettaglio?codice_motornet_uni={offerta.codice_motornet}"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(motornet_url, headers=headers)
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail="Errore recupero dettagli Motornet")
+
+    dettagli_motornet = response.json()
+
+    # 4. Risposta integrata
     risultato = {
         "id_offerta": offerta.id_offerta,
         "immagine": immagine_url,
@@ -423,8 +442,8 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
         "prezzo_totale": float(offerta.prezzo_totale) if offerta.prezzo_totale else None,
         "descrizione_breve": offerta.descrizione_breve,
         "slug": offerta.slug,
-        "solo_privati": offerta.solo_privati  # 👈 aggiungi solo questa riga
-
+        "solo_privati": offerta.solo_privati,
+        "dettagli_motornet": dettagli_motornet  # ⬅️ nuovi dettagli
     }
 
     return risultato
