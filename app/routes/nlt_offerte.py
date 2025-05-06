@@ -7,6 +7,7 @@ from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_de
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
 from .motornet import get_motornet_token
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
 import unidecode
 import re
@@ -395,6 +396,20 @@ async def offerte_nlt_pubbliche(
     return risultato
 
 
+# Funzione separata con gestione retry (3 tentativi con 2 secondi tra tentativi)
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2), retry=retry_if_exception_type(HTTPException))
+async def fetch_motornet_details(codice_motornet: str, token: str):
+    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/dettaglio?codice_motornet_uni={codice_motornet}"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(motornet_url, headers=headers)
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail="Errore recupero dettagli Motornet")
+
+    return response.json()
+
 
 @router.get("/offerte-nlt-pubbliche/{slug_dealer}/{slug_offerta}")
 async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session = Depends(get_db)):
@@ -417,19 +432,15 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
 
     # 3. Token Motornet
     token = get_motornet_token()
-    headers = {"Authorization": f"Bearer {token}"}
 
-    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/dettaglio?codice_motornet_uni={offerta.codice_motornet}"
+    # 4. Chiama funzione con retry automatico (max 3 tentativi)
+    try:
+        dettagli_motornet = await fetch_motornet_details(offerta.codice_motornet, token)
+    except HTTPException as e:
+        # Dopo 3 tentativi falliti, ritorna errore chiaro al frontend
+        raise HTTPException(status_code=503, detail="Servizio temporaneamente non disponibile, riprova più tardi.")
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(motornet_url, headers=headers)
-
-    if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail="Errore recupero dettagli Motornet")
-
-    dettagli_motornet = response.json()
-
-    # 4. Risposta integrata
+    # 5. Risposta finale integrata
     risultato = {
         "id_offerta": offerta.id_offerta,
         "immagine": immagine_url,
@@ -443,9 +454,7 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
         "descrizione_breve": offerta.descrizione_breve,
         "slug": offerta.slug,
         "solo_privati": offerta.solo_privati,
-        "dettagli_motornet": dettagli_motornet  # ⬅️ nuovi dettagli
+        "dettagli_motornet": dettagli_motornet
     }
 
     return risultato
-
-
