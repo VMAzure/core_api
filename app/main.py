@@ -45,6 +45,8 @@ from app.routes import tools
 from app.routes.image import router as image_router
 from app.routes.azinsurance import insurance, setup
 from app.routes import openai_config  
+from app.routes.openai_config import genera_descrizione_gpt
+
 
 
 # ✅ Configuriamo il logging
