@@ -2,16 +2,17 @@
 import openai
 import os
 import traceback
+from openai import AsyncOpenAI
 
 router = APIRouter()
 
 # Inizializzazione della configurazione OpenAI
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # funzione riutilizzabile per richiesta GPT-4
 async def genera_descrizione_gpt(prompt: str, max_tokens: int = 300):
     try:
-        response = await openai.ChatCompletion.acreate(
+        response = await client.chat.completions.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
@@ -23,7 +24,6 @@ async def genera_descrizione_gpt(prompt: str, max_tokens: int = 300):
 
     except Exception as e:
         print("❌ Errore generazione GPT-4:", e)
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail="Errore generazione testo GPT-4.")
 
 # 📌 Esempio endpoint per testare la chiamata GPT-4
