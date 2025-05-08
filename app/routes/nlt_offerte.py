@@ -8,6 +8,7 @@ from app.routes.nlt import get_current_user
 from datetime import date, datetime
 from .motornet import get_motornet_token
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
+from routes.openai_config import genera_descrizione_gpt
 
 import unidecode
 import re
@@ -21,6 +22,8 @@ from app.auth_helpers import (
     is_admin_user,
     is_dealer_user
 )
+
+
 
 router = APIRouter(
     prefix="/nlt/offerte",
@@ -200,6 +203,10 @@ async def crea_offerta(
         if modello_data:
             default_img_value = modello_data.default_img
 
+     # Genera descrizione tramite OpenAI
+    prompt_descrizione = f"Scrivi una breve descrizione coinvolgente e commerciale per un'offerta di noleggio a lungo termine dell'auto {marca} {modello}, evidenziandone caratteristiche e benefici."
+    descrizione_ai_generata = await genera_descrizione_gpt(prompt_descrizione)
+
     # Ora crei sempre nuova_offerta, anche se codice_modello è None
     nuova_offerta = NltOfferte(
         id_admin=current_user.id,
@@ -220,7 +227,9 @@ async def crea_offerta(
         alimentazione=alimentazione,
         segmento=segmento,
         default_img=default_img_value,
-        solo_privati=solo_privati  # 👈 aggiunto qui
+        solo_privati=solo_privati,
+        descrizione_ai=descrizione_ai_generata 
+
 
     )
 
@@ -454,7 +463,9 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
         "descrizione_breve": offerta.descrizione_breve,
         "slug": offerta.slug,
         "solo_privati": offerta.solo_privati,
-        "dettagli_motornet": dettagli_motornet
+        "dettagli_motornet": dettagli_motornet,
+        "descrizione_ai": offerta.descrizione_ai
+
     }
 
     return risultato

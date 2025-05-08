@@ -344,6 +344,8 @@ class NltOfferte(Base):
     default_img = Column(String(1000), nullable=True)
     slug = Column(String(255), nullable=False, unique=True)
     solo_privati = Column(Boolean, nullable=False, default=False)
+    descrizione_ai = Column(Text, nullable=True)
+
 
 
 
