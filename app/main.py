@@ -14,7 +14,7 @@ from fastapi_jwt_auth.exceptions import AuthJWTException
 from pydantic import BaseSettings
 from dotenv import load_dotenv  # ✅ Importiamo dotenv PRIMA di qualsiasi import dipendente dalle variabili
 from fastapi.responses import JSONResponse
-
+from routes import openai_config  
 
 # ✅ Carichiamo le variabili d'ambiente PRIMA di qualsiasi import di moduli che le usano
 load_dotenv()
@@ -164,6 +164,8 @@ app.include_router(site_settings_router, prefix="/api", tags=["Site Settings"])
 
 app.include_router(insurance.router, prefix="/azinsurance")
 app.include_router(setup.router, prefix="/azinsurance")
+app.include_router(openai_config.router)
+
 
 
 
