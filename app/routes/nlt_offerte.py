@@ -8,7 +8,7 @@ from app.routes.nlt import get_current_user
 from datetime import date, datetime
 from .motornet import get_motornet_token
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
-from routes.openai_config import genera_descrizione_gpt
+from app.routes.openai_config import genera_descrizione_gpt
 
 import unidecode
 import re
