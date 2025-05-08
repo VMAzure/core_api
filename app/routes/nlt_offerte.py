@@ -205,7 +205,7 @@ async def crea_offerta(
 
      # Genera descrizione tramite OpenAI
         prompt_descrizione = (
-        f"Descrivi in circa 450 caratteri (minimo 400, massimo 450 spazi inclusi) "
+        f"Descrivi in circa 350 caratteri (minimo 300, massimo 350 spazi inclusi) "
         f"le principali peculiarità e caratteristiche tecniche della {marca} {modello}. "
         f"Utilizza il grassetto (** **) esclusivamente per le parole chiave più importanti. "
         f"Non citare il noleggio, parla solo di estetica, prestazioni, comfort e tecnologia."
