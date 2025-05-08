@@ -14,7 +14,6 @@ from fastapi_jwt_auth.exceptions import AuthJWTException
 from pydantic import BaseSettings
 from dotenv import load_dotenv  # ✅ Importiamo dotenv PRIMA di qualsiasi import dipendente dalle variabili
 from fastapi.responses import JSONResponse
-from routes import openai_config  
 
 # ✅ Carichiamo le variabili d'ambiente PRIMA di qualsiasi import di moduli che le usano
 load_dotenv()
@@ -45,6 +44,8 @@ from app.routes.nlt_offerte import router as nlt_offerte_router
 from app.routes import tools
 from app.routes.image import router as image_router
 from app.routes.azinsurance import insurance, setup
+from app.routes import openai_config  
+
 
 # ✅ Configuriamo il logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
