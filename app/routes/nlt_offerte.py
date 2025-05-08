@@ -204,7 +204,12 @@ async def crea_offerta(
             default_img_value = modello_data.default_img
 
      # Genera descrizione tramite OpenAI
-    prompt_descrizione = f"Scrivi una breve descrizione coinvolgente e commerciale per un'offerta di noleggio a lungo termine dell'auto {marca} {modello}, evidenziandone caratteristiche e benefici."
+        prompt_descrizione = (
+        f"Descrivi in circa 450 caratteri (minimo 400, massimo 450 spazi inclusi) "
+        f"le principali peculiarità e caratteristiche tecniche della {marca} {modello}. "
+        f"Utilizza il grassetto (** **) esclusivamente per le parole chiave più importanti. "
+        f"Non citare il noleggio, parla solo di estetica, prestazioni, comfort e tecnologia."
+    )
     descrizione_ai_generata = await genera_descrizione_gpt(prompt_descrizione)
 
     # Ora crei sempre nuova_offerta, anche se codice_modello è None
