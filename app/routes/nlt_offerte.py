@@ -10,6 +10,8 @@ from .motornet import get_motornet_token
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from app.routes.openai_config import genera_descrizione_gpt
 
+import logging
+
 import unidecode
 import re
 
@@ -411,6 +413,10 @@ async def offerte_nlt_pubbliche(
 
 
 # Funzione separata con gestione retry (3 tentativi con 2 secondi tra tentativi)
+
+logger = logging.getLogger(__name__)
+
+
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2), retry=retry_if_exception_type(HTTPException))
 async def fetch_motornet_details(codice_motornet: str, token: str):
     motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/dettaglio?codice_motornet_uni={codice_motornet}"
@@ -424,15 +430,107 @@ async def fetch_motornet_details(codice_motornet: str, token: str):
 
     return response.json()
 
+# Funzione di fallback che restituisce dati N.D.
+def get_dati_nd():
+    return {
+        "modello": {
+            "marca": {"acronimo": "N.D.", "nome": "N.D.", "logo": None},
+            "gammaModello": {"codice": "N.D.", "descrizione": "N.D."},
+            "inizioProduzione": "N.D.",
+            "fineProduzione": "N.D.",
+            "gruppoStorico": {"codice": "N.D.", "descrizione": "N.D."},
+            "serieGamma": {"codice": "N.D.", "descrizione": "N.D."},
+            "codDescModello": {"codice": "N.D.", "descrizione": "N.D."},
+            "inizioCommercializzazione": "N.D.",
+            "fineCommercializzazione": "N.D.",
+            "modello": "N.D.",
+            "foto": None,
+            "prezzoMinimo": "N.D.",
+            "modelloBreveCarrozzeria": {"id": "N.D.", "descrizione": "N.D."},
+            "allestimento": "N.D.",
+            "immagine": None,
+            "codiceCostruttore": "N.D.",
+            "codiceMotornetUnivoco": "N.D.",
+            "codiceMotore": "N.D.",
+            "prezzoAccessori": "N.D.",
+            "prezzoListino": "N.D.",
+            "dataListino": "N.D.",
+            "tipo": {"codice": "N.D.", "descrizione": "N.D."},
+            "segmento": {"codice": "N.D.", "descrizione": "N.D."},
+            "alimentazione": {"codice": "N.D.", "descrizione": "N.D."},
+            "categoria": {"codice": "N.D.", "descrizione": "N.D."},
+            "cilindrata": "N.D.",
+            "cavalliFiscali": "N.D.",
+            "tipoMotore": "N.D.",
+            "descrizioneMotore": "N.D.",
+            "hp": "N.D.",
+            "kw": "N.D.",
+            "euro": "N.D.",
+            "emissioniCo2": "N.D.",
+            "consumoMedio": "N.D.",
+            "cambio": {"codice": "N.D.", "descrizione": "N.D."},
+            "nomeCambio": "N.D.",
+            "descrizioneMarce": "N.D.",
+            "accelerazione": "N.D.",
+            "altezza": "N.D.",
+            "cilindri": "N.D.",
+            "consumoUrbano": "N.D.",
+            "consumoExtraurbano": "N.D.",
+            "coppia": "N.D.",
+            "numeroGiri": "N.D.",
+            "larghezza": "N.D.",
+            "lunghezza": "N.D.",
+            "pneumaticiAnteriori": "N.D.",
+            "pneumaticiPosteriori": "N.D.",
+            "valvole": "N.D.",
+            "velocita": "N.D.",
+            "passo": "N.D.",
+            "porte": "N.D.",
+            "posti": "N.D.",
+            "trazione": {"codice": "N.D.", "descrizione": "N.D."},
+            "altezzaMinima": "N.D.",
+            "autonomiaMedia": "N.D.",
+            "autonomiaMassima": "N.D.",
+            "bagagliaio": "N.D.",
+            "cavalliIbrido": "N.D.",
+            "cavalliTotale": "N.D.",
+            "potenzaIbrido": "N.D.",
+            "potenzaTotale": "N.D.",
+            "coppiaIbrido": "N.D.",
+            "coppiaTotale": "N.D.",
+            "equipaggiamento": "N.D.",
+            "garanziaKm": "N.D.",
+            "garanziaTempo": "N.D.",
+            "hc": "N.D.",
+            "neoPatentati": "N.D.",
+            "nox": "N.D.",
+            "numeroGiriIbrido": "N.D.",
+            "numeroGiriTotale": "N.D.",
+            "architettura": {"codice": "N.D.", "descrizione": "N.D."},
+            "traino": "N.D.",
+            "portata": "N.D.",
+            "pm10": "N.D.",
+            "pesoPotenza": "N.D.",
+            "peso": "N.D.",
+            "tipoGuida": "N.D.",
+            "massaPCarico": "N.D.",
+            "capSerbLitri": "N.D.",
+            "pesoVuoto": "N.D.",
+            "paeseProd": "N.D.",
+            "descrizioneBreve": "N.D.",
+            "accessoriSerie": [],
+            "accessoriOpzionali": [],
+            "wltp": "N.D."
+        },
+        "accessiDisponibili": "N.D."
+    }
 
 @router.get("/offerte-nlt-pubbliche/{slug_dealer}/{slug_offerta}")
 async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session = Depends(get_db)):
-    # 1. Recupera settings
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug_dealer).first()
     if not settings:
         raise HTTPException(status_code=404, detail=f"Dealer '{slug_dealer}' non trovato.")
 
-    # 2. Cerca l'offerta
     offerta = db.query(NltOfferte).join(User, NltOfferte.id_admin == User.id).filter(
         User.id == settings.admin_id,
         NltOfferte.slug == slug_offerta,
@@ -442,22 +540,19 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
     if not offerta:
         raise HTTPException(status_code=404, detail="Offerta non trovata.")
 
-    immagine_url = offerta.default_img
-
-    # 3. Token Motornet
     token = get_motornet_token()
 
-    # 4. Chiama funzione con retry automatico (max 3 tentativi)
     try:
         dettagli_motornet = await fetch_motornet_details(offerta.codice_motornet, token)
-    except HTTPException as e:
-        # Dopo 3 tentativi falliti, ritorna errore chiaro al frontend
-        raise HTTPException(status_code=503, detail="Servizio temporaneamente non disponibile, riprova più tardi.")
+        motornet_status = "OK"
+    except HTTPException:
+        dettagli_motornet = get_dati_nd()
+        motornet_status = "KO"
+        logger.error(f"Motornet non raggiungibile per {offerta.codice_motornet}")
 
-    # 5. Risposta finale integrata
-    risultato = {
+    return {
         "id_offerta": offerta.id_offerta,
-        "immagine": immagine_url,
+        "immagine": offerta.default_img,
         "marca": offerta.marca,
         "modello": offerta.modello,
         "versione": offerta.versione,
@@ -468,9 +563,7 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
         "descrizione_breve": offerta.descrizione_breve,
         "slug": offerta.slug,
         "solo_privati": offerta.solo_privati,
-        "dettagli_motornet": dettagli_motornet,
-        "descrizione_ai": offerta.descrizione_ai
-
+        "descrizione_ai": offerta.descrizione_ai,
+        "motornet_status": motornet_status,
+        "dettagli_motornet": dettagli_motornet
     }
-
-    return risultato
