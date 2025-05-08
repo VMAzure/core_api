@@ -31,7 +31,8 @@ def is_team_user(user):
     return user.role in ["admin_team", "dealer_team"]
 
 def get_settings_owner_id(user):
-    if is_admin_user(user) or is_dealer_user(user):
-        return user.id
+    if is_dealer_user(user):
+        return user.admin_id  # ✅ restituisce admin_id associato
+    elif is_admin_user(user):
+        return user.id        # ✅ restituisce il proprio id (admin)
     raise Exception("Ruolo non supportato per site-settings")
-
