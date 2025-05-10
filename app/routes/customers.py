@@ -665,10 +665,9 @@ def switch_cliente_anagrafica(
 from fastapi import BackgroundTasks
 
 @router.post("/public/clienti/completa-registrazione")
-async def completa_registrazione_e_preventivo(
-    cliente: ClienteCreateRequest,
-    token: str,
-    background_tasks: BackgroundTasks,
+def completa_registrazione_cliente_pubblico(
+    token: str = Query(...),  # 👈 token come parametro query (URL)
+    cliente: ClienteCreateRequest = Body(...),  # 👈 dati del cliente dal body
     db: Session = Depends(get_db)
 ):
     # verifica token
