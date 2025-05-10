@@ -171,15 +171,25 @@ class NltClientiPubbliciBase(BaseModel):
     dealer_slug: str
 
 class NltClientiPubbliciCreate(NltClientiPubbliciBase):
-    pass
+    slug_offerta: Optional[str]
+    anticipo: Optional[float]
+    canone: Optional[float]
+    durata: Optional[int]
+    km: Optional[int]
 
 class NltClientiPubbliciResponse(NltClientiPubbliciBase):
     id: UUID
     token: str
+    cliente_id: Optional[int]
     data_creazione: datetime
     data_scadenza: datetime
     confermato: bool
-    stato: str  # Aggiunto per gestire i casi specifici nel frontend
+    slug_offerta: Optional[str]
+    anticipo: Optional[float]
+    canone: Optional[float]
+    durata: Optional[int]
+    km: Optional[int]
+    stato: Optional[str]
 
     class Config:
         orm_mode = True

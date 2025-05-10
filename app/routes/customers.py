@@ -516,7 +516,7 @@ def crea_cliente_pubblico(
         stato=stato_cliente
     )
 
-@router.get("/public/clienti/conferma/{token}")
+@router.get("/public/clienti/conferma/{token}", response_model=NltClientiPubbliciResponse)
 def conferma_cliente_pubblico(token: str, db: Session = Depends(get_db)):
     cliente_pubblico = db.query(NltClientiPubblici).filter(
         NltClientiPubblici.token == token,
@@ -531,97 +531,78 @@ def conferma_cliente_pubblico(token: str, db: Session = Depends(get_db)):
     dealer_richiesto = db.query(User).join(
         SiteAdminSettings,
         ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
-    ).filter(
-        SiteAdminSettings.slug == cliente_pubblico.dealer_slug
-    ).first()
+    ).filter(SiteAdminSettings.slug == cliente_pubblico.dealer_slug).first()
 
-    if not dealer_richiesto:
-        raise HTTPException(status_code=404, detail="Dealer non trovato per slug fornito")
-
-    response = {
-        "email": cliente_pubblico.email,
-        "dealer_richiesto": {
-            "id": dealer_richiesto.id,
-            "nome": dealer_richiesto.nome,
-            "ragione_sociale": dealer_richiesto.ragione_sociale
-        },
-        "token": token,
-        "stato": ""
-    }
-
+    stato = "nuovo_cliente"
     if cliente_esistente:
-        dealer_esistente = db.query(User).filter(User.id == cliente_esistente.dealer_id).first()
-        response["cliente"] = {
-            "id": cliente_esistente.id,
-            "nome": cliente_esistente.nome,
-            "cognome": cliente_esistente.cognome,
-            "tipo_cliente": cliente_esistente.tipo_cliente,
-            "dealer_attuale": {
-                "id": dealer_esistente.id,
-                "nome": dealer_esistente.nome,
-                "ragione_sociale": dealer_esistente.ragione_sociale
-            }
-        }
-        if dealer_esistente.id == dealer_richiesto.id:
-            response["stato"] = "cliente_esistente"
+        if cliente_esistente.dealer_id == dealer_richiesto.id:
+            stato = "cliente_stesso_dealer"
         else:
-            response["stato"] = "conflitto_dealer"
-    else:
-        response["stato"] = "nuovo_cliente"
+            stato = "cliente_altro_dealer"
 
-    return response
+    return NltClientiPubbliciResponse(
+        id=cliente_pubblico.id,
+        email=cliente_pubblico.email,
+        dealer_slug=cliente_pubblico.dealer_slug,
+        cliente_id=cliente_pubblico.cliente_id,
+        token=token,
+        data_creazione=cliente_pubblico.data_creazione,
+        data_scadenza=cliente_pubblico.data_scadenza,
+        confermato=cliente_pubblico.confermato,
+        stato=stato,
+        slug_offerta=cliente_pubblico.slug_offerta,
+        anticipo=cliente_pubblico.anticipo,
+        canone=cliente_pubblico.canone,
+        durata=cliente_pubblico.durata,
+        km=cliente_pubblico.km
+    )
 
 @router.post("/public/clienti", response_model=NltClientiPubbliciResponse)
 def crea_cliente_pubblico(
     payload: NltClientiPubbliciCreate,
     db: Session = Depends(get_db)
 ):
-    # Recupera il dealer tramite slug
     dealer = db.query(User).join(
         SiteAdminSettings,
         ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
-    ).filter(
-        SiteAdminSettings.slug == payload.dealer_slug
-    ).first()
+    ).filter(SiteAdminSettings.slug == payload.dealer_slug).first()
 
     if not dealer:
         raise HTTPException(status_code=404, detail="Dealer non trovato.")
 
-    # Controlla se il cliente è già censito
     cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(payload.email)).first()
 
-    # Genera token e scadenza
     token = str(uuid.uuid4())
     data_creazione = datetime.utcnow()
     data_scadenza = data_creazione + timedelta(days=7)
 
-    # Determina stato cliente
+    stato_cliente = "nuovo_cliente"
     if cliente_esistente:
         if cliente_esistente.dealer_id == dealer.id:
             stato_cliente = "cliente_stesso_dealer"
         else:
             stato_cliente = "cliente_altro_dealer"
-    else:
-        stato_cliente = "nuovo_cliente"
 
-    # Salva nella tabella NltClientiPubblici
     nuovo_cliente_pubblico = NltClientiPubblici(
         email=payload.email,
         dealer_slug=payload.dealer_slug,
         token=token,
         data_creazione=data_creazione,
         data_scadenza=data_scadenza,
-        confermato=False
+        confermato=False,
+        slug_offerta=payload.slug_offerta,
+        anticipo=payload.anticipo,
+        canone=payload.canone,
+        durata=payload.durata,
+        km=payload.km
     )
 
     db.add(nuovo_cliente_pubblico)
     db.commit()
     db.refresh(nuovo_cliente_pubblico)
 
-    # Gestione email differenziata
     admin_id = dealer.parent_id or dealer.id
     subject = "Completa la tua richiesta di preventivo"
-
     base_url_frontend = "https://corewebapp-azcore.up.railway.app/AZURELease/html"
 
     if stato_cliente == "nuovo_cliente":
@@ -636,11 +617,10 @@ def crea_cliente_pubblico(
         <p>Gentile cliente, il tuo preventivo è già pronto:</p>
         <p><a href="{url}">Scarica preventivo</a></p>
         """
-    else:  # cliente_altro_dealer
+    else:
         url = f"{base_url_frontend}/scelta-dealer.html?token={token}"
         body = f"""
-        <p>Gentile cliente, risultano i tuoi dati già registrati presso un altro dealer.</p>
-        <p>Clicca per scegliere da chi vuoi ricevere il preventivo:</p>
+        <p>Gentile cliente, risulti registrato con altro dealer. Seleziona:</p>
         <p><a href="{url}">{url}</a></p>
         """
 
@@ -654,11 +634,17 @@ def crea_cliente_pubblico(
         id=nuovo_cliente_pubblico.id,
         email=payload.email,
         dealer_slug=payload.dealer_slug,
+        stato=stato_cliente,
         token=token,
+        cliente_id=None,
         data_creazione=data_creazione,
         data_scadenza=data_scadenza,
         confermato=False,
-        stato=stato_cliente
+        slug_offerta=payload.slug_offerta,
+        anticipo=payload.anticipo,
+        canone=payload.canone,
+        durata=payload.durata,
+        km=payload.km
     )
 
 @router.post("/public/clienti/completa-registrazione", response_model=ClienteResponse)

@@ -696,12 +696,17 @@ class NltClientiPubblici(Base):
     __tablename__ = 'nlt_clienti_pubblici'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email = Column(String, nullable=False, unique=True, index=True)
+    email = Column(String, nullable=False, index=True)
     dealer_slug = Column(String, nullable=False)
     token = Column(String, nullable=False, unique=True)
-    data_creazione = Column(DateTime(timezone=True), server_default=func.now())
-    data_scadenza = Column(DateTime(timezone=True), nullable=False)
+    cliente_id = Column(Integer, nullable=True)
+    data_creazione = Column(DateTime, default=datetime.utcnow)
+    data_scadenza = Column(DateTime, nullable=False)
     confermato = Column(Boolean, default=False)
 
-
+    slug_offerta = Column(String, nullable=True)
+    anticipo = Column(Float, nullable=True)
+    canone = Column(Float, nullable=True)
+    durata = Column(Integer, nullable=True)
+    km = Column(Integer, nullable=True)
 
