@@ -41,17 +41,18 @@ class ChangePasswordRequest(BaseModel):
 
 
 class ClienteCreateRequest(BaseModel):
+    token: str  # 👈✅ AGGIUNGI QUESTO CAMPO (obbligatorio!)
     tipo_cliente: str
     nome: Optional[str] = None
     cognome: Optional[str] = None
     ragione_sociale: Optional[str] = None
-    codice_fiscale: Optional[str] = None  # ✅ Ora opzionale
+    codice_fiscale: Optional[str] = None
     partita_iva: Optional[str] = None
     indirizzo: str
     telefono: str
     email: EmailStr
     iban: Optional[str] = None
-    dealer_id: Optional[int] = None  # ✅ Deve esserci questo campo
+    dealer_id: Optional[int] = None
 
 
 
