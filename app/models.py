@@ -234,6 +234,8 @@ class SiteAdminSettings(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     admin_id = Column(Integer, nullable=False, index=True)
+    dealer_id = Column(Integer, ForeignKey("utenti.id"), nullable=True) 
+
     slug = Column(String(255), unique=True, nullable=False, index=True)
 
     primary_color = Column(String(7), nullable=True)

@@ -129,10 +129,20 @@ async def create_or_update_site_settings(
     if not current_user or not (is_admin_user(current_user) or is_dealer_user(current_user)):
         raise HTTPException(status_code=403, detail="Non autorizzato")
 
-    owner_id = get_settings_owner_id(current_user)
+    # Determina se Admin o Dealer
+    if is_admin_user(current_user):
+        settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.admin_id == current_user.id,
+            SiteAdminSettings.dealer_id == None
+        ).first()
+    else:  # dealer
+        admin_id = get_admin_id(current_user)
+        settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.admin_id == admin_id,
+            SiteAdminSettings.dealer_id == current_user.id
+        ).first()
 
-    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == owner_id).first()
-
+    # gestione slug
     if not payload.slug:
         payload.slug = generate_slug(current_user.ragione_sociale)
         existing_slug = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == payload.slug).first()
@@ -143,10 +153,10 @@ async def create_or_update_site_settings(
             existing_slug = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == payload.slug).first()
             counter += 1
     else:
-        existing_slug = db.query(SiteAdminSettings).filter(
-            SiteAdminSettings.slug == payload.slug,
-            SiteAdminSettings.admin_id != owner_id
-        ).first()
+        slug_filter = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == payload.slug)
+        if settings:
+            slug_filter = slug_filter.filter(SiteAdminSettings.id != settings.id)
+        existing_slug = slug_filter.first()
         if existing_slug:
             raise HTTPException(status_code=409, detail="Slug già in uso")
 
@@ -154,7 +164,18 @@ async def create_or_update_site_settings(
         for key, value in payload.dict(exclude_unset=True).items():
             setattr(settings, key, value)
     else:
-        settings = SiteAdminSettings(admin_id=owner_id, **payload.dict())
+        if is_admin_user(current_user):
+            settings = SiteAdminSettings(
+                admin_id=current_user.id,
+                dealer_id=None,
+                **payload.dict()
+            )
+        else:
+            settings = SiteAdminSettings(
+                admin_id=get_admin_id(current_user),
+                dealer_id=current_user.id,
+                **payload.dict()
+            )
 
     db.add(settings)
     db.commit()
@@ -271,15 +292,25 @@ async def get_site_settings(
     if not current_user or not (is_admin_user(current_user) or is_dealer_user(current_user)):
         raise HTTPException(status_code=403, detail="Non autorizzato")
 
-    owner_id = get_settings_owner_id(current_user)
-
-    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == owner_id).first()
+    if is_admin_user(current_user):
+        settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.admin_id == current_user.id,
+            SiteAdminSettings.dealer_id == None
+        ).first()
+    else:  # dealer
+        admin_id = get_admin_id(current_user)
+        settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.admin_id == admin_id,
+            SiteAdminSettings.dealer_id == current_user.id
+        ).first()
 
     if not settings:
         mese_corrente = datetime.now().strftime('%B %Y').capitalize()
+        new_slug = generate_slug(current_user.ragione_sociale)
         settings = SiteAdminSettings(
-            admin_id=owner_id,
-            slug=f"{current_user.ragione_sociale.lower().replace(' ', '-')}",
+            admin_id=current_user.id if is_admin_user(current_user) else admin_id,
+            dealer_id=None if is_admin_user(current_user) else current_user.id,
+            slug=new_slug,
             meta_title=f"Offerte Noleggio Lungo Termine {mese_corrente} | {current_user.ragione_sociale}",
             meta_description=f"Scopri le migliori offerte di noleggio lungo termine da {current_user.ragione_sociale}.",
             primary_color="#ffffff",
@@ -301,7 +332,6 @@ async def get_site_settings(
         db.commit()
         db.refresh(settings)
 
-    # 👇 FONDAMENTALE! Restituisci esplicitamente TUTTI i campi:
     return {
         "primary_color": settings.primary_color or "",
         "secondary_color": settings.secondary_color or "",
