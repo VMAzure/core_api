@@ -6,6 +6,7 @@ from app.models import User, Cliente, ClienteModifica, NltPreventivi, NltPrevent
 from fastapi_jwt_auth import AuthJWT
 from typing import List, Optional
 from app.schemas import ClienteResponse, ClienteCreateRequest, NltClientiPubbliciCreate, NltClientiPubbliciResponse
+from fastapi import Query, Body, BackgroundTasks
 
 from pydantic import BaseModel
 import uuid
@@ -662,12 +663,12 @@ def switch_cliente_anagrafica(
 
     return {"status": "cliente_switch_avvenuto", "cliente_id": cliente.id, "nuovo_dealer": nuovo_dealer_slug}
 
-from fastapi import BackgroundTasks
 
 @router.post("/public/clienti/completa-registrazione")
 def completa_registrazione_cliente_pubblico(
-    token: str = Query(...),  # 👈 token come parametro query (URL)
-    cliente: ClienteCreateRequest = Body(...),  # 👈 dati del cliente dal body
+    token: str = Query(...),  # token come parametro query (URL)
+    cliente: ClienteCreateRequest = Body(...),  # dati cliente dal body
+    background_tasks: BackgroundTasks = Depends(),  # 🚩 Importante correzione
     db: Session = Depends(get_db)
 ):
     # verifica token
@@ -722,6 +723,7 @@ def completa_registrazione_cliente_pubblico(
     db.commit()
     db.refresh(nuovo_cliente)
 
+    
     # Genera il PDF e invia mail asincrona
     background_tasks.add_task(
         genera_e_invia_preventivo,
