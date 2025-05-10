@@ -8,6 +8,8 @@ from typing import List, Optional
 from app.schemas import ClienteResponse, ClienteCreateRequest, NltClientiPubbliciCreate, NltClientiPubbliciResponse
 from pydantic import BaseModel
 import uuid
+from app.utils.email import send_email
+
 
 router = APIRouter()
 from app.auth_helpers import (
@@ -426,6 +428,11 @@ def crea_cliente_pubblico(
     payload: NltClientiPubbliciCreate,
     db: Session = Depends(get_db)
 ):
+    # Verifica dealer_slug valido
+    dealer = db.query(User).filter(User.slug == payload.dealer_slug).first()
+    if not dealer:
+        raise HTTPException(status_code=404, detail="Dealer non trovato.")
+
     # Verifica se email è già presente in clienti
     cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(payload.email)).first()
     if cliente_esistente:
@@ -434,7 +441,7 @@ def crea_cliente_pubblico(
             detail=f"Email già presente per cliente assegnato al dealer con ID {cliente_esistente.dealer_id}."
         )
 
-    # Genera un token univoco
+    # Genera token e date
     token = str(uuid.uuid4())
     data_creazione = datetime.utcnow()
     data_scadenza = data_creazione + timedelta(days=7)
@@ -452,6 +459,22 @@ def crea_cliente_pubblico(
     db.commit()
     db.refresh(nuovo_cliente_pubblico)
 
-    # TODO: Invia email con il link contenente il token (passo successivo)
+    # 🔥 Invio mail con link frontend contenente il token
+    subject = "Completa la tua richiesta di preventivo"
+    url_conferma = f"https://corewebapp-azcore.up.railway.app/AZURELease/dealer/conferma-dati-cliente.html?token={token}"
+    body = f"""
+    <p>Gentile cliente,</p>
+    <p>clicca sul seguente link per completare la tua richiesta di preventivo:</p>
+    <p><a href="{url_conferma}">{url_conferma}</a></p>
+    <p>Il link è valido fino al {data_scadenza.strftime('%d/%m/%Y %H:%M')}.</p>
+    <p>Grazie.</p>
+    """
+
+    try:
+        admin_id = dealer.parent_id or dealer.id
+        send_email(admin_id, payload.email, subject, body)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Errore invio email: {str(e)}")
 
     return nuovo_cliente_pubblico
