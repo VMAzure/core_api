@@ -666,11 +666,12 @@ def switch_cliente_anagrafica(
 
 @router.post("/public/clienti/completa-registrazione")
 def completa_registrazione_cliente_pubblico(
-    token: str = Query(...),  # token come parametro query (URL)
-    cliente: ClienteCreateRequest = Body(...),  # dati cliente dal body
-    background_tasks: BackgroundTasks = Depends(),  # 🚩 Importante correzione
+    background_tasks: BackgroundTasks,       # 👈 messo per primo
+    token: str = Query(...),
+    cliente: ClienteCreateRequest = Body(...),
     db: Session = Depends(get_db)
 ):
+
     # verifica token
     cliente_pubblico = db.query(NltClientiPubblici).filter(
         NltClientiPubblici.token == token,
