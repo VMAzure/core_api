@@ -11,9 +11,13 @@ from pydantic import BaseModel
 import uuid
 from app.utils.email import send_email
 from sqlalchemy import or_
+from app.models import NltOfferte, NltService, NltDocumentiRichiesti
 
+import os
 
-
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET")
+SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
 
 router = APIRouter()
 from app.auth_helpers import (
@@ -613,116 +617,6 @@ def crea_cliente_pubblico(payload: NltClientiPubbliciCreate, db: Session = Depen
         durata=payload.durata,
         km=payload.km
     )
-@router.post("/public/clienti/completa-registrazione")
-def completa_registrazione_cliente_pubblico(
-    cliente: ClienteCreateRequest,
-    db: Session = Depends(get_db)
-):
-    token = cliente.token
-
-    cliente_pubblico = db.query(NltClientiPubblici).filter(
-        NltClientiPubblici.token == token,
-        NltClientiPubblici.data_scadenza >= datetime.utcnow(),
-        NltClientiPubblici.confermato == False
-    ).first()
-
-    if not cliente_pubblico:
-        raise HTTPException(status_code=404, detail="Token non valido o scaduto")
-
-    dealer = db.query(User).join(
-        SiteAdminSettings,
-        ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
-    ).filter(
-        SiteAdminSettings.slug == cliente_pubblico.dealer_slug
-    ).first()
-
-    if not dealer:
-        raise HTTPException(status_code=404, detail="Dealer non trovato")
-
-    admin_id = dealer.parent_id or dealer.id
-    dealer_id = None if dealer.role == "admin" else dealer.id
-
-    # Identifica cliente tramite CF o P.IVA in base al tipo
-    identificativo = cliente.codice_fiscale if cliente.tipo_cliente == "Privato" else cliente.partita_iva
-
-    cliente_esistente = db.query(Cliente).filter(
-        or_(
-            Cliente.codice_fiscale.ilike(identificativo),
-            Cliente.partita_iva.ilike(identificativo)
-        )
-    ).first()
-
-    site_admin_settings = db.query(SiteAdminSettings).filter(
-        (SiteAdminSettings.dealer_id == dealer.id) if dealer.role == "dealer" else (SiteAdminSettings.admin_id == dealer.id)
-    ).first()
-
-    if not site_admin_settings:
-        raise HTTPException(status_code=404, detail="Configurazione dealer non trovata")
-
-    dealer_corrente_slug = site_admin_settings.slug
-
-    if cliente_esistente:
-        assegnatario = cliente_esistente.dealer or cliente_esistente.admin
-        assegnatario_nome = assegnatario.ragione_sociale or f"{assegnatario.nome} {assegnatario.cognome}"
-
-        if cliente_esistente.admin_id == admin_id and cliente_esistente.dealer_id == dealer_id:
-            # Stesso dealer/admin
-            send_email(
-                admin_id, cliente_esistente.email,
-                "Preventivo Richiesto",
-                "Ecco il tuo preventivo richiesto (link o allegato)"
-            )
-            return {
-                "status": "cliente_gia_presente_stesso_dealer",
-                "email": cliente_esistente.email,
-                "assegnatario_nome": assegnatario_nome
-            }
-
-        # Dealer/admin diversi
-        return {
-            "status": "cliente_esistente_altro_dealer",
-            "cliente_id": cliente_esistente.id,
-            "email_esistente": cliente_esistente.email,
-            "email_nuova": cliente_pubblico.email,
-            "assegnatario_nome": assegnatario_nome,
-            "dealer_corrente": dealer_corrente_slug
-        }
-
-    # Creazione nuovo cliente
-    nuovo_cliente = Cliente(
-        admin_id=admin_id,
-        dealer_id=dealer_id,
-        tipo_cliente=cliente.tipo_cliente,
-        nome=cliente.nome,
-        cognome=cliente.cognome,
-        ragione_sociale=cliente.ragione_sociale if cliente.tipo_cliente == "Società" else None,
-        codice_fiscale=cliente.codice_fiscale,
-        partita_iva=cliente.partita_iva,
-        indirizzo=cliente.indirizzo,
-        telefono=cliente.telefono,
-        email=cliente_pubblico.email,
-        iban=None,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
-    )
-
-    db.add(nuovo_cliente)
-    cliente_pubblico.confermato = True
-    db.commit()
-    db.refresh(nuovo_cliente)
-
-    # Invia preventivo nuovo cliente
-    send_email(
-        admin_id, nuovo_cliente.email,
-        "Preventivo richiesto",
-        "Ecco il tuo preventivo (link o allegato)."
-    )
-
-    return {
-        "status": "cliente_creato",
-        "cliente_id": nuovo_cliente.id,
-        "email": nuovo_cliente.email
-    }
 
 @router.post("/public/clienti/switch-anagrafica")
 def switch_cliente_anagrafica(
@@ -767,3 +661,165 @@ def switch_cliente_anagrafica(
     )
 
     return {"status": "cliente_switch_avvenuto", "cliente_id": cliente.id, "nuovo_dealer": nuovo_dealer_slug}
+
+from fastapi import BackgroundTasks
+
+@router.post("/customers/public/clienti/completa-registrazione")
+async def completa_registrazione_e_preventivo(
+    cliente: ClienteCreateRequest,
+    token: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    # verifica token
+    cliente_pubblico = db.query(NltClientiPubblici).filter(
+        NltClientiPubblici.token == token,
+        NltClientiPubblici.data_scadenza >= datetime.utcnow(),
+        NltClientiPubblici.confermato == False
+    ).first()
+
+    if not cliente_pubblico:
+        raise HTTPException(status_code=404, detail="Token non valido o scaduto")
+
+    dealer = db.query(User).join(
+        SiteAdminSettings,
+        ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
+    ).filter(SiteAdminSettings.slug == cliente_pubblico.dealer_slug).first()
+
+    if not dealer:
+        raise HTTPException(status_code=404, detail="Dealer non trovato")
+
+    # controlla presenza cliente esistente (per CF o P.IVA)
+    cliente_esistente = db.query(Cliente).filter(
+        (Cliente.codice_fiscale == cliente.codice_fiscale) |
+        (Cliente.partita_iva == cliente.partita_iva)
+    ).first()
+
+    if cliente_esistente:
+        # gestire eventualmente switch dealer o altro
+        raise HTTPException(status_code=400, detail="Cliente già presente")
+
+    # Inserisce nuovo cliente
+    nuovo_cliente = Cliente(
+        admin_id=dealer.parent_id or dealer.id,
+        dealer_id=None if dealer.role == "admin" else dealer.id,
+        tipo_cliente=cliente.tipo_cliente,
+        nome=cliente.nome,
+        cognome=cliente.cognome,
+        ragione_sociale=cliente.ragione_sociale if cliente.tipo_cliente == "Società" else None,
+        codice_fiscale=cliente.codice_fiscale,
+        partita_iva=cliente.partita_iva,
+        indirizzo=cliente.indirizzo,
+        telefono=cliente.telefono,
+        email=cliente_pubblico.email,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+
+    db.add(nuovo_cliente)
+
+    # conferma cliente pubblico
+    cliente_pubblico.confermato = True
+    db.commit()
+    db.refresh(nuovo_cliente)
+
+    # Genera il PDF e invia mail asincrona
+    background_tasks.add_task(
+        genera_e_invia_preventivo,
+        cliente_pubblico=cliente_pubblico,
+        tipo_cliente=cliente.tipo_cliente,
+        cliente=nuovo_cliente,
+        dealer=dealer,
+        db_session=db
+    )
+
+    return {"success": True, "message": "Dati ricevuti correttamente! Riceverai presto il preventivo via email."}
+
+async def genera_e_invia_preventivo(cliente_pubblico, tipo_cliente, cliente, dealer, db_session):
+    import httpx
+
+    # Recupero offerta completa da DB
+    offerta = db_session.query(NltOfferte).filter(NltOfferte.slug == cliente_pubblico.slug_offerta).first()
+    dealer_settings = db_session.query(SiteAdminSettings).filter(SiteAdminSettings.slug == cliente_pubblico.dealer_slug).first()
+
+    # Recupero servizi e documenti
+    servizi = db_session.query(NltService).filter(NltService.is_active == True).all()
+    documenti = db_session.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
+
+    # Immagini auto
+    main_image_url = f"{offerta.default_img}&angle=203&width=800"
+    angles = [29, 17, 13, 9, 21]
+
+    car_images = [{"Url": f"{offerta.default_img}&angle={angle}&width=800", "Angle": angle, "Color": "N.D."} for angle in angles]
+
+    # Payload completo per il PDF
+    payload_pdf = {
+        "CustomerFirstName": cliente.nome,
+        "CustomerLastName": cliente.cognome,
+        "CustomerCompanyName": cliente.ragione_sociale or "",
+        "TipoCliente": tipo_cliente,
+        "DocumentiNecessari": [doc.documento for doc in documenti],
+        "CarMainImageUrl": main_image_url,
+        "CarImages": car_images,
+        "Auto": {
+            "Marca": offerta.marca,
+            "Modello": offerta.modello,
+            "Versione": offerta.versione,
+            "DescrizioneVersione": offerta.versione,
+            "Note": "Richiesta preventivo web"
+        },
+        "Servizi": [{"Nome": s.name, "Opzione": s.conditions["options"][0]} for s in servizi],
+        "DatiEconomici": {
+            "Durata": cliente_pubblico.durata,
+            "KmTotali": cliente_pubblico.km,
+            "Anticipo": cliente_pubblico.anticipo,
+            "Canone": cliente_pubblico.canone
+        },
+        "AdminInfo": {
+            "Email": dealer_settings.email,
+            "CompanyName": dealer_settings.ragione_sociale,
+            "LogoUrl": dealer_settings.logo_url
+        },
+        "DealerInfo": None,
+        "NoteAuto": "Richiesta da sito web",
+        "Player": "Web"
+    }
+
+    # Genera PDF (usando endpoint attuale)
+    async with httpx.AsyncClient() as client:
+        pdf_res = await client.post("https://corewebapp-azcore.up.railway.app/api/Pdf/GenerateOffer", json=payload_pdf)
+        pdf_blob = pdf_res.content
+
+    # Salva su Supabase e DB
+    file_name = f"{uuid.uuid4()}.pdf"
+    supabase_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_name}"
+
+    headers = {"Authorization": f"Bearer {SUPABASE_API_KEY}", "Content-Type": "application/pdf"}
+    async with httpx.AsyncClient() as client:
+        upload_res = await client.put(supabase_url, content=pdf_blob, headers=headers)
+
+    file_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{file_name}"
+
+    nuovo_preventivo = NltPreventivi(
+        cliente_id=cliente.id,
+        file_url=file_url,
+        creato_da=dealer.id,
+        marca=offerta.marca,
+        modello=offerta.modello,
+        durata=cliente_pubblico.durata,
+        km_totali=cliente_pubblico.km,
+        anticipo=cliente_pubblico.anticipo,
+        canone=cliente_pubblico.canone,
+        visibile=1,
+        preventivo_assegnato_a=dealer.id,
+        note="Richiesta web",
+        player="Web"
+    )
+
+    db_session.add(nuovo_preventivo)
+    db_session.commit()
+
+    # invia mail all'utente con link preventivo
+    subject = "Il tuo preventivo è pronto!"
+    body = f"Clicca il link per scaricare il preventivo: {file_url}"
+    send_email(dealer.id, cliente.email, subject, body)
