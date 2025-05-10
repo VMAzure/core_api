@@ -630,8 +630,7 @@ def completa_registrazione_cliente_pubblico(
 
     dealer = db.query(User).join(
         SiteAdminSettings,
-        ((SiteAdminSettings.dealer_id == User.id) | 
-         ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
+        ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
     ).filter(
         SiteAdminSettings.slug == cliente_pubblico.dealer_slug
     ).first()
@@ -647,18 +646,27 @@ def completa_registrazione_cliente_pubblico(
         Cliente.admin_id == admin_id
     ).first()
 
+    # Recupero corretto dello slug del dealer corrente
+    site_admin_settings = db.query(SiteAdminSettings).filter(
+        SiteAdminSettings.dealer_id == dealer.id if dealer.role == "dealer" else SiteAdminSettings.admin_id == dealer.id
+    ).first()
+
+    if not site_admin_settings:
+        raise HTTPException(status_code=404, detail="Configurazione dealer non trovata")
+
+    dealer_corrente_slug = site_admin_settings.slug
+
     if cliente_esistente:
         assegnatario = cliente_esistente.dealer or cliente_esistente.admin
         assegnatario_nome = assegnatario.ragione_sociale or f"{assegnatario.nome} {assegnatario.cognome}"
 
-        # Risposta chiara per il frontend
         return {
             "status": "cliente_esistente",
             "cliente_id": cliente_esistente.id,
             "email": cliente_esistente.email,
             "codice_fiscale": cliente.codice_fiscale,
             "assegnatario_nome": assegnatario_nome,
-            "dealer_corrente": dealer.slug
+            "dealer_corrente": dealer_corrente_slug  # ✅ corretto ora
         }
 
     nuovo_cliente = Cliente(
