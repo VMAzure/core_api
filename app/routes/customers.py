@@ -2,13 +2,15 @@
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from app.database import get_db
-from app.models import User, Cliente, ClienteModifica, NltPreventivi, NltPreventiviLinks, NltClientiPubblici
+from app.models import User, Cliente, ClienteModifica, NltPreventivi, NltPreventiviLinks, NltClientiPubblici, SiteAdminSettings
 from fastapi_jwt_auth import AuthJWT
 from typing import List, Optional
 from app.schemas import ClienteResponse, ClienteCreateRequest, NltClientiPubbliciCreate, NltClientiPubbliciResponse
 from pydantic import BaseModel
 import uuid
 from app.utils.email import send_email
+
+
 
 
 router = APIRouter()
@@ -429,7 +431,7 @@ def crea_cliente_pubblico(
     db: Session = Depends(get_db)
 ):
     # Verifica dealer_slug valido
-    dealer = db.query(User).filter(User.slug == payload.dealer_slug).first()
+    dealer = db.query(User).join(SiteAdminSettings, User.id == SiteAdminSettings.admin_id).filter(SiteAdminSettings.slug == payload.dealer_slug).first()
     if not dealer:
         raise HTTPException(status_code=404, detail="Dealer non trovato.")
 
