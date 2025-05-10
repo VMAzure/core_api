@@ -10,6 +10,7 @@ from app.schemas import ClienteResponse, ClienteCreateRequest, NltClientiPubblic
 from pydantic import BaseModel
 import uuid
 from app.utils.email import send_email
+from sqlalchemy import or_
 
 
 
@@ -641,14 +642,18 @@ def completa_registrazione_cliente_pubblico(
     admin_id = dealer.parent_id or dealer.id
     dealer_id = None if dealer.role == "admin" else dealer.id
 
+    # Identifica cliente tramite CF o P.IVA in base al tipo
+    identificativo = cliente.codice_fiscale if cliente.tipo_cliente == "Privato" else cliente.partita_iva
+
     cliente_esistente = db.query(Cliente).filter(
-        Cliente.codice_fiscale.ilike(cliente.codice_fiscale),
-        Cliente.admin_id == admin_id
+        or_(
+            Cliente.codice_fiscale.ilike(identificativo),
+            Cliente.partita_iva.ilike(identificativo)
+        )
     ).first()
 
-    # Recupero corretto dello slug del dealer corrente
     site_admin_settings = db.query(SiteAdminSettings).filter(
-        SiteAdminSettings.dealer_id == dealer.id if dealer.role == "dealer" else SiteAdminSettings.admin_id == dealer.id
+        (SiteAdminSettings.dealer_id == dealer.id) if dealer.role == "dealer" else (SiteAdminSettings.admin_id == dealer.id)
     ).first()
 
     if not site_admin_settings:
@@ -660,15 +665,30 @@ def completa_registrazione_cliente_pubblico(
         assegnatario = cliente_esistente.dealer or cliente_esistente.admin
         assegnatario_nome = assegnatario.ragione_sociale or f"{assegnatario.nome} {assegnatario.cognome}"
 
+        if cliente_esistente.admin_id == admin_id and cliente_esistente.dealer_id == dealer_id:
+            # Stesso dealer/admin
+            send_email(
+                admin_id, cliente_esistente.email,
+                "Preventivo Richiesto",
+                "Ecco il tuo preventivo richiesto (link o allegato)"
+            )
+            return {
+                "status": "cliente_gia_presente_stesso_dealer",
+                "email": cliente_esistente.email,
+                "assegnatario_nome": assegnatario_nome
+            }
+
+        # Dealer/admin diversi
         return {
-            "status": "cliente_esistente",
+            "status": "cliente_esistente_altro_dealer",
             "cliente_id": cliente_esistente.id,
-            "email": cliente_esistente.email,
-            "codice_fiscale": cliente.codice_fiscale,
+            "email_esistente": cliente_esistente.email,
+            "email_nuova": cliente_pubblico.email,
             "assegnatario_nome": assegnatario_nome,
-            "dealer_corrente": dealer_corrente_slug  # ✅ corretto ora
+            "dealer_corrente": dealer_corrente_slug
         }
 
+    # Creazione nuovo cliente
     nuovo_cliente = Cliente(
         admin_id=admin_id,
         dealer_id=dealer_id,
@@ -691,45 +711,59 @@ def completa_registrazione_cliente_pubblico(
     db.commit()
     db.refresh(nuovo_cliente)
 
+    # Invia preventivo nuovo cliente
+    send_email(
+        admin_id, nuovo_cliente.email,
+        "Preventivo richiesto",
+        "Ecco il tuo preventivo (link o allegato)."
+    )
+
     return {
         "status": "cliente_creato",
         "cliente_id": nuovo_cliente.id,
         "email": nuovo_cliente.email
     }
 
-
-
-
-@router.put("/public/clienti/{cliente_id}/switch-dealer/{nuovo_dealer_id}")
-def switch_cliente_dealer(
+@router.post("/public/clienti/switch-anagrafica")
+def switch_cliente_anagrafica(
     cliente_id: int,
-    nuovo_dealer_id: int,
+    nuovo_dealer_slug: str,
+    nuova_email: str,
     db: Session = Depends(get_db)
 ):
-    # Verifica esistenza cliente
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
 
-    # Verifica esistenza nuovo dealer
-    nuovo_dealer = db.query(User).filter(User.id == nuovo_dealer_id, User.role == "dealer").first()
-    if not nuovo_dealer:
-        raise HTTPException(status_code=404, detail="Nuovo dealer non trovato")
+    nuovo_dealer = db.query(User).join(SiteAdminSettings).filter(
+        SiteAdminSettings.slug == nuovo_dealer_slug
+    ).first()
 
-    # Aggiorna il dealer del cliente
-    cliente.dealer_id = nuovo_dealer_id
+    if not nuovo_dealer:
+        raise HTTPException(status_code=404, detail="Dealer non trovato")
+
+    vecchio_dealer = cliente.dealer or cliente.admin
+    vecchio_nome = vecchio_dealer.ragione_sociale or f"{vecchio_dealer.nome} {vecchio_dealer.cognome}"
+
+    cliente.admin_id = nuovo_dealer.parent_id or nuovo_dealer.id
+    cliente.dealer_id = None if nuovo_dealer.role == "admin" else nuovo_dealer.id
+    cliente.email = nuova_email
     cliente.updated_at = datetime.utcnow()
 
-    try:
-        db.commit()
-        db.refresh(cliente)
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Errore durante lo switch del dealer")
+    db.commit()
 
-    return {
-        "success": True,
-        "message": f"Cliente associato correttamente al nuovo dealer con ID {nuovo_dealer_id}",
-        "cliente_id": cliente_id,
-        "nuovo_dealer_id": nuovo_dealer_id
-    }
+    # Invia mail al vecchio dealer per avvisarlo
+    send_email(
+        vecchio_dealer.id, vecchio_dealer.email,
+        "Notifica cambio assegnazione cliente",
+        f"Il cliente {cliente.nome} {cliente.cognome} ha trasferito la sua anagrafica al nuovo dealer: {nuovo_dealer_slug}"
+    )
+
+    # Invia preventivo al cliente con nuovo dealer
+    send_email(
+        cliente.admin_id, cliente.email,
+        "Preventivo aggiornato con nuovo dealer",
+        "Ecco il tuo preventivo aggiornato (link o allegato)."
+    )
+
+    return {"status": "cliente_switch_avvenuto", "cliente_id": cliente.id, "nuovo_dealer": nuovo_dealer_slug}
