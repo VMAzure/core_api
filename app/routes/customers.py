@@ -721,3 +721,37 @@ def completa_registrazione_cliente_pubblico(
 
     return nuovo_cliente
 
+
+@router.put("/public/clienti/{cliente_id}/switch-dealer/{nuovo_dealer_id}")
+def switch_cliente_dealer(
+    cliente_id: int,
+    nuovo_dealer_id: int,
+    db: Session = Depends(get_db)
+):
+    # Verifica esistenza cliente
+    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+
+    # Verifica esistenza nuovo dealer
+    nuovo_dealer = db.query(User).filter(User.id == nuovo_dealer_id, User.role == "dealer").first()
+    if not nuovo_dealer:
+        raise HTTPException(status_code=404, detail="Nuovo dealer non trovato")
+
+    # Aggiorna il dealer del cliente
+    cliente.dealer_id = nuovo_dealer_id
+    cliente.updated_at = datetime.utcnow()
+
+    try:
+        db.commit()
+        db.refresh(cliente)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Errore durante lo switch del dealer")
+
+    return {
+        "success": True,
+        "message": f"Cliente associato correttamente al nuovo dealer con ID {nuovo_dealer_id}",
+        "cliente_id": cliente_id,
+        "nuovo_dealer_id": nuovo_dealer_id
+    }
