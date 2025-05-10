@@ -491,10 +491,14 @@ def conferma_cliente_pubblico(token: str, db: Session = Depends(get_db)):
     if not cliente_pubblico:
         raise HTTPException(status_code=404, detail="Token non valido o scaduto")
 
-    # Controlla se cliente esiste già in tabella clienti
-    cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(cliente_pubblico.email)).first()
+    cliente_esistente = db.query(Cliente).filter(
+        Cliente.email.ilike(cliente_pubblico.email)
+    ).first()
 
-    dealer_richiesto = db.query(User).join(SiteAdminSettings).filter(
+    dealer_richiesto = db.query(User).join(
+        SiteAdminSettings,
+        SiteAdminSettings.admin_id == User.id
+    ).filter(
         SiteAdminSettings.slug == cliente_pubblico.dealer_slug
     ).first()
 
