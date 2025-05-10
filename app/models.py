@@ -710,7 +710,7 @@ class NltClientiPubblici(Base):
     km = Column(Integer, nullable=True)
 
 
-    class NltClientiPubbliciCreate(BaseModel):
+class NltClientiPubbliciCreate(BaseModel):
     email: str
     dealer_slug: str
     slug_offerta: Optional[str] = None

@@ -165,9 +165,13 @@ class ClienteConsensoResponse(ClienteConsensoRequest):
     class Config:
         orm_mode = True
 
+from pydantic import BaseModel
+from typing import Optional
+from uuid import UUID
+from datetime import datetime
 
 class NltClientiPubbliciBase(BaseModel):
-    email: EmailStr
+    email: str
     dealer_slug: str
 
 class NltClientiPubbliciCreate(NltClientiPubbliciBase):
@@ -177,7 +181,6 @@ class NltClientiPubbliciCreate(NltClientiPubbliciBase):
     durata: Optional[int] = None
     km: Optional[int] = None
 
-
 class NltClientiPubbliciResponse(NltClientiPubbliciBase):
     id: UUID
     token: str
@@ -185,12 +188,13 @@ class NltClientiPubbliciResponse(NltClientiPubbliciBase):
     data_creazione: datetime
     data_scadenza: datetime
     confermato: bool
-    slug_offerta: Optional[str]
-    anticipo: Optional[float]
-    canone: Optional[float]
-    durata: Optional[int]
-    km: Optional[int]
+    slug_offerta: Optional[str] = None
+    anticipo: Optional[float] = None
+    canone: Optional[float] = None
+    durata: Optional[int] = None
+    km: Optional[int] = None
     stato: Optional[str]
 
     class Config:
         orm_mode = True
+
