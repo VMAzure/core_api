@@ -430,8 +430,14 @@ def crea_cliente_pubblico(
     payload: NltClientiPubbliciCreate,
     db: Session = Depends(get_db)
 ):
-    # Verifica dealer_slug valido
-    dealer = db.query(User).join(SiteAdminSettings, User.id == SiteAdminSettings.admin_id).filter(SiteAdminSettings.slug == payload.dealer_slug).first()
+    # ✅ Aggiornata logica di ricerca dealer/admin tramite dealer_slug
+    dealer = db.query(User).join(
+        SiteAdminSettings,
+        ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
+    ).filter(
+        SiteAdminSettings.slug == payload.dealer_slug
+    ).first()
+
     if not dealer:
         raise HTTPException(status_code=404, detail="Dealer non trovato.")
 
@@ -463,7 +469,7 @@ def crea_cliente_pubblico(
 
     # 🔥 Invio mail con link frontend contenente il token
     subject = "Completa la tua richiesta di preventivo"
-    url_conferma = f"https://corewebapp-azcore.up.railway.app/AZURELease/dealer/conferma-dati-cliente.html?token={token}"
+    url_conferma = f"https://corewebapp-azcore.up.railway.app/AZURELease/html/conferma-dati-cliente.html?token={token}"
     body = f"""
     <p>Gentile cliente,</p>
     <p>clicca sul seguente link per completare la tua richiesta di preventivo:</p>
@@ -481,6 +487,7 @@ def crea_cliente_pubblico(
 
     return nuovo_cliente_pubblico
 
+
 @router.get("/public/clienti/conferma/{token}")
 def conferma_cliente_pubblico(token: str, db: Session = Depends(get_db)):
     cliente_pubblico = db.query(NltClientiPubblici).filter(
@@ -491,19 +498,17 @@ def conferma_cliente_pubblico(token: str, db: Session = Depends(get_db)):
     if not cliente_pubblico:
         raise HTTPException(status_code=404, detail="Token non valido o scaduto")
 
-    cliente_esistente = db.query(Cliente).filter(
-        Cliente.email.ilike(cliente_pubblico.email)
-    ).first()
+    cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(cliente_pubblico.email)).first()
 
     dealer_richiesto = db.query(User).join(
         SiteAdminSettings,
-        SiteAdminSettings.admin_id == User.id
+        ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
     ).filter(
         SiteAdminSettings.slug == cliente_pubblico.dealer_slug
     ).first()
 
     if not dealer_richiesto:
-        raise HTTPException(status_code=404, detail="Dealer non trovato")
+        raise HTTPException(status_code=404, detail="Dealer non trovato per slug fornito")
 
     response = {
         "email": cliente_pubblico.email,
@@ -537,3 +542,4 @@ def conferma_cliente_pubblico(token: str, db: Session = Depends(get_db)):
         response["stato"] = "nuovo_cliente"
 
     return response
+
