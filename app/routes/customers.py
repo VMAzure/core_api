@@ -505,11 +505,12 @@ def crea_cliente_pubblico(
         <p><a href="{url}">{url}</a></p>
         """
 
-    try:
-        send_email(admin_id, payload.email, subject, body)
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Errore invio email: {str(e)}")
+    # try:
+    #     send_email(admin_id, payload.email, subject, body)
+    # except Exception as e:
+    #     db.rollback()
+    #     raise HTTPException(status_code=500, detail=f"Errore invio email: {str(e)}")
+
 
     return NltClientiPubbliciResponse(
         id=nuovo_cliente_pubblico.id,
