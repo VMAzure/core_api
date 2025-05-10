@@ -656,10 +656,12 @@ def crea_cliente_pubblico(
 
 @router.post("/public/clienti/completa-registrazione", response_model=ClienteResponse)
 def completa_registrazione_cliente_pubblico(
-    token: str,
     cliente: ClienteCreateRequest,
     db: Session = Depends(get_db)
 ):
+    # ✅ Estrai il token dal payload JSON
+    token = cliente.token
+
     # Verifica token e recupera dati da NltClientiPubblici
     cliente_pubblico = db.query(NltClientiPubblici).filter(
         NltClientiPubblici.token == token,
@@ -713,6 +715,7 @@ def completa_registrazione_cliente_pubblico(
     db.refresh(nuovo_cliente)
 
     return nuovo_cliente
+
 
 
 @router.put("/public/clienti/{cliente_id}/switch-dealer/{nuovo_dealer_id}")

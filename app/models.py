@@ -718,3 +718,19 @@ class NltClientiPubbliciCreate(BaseModel):
     canone: Optional[float] = None
     durata: Optional[int] = None
     km: Optional[int] = None
+
+class ClienteCreateRequest(BaseModel):
+    token: str  # ✅ aggiungi il token qui
+    tipo_cliente: str
+    nome: str
+    cognome: str
+    ragione_sociale: Optional[str] = None
+    codice_fiscale: Optional[str] = None
+    partita_iva: Optional[str] = None
+    indirizzo: str
+    telefono: str
+    email: str  # Se già presente nel payload
+    privacy: bool
+    newsletter: bool
+    marketing: bool
+    dealer_slug: str
