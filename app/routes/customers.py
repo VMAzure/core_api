@@ -571,3 +571,153 @@ def conferma_cliente_pubblico(token: str, db: Session = Depends(get_db)):
 
     return response
 
+@router.post("/public/clienti", response_model=NltClientiPubbliciResponse)
+def crea_cliente_pubblico(
+    payload: NltClientiPubbliciCreate,
+    db: Session = Depends(get_db)
+):
+    # Recupera il dealer tramite slug
+    dealer = db.query(User).join(
+        SiteAdminSettings,
+        ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
+    ).filter(
+        SiteAdminSettings.slug == payload.dealer_slug
+    ).first()
+
+    if not dealer:
+        raise HTTPException(status_code=404, detail="Dealer non trovato.")
+
+    # Controlla se il cliente è già censito
+    cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(payload.email)).first()
+
+    # Genera token e scadenza
+    token = str(uuid.uuid4())
+    data_creazione = datetime.utcnow()
+    data_scadenza = data_creazione + timedelta(days=7)
+
+    # Determina stato cliente
+    if cliente_esistente:
+        if cliente_esistente.dealer_id == dealer.id:
+            stato_cliente = "cliente_stesso_dealer"
+        else:
+            stato_cliente = "cliente_altro_dealer"
+    else:
+        stato_cliente = "nuovo_cliente"
+
+    # Salva nella tabella NltClientiPubblici
+    nuovo_cliente_pubblico = NltClientiPubblici(
+        email=payload.email,
+        dealer_slug=payload.dealer_slug,
+        token=token,
+        data_creazione=data_creazione,
+        data_scadenza=data_scadenza,
+        confermato=False
+    )
+
+    db.add(nuovo_cliente_pubblico)
+    db.commit()
+    db.refresh(nuovo_cliente_pubblico)
+
+    # Gestione email differenziata
+    admin_id = dealer.parent_id or dealer.id
+    subject = "Completa la tua richiesta di preventivo"
+
+    base_url_frontend = "https://corewebapp-azcore.up.railway.app/AZURELease/html"
+
+    if stato_cliente == "nuovo_cliente":
+        url = f"{base_url_frontend}/conferma-dati-cliente.html?token={token}"
+        body = f"""
+        <p>Gentile cliente, clicca per completare i tuoi dati:</p>
+        <p><a href="{url}">{url}</a></p>
+        """
+    elif stato_cliente == "cliente_stesso_dealer":
+        url = f"{base_url_frontend}/scarica-preventivo.html?token={token}"
+        body = f"""
+        <p>Gentile cliente, il tuo preventivo è già pronto:</p>
+        <p><a href="{url}">Scarica preventivo</a></p>
+        """
+    else:  # cliente_altro_dealer
+        url = f"{base_url_frontend}/scelta-dealer.html?token={token}"
+        body = f"""
+        <p>Gentile cliente, risultano i tuoi dati già registrati presso un altro dealer.</p>
+        <p>Clicca per scegliere da chi vuoi ricevere il preventivo:</p>
+        <p><a href="{url}">{url}</a></p>
+        """
+
+    try:
+        send_email(admin_id, payload.email, subject, body)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Errore invio email: {str(e)}")
+
+    return NltClientiPubbliciResponse(
+        id=nuovo_cliente_pubblico.id,
+        email=payload.email,
+        dealer_slug=payload.dealer_slug,
+        token=token,
+        data_creazione=data_creazione,
+        data_scadenza=data_scadenza,
+        confermato=False,
+        stato=stato_cliente
+    )
+
+@router.post("/public/clienti/completa-registrazione", response_model=ClienteResponse)
+def completa_registrazione_cliente_pubblico(
+    token: str,
+    cliente: ClienteCreateRequest,
+    db: Session = Depends(get_db)
+):
+    # Verifica token e recupera dati da NltClientiPubblici
+    cliente_pubblico = db.query(NltClientiPubblici).filter(
+        NltClientiPubblici.token == token,
+        NltClientiPubblici.data_scadenza >= datetime.utcnow(),
+        NltClientiPubblici.confermato == False
+    ).first()
+
+    if not cliente_pubblico:
+        raise HTTPException(status_code=404, detail="Token non valido o scaduto")
+
+    # Recupera il dealer/admin tramite dealer_slug
+    dealer = db.query(User).join(
+        SiteAdminSettings,
+        ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
+    ).filter(
+        SiteAdminSettings.slug == cliente_pubblico.dealer_slug
+    ).first()
+
+    if not dealer:
+        raise HTTPException(status_code=404, detail="Dealer non trovato")
+
+    # Verifica se il cliente è già presente
+    cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(cliente_pubblico.email)).first()
+    
+    if cliente_esistente:
+        raise HTTPException(status_code=400, detail="Cliente già presente")
+
+    # Inserisce nuovo cliente
+    nuovo_cliente = Cliente(
+        admin_id=dealer.parent_id or dealer.id,
+        dealer_id=None if dealer.role == "admin" else dealer.id,
+        tipo_cliente=cliente.tipo_cliente,
+        nome=cliente.nome,
+        cognome=cliente.cognome,
+        ragione_sociale=cliente.ragione_sociale if cliente.tipo_cliente == "Società" else None,
+        codice_fiscale=cliente.codice_fiscale,
+        partita_iva=cliente.partita_iva,
+        indirizzo=cliente.indirizzo,
+        telefono=cliente.telefono,
+        email=cliente_pubblico.email,
+        iban=None,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+
+    db.add(nuovo_cliente)
+
+    # Aggiorna stato confermato
+    cliente_pubblico.confermato = True
+    db.commit()
+    db.refresh(nuovo_cliente)
+
+    return nuovo_cliente
+
