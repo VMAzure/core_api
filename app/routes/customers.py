@@ -426,20 +426,9 @@ def registra_consenso_pubblico(
     return {"success": True, "msg": "Consenso registrato"}
 
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models import User, Cliente, NltClientiPubblici, SiteAdminSettings
-from app.utils.email import send_email
-from app.schemas import NltClientePublicoCreateRequest, NltClientePublicoResponse
-from datetime import datetime, timedelta
-import uuid
-
-router = APIRouter()
-
-@router.post("/public/clienti", response_model=NltClientePublicoResponse)
+@router.post("/public/clienti", response_model=NltClientiPubbliciResponse)
 def crea_cliente_pubblico(
-    payload: NltClientePublicoCreateRequest,
+    payload: NltClientiPubbliciCreate,
     db: Session = Depends(get_db)
 ):
     # Recupera il dealer tramite slug
@@ -461,12 +450,14 @@ def crea_cliente_pubblico(
     data_creazione = datetime.utcnow()
     data_scadenza = data_creazione + timedelta(days=7)
 
-    stato_cliente = "nuovo_cliente"
+    # Determina stato cliente
     if cliente_esistente:
         if cliente_esistente.dealer_id == dealer.id:
             stato_cliente = "cliente_stesso_dealer"
         else:
             stato_cliente = "cliente_altro_dealer"
+    else:
+        stato_cliente = "nuovo_cliente"
 
     # Salva nella tabella NltClientiPubblici
     nuovo_cliente_pubblico = NltClientiPubblici(
@@ -514,14 +505,16 @@ def crea_cliente_pubblico(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Errore invio email: {str(e)}")
 
-    return NltClientePublicoResponse(
+    return NltClientiPubbliciResponse(
+        id=nuovo_cliente_pubblico.id,
         email=payload.email,
         dealer_slug=payload.dealer_slug,
-        stato=stato_cliente,
         token=token,
-        data_scadenza=data_scadenza
+        data_creazione=data_creazione,
+        data_scadenza=data_scadenza,
+        confermato=False,
+        stato=stato_cliente
     )
-
 
 @router.get("/public/clienti/conferma/{token}")
 def conferma_cliente_pubblico(token: str, db: Session = Depends(get_db)):
