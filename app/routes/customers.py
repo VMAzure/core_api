@@ -480,3 +480,56 @@ def crea_cliente_pubblico(
         raise HTTPException(status_code=500, detail=f"Errore invio email: {str(e)}")
 
     return nuovo_cliente_pubblico
+
+@router.get("/public/clienti/conferma/{token}")
+def conferma_cliente_pubblico(token: str, db: Session = Depends(get_db)):
+    cliente_pubblico = db.query(NltClientiPubblici).filter(
+        NltClientiPubblici.token == token,
+        NltClientiPubblici.data_scadenza >= datetime.utcnow()
+    ).first()
+
+    if not cliente_pubblico:
+        raise HTTPException(status_code=404, detail="Token non valido o scaduto")
+
+    # Controlla se cliente esiste già in tabella clienti
+    cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(cliente_pubblico.email)).first()
+
+    dealer_richiesto = db.query(User).join(SiteAdminSettings).filter(
+        SiteAdminSettings.slug == cliente_pubblico.dealer_slug
+    ).first()
+
+    if not dealer_richiesto:
+        raise HTTPException(status_code=404, detail="Dealer non trovato")
+
+    response = {
+        "email": cliente_pubblico.email,
+        "dealer_richiesto": {
+            "id": dealer_richiesto.id,
+            "nome": dealer_richiesto.nome,
+            "ragione_sociale": dealer_richiesto.ragione_sociale
+        },
+        "token": token,
+        "stato": ""
+    }
+
+    if cliente_esistente:
+        dealer_esistente = db.query(User).filter(User.id == cliente_esistente.dealer_id).first()
+        response["cliente"] = {
+            "id": cliente_esistente.id,
+            "nome": cliente_esistente.nome,
+            "cognome": cliente_esistente.cognome,
+            "tipo_cliente": cliente_esistente.tipo_cliente,
+            "dealer_attuale": {
+                "id": dealer_esistente.id,
+                "nome": dealer_esistente.nome,
+                "ragione_sociale": dealer_esistente.ragione_sociale
+            }
+        }
+        if dealer_esistente.id == dealer_richiesto.id:
+            response["stato"] = "cliente_esistente"
+        else:
+            response["stato"] = "conflitto_dealer"
+    else:
+        response["stato"] = "nuovo_cliente"
+
+    return response
