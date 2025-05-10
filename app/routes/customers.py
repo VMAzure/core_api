@@ -664,7 +664,7 @@ def switch_cliente_anagrafica(
 
 from fastapi import BackgroundTasks
 
-@router.post("/customers/public/clienti/completa-registrazione")
+@router.post("/public/clienti/completa-registrazione")
 async def completa_registrazione_e_preventivo(
     cliente: ClienteCreateRequest,
     token: str,
