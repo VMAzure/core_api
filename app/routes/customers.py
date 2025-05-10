@@ -6,6 +6,7 @@ from app.models import User, Cliente, ClienteModifica, NltPreventivi, NltPrevent
 from fastapi_jwt_auth import AuthJWT
 from typing import List, Optional
 from app.schemas import ClienteResponse, ClienteCreateRequest, NltClientiPubbliciCreate, NltClientiPubbliciResponse
+
 from pydantic import BaseModel
 import uuid
 from app.utils.email import send_email
