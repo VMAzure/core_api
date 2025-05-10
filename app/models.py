@@ -720,7 +720,7 @@ class NltClientiPubbliciCreate(BaseModel):
     km: Optional[int] = None
 
 class ClienteCreateRequest(BaseModel):
-    token: str  # ✅ aggiungi il token qui
+    token: str  # ✅ campo mancante da aggiungere
     tipo_cliente: str
     nome: str
     cognome: str
@@ -729,7 +729,7 @@ class ClienteCreateRequest(BaseModel):
     partita_iva: Optional[str] = None
     indirizzo: str
     telefono: str
-    email: str  # Se già presente nel payload
+    email: str
     privacy: bool
     newsletter: bool
     marketing: bool
