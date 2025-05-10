@@ -1,14 +1,13 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.database import get_db
-from app.models import User, Cliente, ClienteModifica, NltPreventivi, NltPreventiviLinks
+from app.models import User, Cliente, ClienteModifica, NltPreventivi, NltPreventiviLinks, NltClientiPubblici
 from fastapi_jwt_auth import AuthJWT
 from typing import List, Optional
-from app.schemas import ClienteResponse, ClienteCreateRequest
+from app.schemas import ClienteResponse, ClienteCreateRequest, NltClientiPubbliciCreate, NltClientiPubbliciResponse
 from pydantic import BaseModel
 import uuid
-
 
 router = APIRouter()
 from app.auth_helpers import (
@@ -420,3 +419,39 @@ def registra_consenso_pubblico(
     db.refresh(nuovo_consenso)
 
     return {"success": True, "msg": "Consenso registrato"}
+
+
+@router.post("/public/clienti", response_model=NltClientiPubbliciResponse)
+def crea_cliente_pubblico(
+    payload: NltClientiPubbliciCreate,
+    db: Session = Depends(get_db)
+):
+    # Verifica se email è già presente in clienti
+    cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(payload.email)).first()
+    if cliente_esistente:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Email già presente per cliente assegnato al dealer con ID {cliente_esistente.dealer_id}."
+        )
+
+    # Genera un token univoco
+    token = str(uuid.uuid4())
+    data_creazione = datetime.utcnow()
+    data_scadenza = data_creazione + timedelta(days=7)
+
+    nuovo_cliente_pubblico = NltClientiPubblici(
+        email=payload.email,
+        dealer_slug=payload.dealer_slug,
+        token=token,
+        data_creazione=data_creazione,
+        data_scadenza=data_scadenza,
+        confermato=False
+    )
+
+    db.add(nuovo_cliente_pubblico)
+    db.commit()
+    db.refresh(nuovo_cliente_pubblico)
+
+    # TODO: Invia email con il link contenente il token (passo successivo)
+
+    return nuovo_cliente_pubblico

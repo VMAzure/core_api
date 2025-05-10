@@ -4,6 +4,8 @@ from typing import Optional
 from datetime import datetime, date
 from pydantic import BaseModel, EmailStr, Field
 import uuid
+from uuid import UUID
+
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -159,6 +161,24 @@ class ClienteConsensoResponse(ClienteConsensoRequest):
     cliente_id: int
     data_consenso: datetime
     attivo: bool  # 👈 aggiunto
+
+    class Config:
+        orm_mode = True
+
+
+class NltClientiPubbliciBase(BaseModel):
+    email: EmailStr
+    dealer_slug: str
+
+class NltClientiPubbliciCreate(NltClientiPubbliciBase):
+    pass
+
+class NltClientiPubbliciResponse(NltClientiPubbliciBase):
+    id: UUID
+    token: str
+    data_creazione: datetime
+    data_scadenza: datetime
+    confermato: bool
 
     class Config:
         orm_mode = True
