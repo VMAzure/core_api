@@ -612,71 +612,82 @@ def crea_cliente_pubblico(payload: NltClientiPubbliciCreate, db: Session = Depen
         durata=payload.durata,
         km=payload.km
     )
-@router.post("/public/clienti/completa-registrazione", response_model=ClienteResponse)
+@router.post("/public/clienti/completa-registrazione")
 def completa_registrazione_cliente_pubblico(
     cliente: ClienteCreateRequest,
     db: Session = Depends(get_db)
 ):
-    try:
-        token = cliente.token
+    token = cliente.token
 
-        cliente_pubblico = db.query(NltClientiPubblici).filter(
-            NltClientiPubblici.token == token,
-            NltClientiPubblici.data_scadenza >= datetime.utcnow(),
-            NltClientiPubblici.confermato == False
-        ).first()
+    cliente_pubblico = db.query(NltClientiPubblici).filter(
+        NltClientiPubblici.token == token,
+        NltClientiPubblici.data_scadenza >= datetime.utcnow(),
+        NltClientiPubblici.confermato == False
+    ).first()
 
-        if not cliente_pubblico:
-            raise HTTPException(status_code=404, detail="Token non valido o scaduto")
+    if not cliente_pubblico:
+        raise HTTPException(status_code=404, detail="Token non valido o scaduto")
 
-        dealer = db.query(User).join(
-            SiteAdminSettings,
-            ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
-        ).filter(
-            SiteAdminSettings.slug == cliente_pubblico.dealer_slug
-        ).first()
+    dealer = db.query(User).join(
+        SiteAdminSettings,
+        ((SiteAdminSettings.dealer_id == User.id) | 
+         ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
+    ).filter(
+        SiteAdminSettings.slug == cliente_pubblico.dealer_slug
+    ).first()
 
-        if not dealer:
-            raise HTTPException(status_code=404, detail="Dealer non trovato")
+    if not dealer:
+        raise HTTPException(status_code=404, detail="Dealer non trovato")
 
-        admin_id = dealer.parent_id or dealer.id
-        if not admin_id:
-            raise HTTPException(status_code=400, detail="Configurazione dealer/admin non valida")
+    admin_id = dealer.parent_id or dealer.id
+    dealer_id = None if dealer.role == "admin" else dealer.id
 
-        cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(cliente_pubblico.email)).first()
-        if cliente_esistente:
-            raise HTTPException(status_code=400, detail="Cliente già presente")
+    cliente_esistente = db.query(Cliente).filter(
+        Cliente.codice_fiscale.ilike(cliente.codice_fiscale),
+        Cliente.admin_id == admin_id
+    ).first()
 
-        nuovo_cliente = Cliente(
-            admin_id=admin_id,
-            dealer_id=None if dealer.role == "admin" else dealer.id,
-            tipo_cliente=cliente.tipo_cliente,
-            nome=cliente.nome,
-            cognome=cliente.cognome,
-            ragione_sociale=cliente.ragione_sociale if cliente.tipo_cliente == "Società" else None,
-            codice_fiscale=cliente.codice_fiscale,
-            partita_iva=cliente.partita_iva,
-            indirizzo=cliente.indirizzo,
-            telefono=cliente.telefono,
-            email=cliente_pubblico.email,
-            iban=None,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
-        )
+    if cliente_esistente:
+        assegnatario = cliente_esistente.dealer or cliente_esistente.admin
+        assegnatario_nome = assegnatario.ragione_sociale or f"{assegnatario.nome} {assegnatario.cognome}"
 
-        db.add(nuovo_cliente)
-        cliente_pubblico.confermato = True
+        # Risposta chiara per il frontend
+        return {
+            "status": "cliente_esistente",
+            "cliente_id": cliente_esistente.id,
+            "email": cliente_esistente.email,
+            "codice_fiscale": cliente.codice_fiscale,
+            "assegnatario_nome": assegnatario_nome,
+            "dealer_corrente": dealer.slug
+        }
 
-        db.commit()
-        db.refresh(nuovo_cliente)
+    nuovo_cliente = Cliente(
+        admin_id=admin_id,
+        dealer_id=dealer_id,
+        tipo_cliente=cliente.tipo_cliente,
+        nome=cliente.nome,
+        cognome=cliente.cognome,
+        ragione_sociale=cliente.ragione_sociale if cliente.tipo_cliente == "Società" else None,
+        codice_fiscale=cliente.codice_fiscale,
+        partita_iva=cliente.partita_iva,
+        indirizzo=cliente.indirizzo,
+        telefono=cliente.telefono,
+        email=cliente_pubblico.email,
+        iban=None,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
 
-        return nuovo_cliente
+    db.add(nuovo_cliente)
+    cliente_pubblico.confermato = True
+    db.commit()
+    db.refresh(nuovo_cliente)
 
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Errore interno server: {str(e)}")
+    return {
+        "status": "cliente_creato",
+        "cliente_id": nuovo_cliente.id,
+        "email": nuovo_cliente.email
+    }
 
 
 
