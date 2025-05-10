@@ -171,11 +171,12 @@ class NltClientiPubbliciBase(BaseModel):
     dealer_slug: str
 
 class NltClientiPubbliciCreate(NltClientiPubbliciBase):
-    slug_offerta: Optional[str]
-    anticipo: Optional[float]
-    canone: Optional[float]
-    durata: Optional[int]
-    km: Optional[int]
+    slug_offerta: Optional[str] = None
+    anticipo: Optional[float] = None
+    canone: Optional[float] = None
+    durata: Optional[int] = None
+    km: Optional[int] = None
+
 
 class NltClientiPubbliciResponse(NltClientiPubbliciBase):
     id: UUID

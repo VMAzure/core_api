@@ -703,10 +703,18 @@ class NltClientiPubblici(Base):
     data_creazione = Column(DateTime, default=datetime.utcnow)
     data_scadenza = Column(DateTime, nullable=False)
     confermato = Column(Boolean, default=False)
-
     slug_offerta = Column(String, nullable=True)
     anticipo = Column(Float, nullable=True)
     canone = Column(Float, nullable=True)
     durata = Column(Integer, nullable=True)
     km = Column(Integer, nullable=True)
 
+
+    class NltClientiPubbliciCreate(BaseModel):
+    email: str
+    dealer_slug: str
+    slug_offerta: Optional[str] = None
+    anticipo: Optional[float] = None
+    canone: Optional[float] = None
+    durata: Optional[int] = None
+    km: Optional[int] = None
