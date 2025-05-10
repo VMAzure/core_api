@@ -165,10 +165,6 @@ class ClienteConsensoResponse(ClienteConsensoRequest):
     class Config:
         orm_mode = True
 
-from pydantic import BaseModel
-from typing import Optional
-from uuid import UUID
-from datetime import datetime
 
 class NltClientiPubbliciBase(BaseModel):
     email: str

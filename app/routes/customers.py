@@ -466,8 +466,14 @@ def crea_cliente_pubblico(
         token=token,
         data_creazione=data_creazione,
         data_scadenza=data_scadenza,
-        confermato=False
+        confermato=False,
+        slug_offerta=str(payload.slug_offerta) if payload.slug_offerta else None,
+        anticipo=float(payload.anticipo) if payload.anticipo is not None else None,
+        canone=float(payload.canone) if payload.canone is not None else None,
+        durata=int(payload.durata) if payload.durata is not None else None,
+        km=int(payload.km) if payload.km is not None else None
     )
+
 
     db.add(nuovo_cliente_pubblico)
     db.commit()
