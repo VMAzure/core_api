@@ -565,10 +565,7 @@ def conferma_cliente_pubblico(token: str, db: Session = Depends(get_db)):
     )
 
 @router.post("/public/clienti", response_model=NltClientiPubbliciResponse)
-def crea_cliente_pubblico(
-    payload: NltClientiPubbliciCreate,
-    db: Session = Depends(get_db)
-):
+def crea_cliente_pubblico(payload: NltClientiPubbliciCreate, db: Session = Depends(get_db)):
     dealer = db.query(User).join(
         SiteAdminSettings,
         ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
@@ -577,20 +574,11 @@ def crea_cliente_pubblico(
     if not dealer:
         raise HTTPException(status_code=404, detail="Dealer non trovato.")
 
-    cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(payload.email)).first()
-
     token = str(uuid.uuid4())
     data_creazione = datetime.utcnow()
     data_scadenza = data_creazione + timedelta(days=7)
 
-    stato_cliente = "nuovo_cliente"
-    if cliente_esistente:
-        if cliente_esistente.dealer_id == dealer.id:
-            stato_cliente = "cliente_stesso_dealer"
-        else:
-            stato_cliente = "cliente_altro_dealer"
-
-    nuovo_cliente_pubblico = NltClientiPubblici(
+    cliente_pubblico = NltClientiPubblici(
         email=payload.email,
         dealer_slug=payload.dealer_slug,
         token=token,
@@ -604,44 +592,15 @@ def crea_cliente_pubblico(
         km=payload.km
     )
 
-    db.add(nuovo_cliente_pubblico)
+    db.add(cliente_pubblico)
     db.commit()
-    db.refresh(nuovo_cliente_pubblico)
-
-    admin_id = dealer.parent_id or dealer.id
-    subject = "Completa la tua richiesta di preventivo"
-    base_url_frontend = "https://corewebapp-azcore.up.railway.app/AZURELease/html"
-
-    if stato_cliente == "nuovo_cliente":
-        url = f"{base_url_frontend}/conferma-dati-cliente.html?token={token}"
-        body = f"""
-        <p>Gentile cliente, clicca per completare i tuoi dati:</p>
-        <p><a href="{url}">{url}</a></p>
-        """
-    elif stato_cliente == "cliente_stesso_dealer":
-        url = f"{base_url_frontend}/scarica-preventivo.html?token={token}"
-        body = f"""
-        <p>Gentile cliente, il tuo preventivo è già pronto:</p>
-        <p><a href="{url}">Scarica preventivo</a></p>
-        """
-    else:
-        url = f"{base_url_frontend}/scelta-dealer.html?token={token}"
-        body = f"""
-        <p>Gentile cliente, risulti registrato con altro dealer. Seleziona:</p>
-        <p><a href="{url}">{url}</a></p>
-        """
-
-    try:
-        send_email(admin_id, payload.email, subject, body)
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Errore invio email: {str(e)}")
+    db.refresh(cliente_pubblico)
 
     return NltClientiPubbliciResponse(
-        id=nuovo_cliente_pubblico.id,
+        id=cliente_pubblico.id,
         email=payload.email,
         dealer_slug=payload.dealer_slug,
-        stato=stato_cliente,
+        stato="nuovo_cliente",
         token=token,
         cliente_id=None,
         data_creazione=data_creazione,
