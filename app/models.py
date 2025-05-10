@@ -720,7 +720,7 @@ class NltClientiPubbliciCreate(BaseModel):
     km: Optional[int] = None
 
 class ClienteCreateRequest(BaseModel):
-    token: str  # ✅ campo mancante da aggiungere
+    token: str
     tipo_cliente: str
     nome: str
     cognome: str

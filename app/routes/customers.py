@@ -659,10 +659,8 @@ def completa_registrazione_cliente_pubblico(
     cliente: ClienteCreateRequest,
     db: Session = Depends(get_db)
 ):
-    # ✅ Estrai il token dal payload JSON
     token = cliente.token
 
-    # Verifica token e recupera dati da NltClientiPubblici
     cliente_pubblico = db.query(NltClientiPubblici).filter(
         NltClientiPubblici.token == token,
         NltClientiPubblici.data_scadenza >= datetime.utcnow(),
@@ -672,7 +670,6 @@ def completa_registrazione_cliente_pubblico(
     if not cliente_pubblico:
         raise HTTPException(status_code=404, detail="Token non valido o scaduto")
 
-    # Recupera il dealer/admin tramite dealer_slug
     dealer = db.query(User).join(
         SiteAdminSettings,
         ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
@@ -683,15 +680,16 @@ def completa_registrazione_cliente_pubblico(
     if not dealer:
         raise HTTPException(status_code=404, detail="Dealer non trovato")
 
-    # Verifica se il cliente è già presente
+    admin_id = dealer.parent_id if dealer.parent_id else dealer.id
+    if not admin_id:
+        raise HTTPException(status_code=400, detail="Configurazione dealer/admin non valida")
+
     cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(cliente_pubblico.email)).first()
-    
     if cliente_esistente:
         raise HTTPException(status_code=400, detail="Cliente già presente")
 
-    # Inserisce nuovo cliente
     nuovo_cliente = Cliente(
-        admin_id=dealer.parent_id or dealer.id,
+        admin_id=admin_id,
         dealer_id=None if dealer.role == "admin" else dealer.id,
         tipo_cliente=cliente.tipo_cliente,
         nome=cliente.nome,
@@ -708,13 +706,17 @@ def completa_registrazione_cliente_pubblico(
     )
 
     db.add(nuovo_cliente)
-
-    # Aggiorna stato confermato
     cliente_pubblico.confermato = True
-    db.commit()
-    db.refresh(nuovo_cliente)
+
+    try:
+        db.commit()
+        db.refresh(nuovo_cliente)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Errore salvataggio cliente: {str(e)}")
 
     return nuovo_cliente
+
 
 
 
