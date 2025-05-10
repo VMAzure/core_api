@@ -179,6 +179,7 @@ class NltClientiPubbliciResponse(NltClientiPubbliciBase):
     data_creazione: datetime
     data_scadenza: datetime
     confermato: bool
+    stato: str  # Aggiunto per gestire i casi specifici nel frontend
 
     class Config:
         orm_mode = True

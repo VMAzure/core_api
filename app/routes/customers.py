@@ -425,12 +425,23 @@ def registra_consenso_pubblico(
     return {"success": True, "msg": "Consenso registrato"}
 
 
-@router.post("/public/clienti", response_model=NltClientiPubbliciResponse)
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.models import User, Cliente, NltClientiPubblici, SiteAdminSettings
+from app.utils.email import send_email
+from app.schemas import NltClientePublicoCreateRequest, NltClientePublicoResponse
+from datetime import datetime, timedelta
+import uuid
+
+router = APIRouter()
+
+@router.post("/public/clienti", response_model=NltClientePublicoResponse)
 def crea_cliente_pubblico(
-    payload: NltClientiPubbliciCreate,
+    payload: NltClientePublicoCreateRequest,
     db: Session = Depends(get_db)
 ):
-    # ✅ Aggiornata logica di ricerca dealer/admin tramite dealer_slug
+    # Recupera il dealer tramite slug
     dealer = db.query(User).join(
         SiteAdminSettings,
         ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
@@ -441,19 +452,22 @@ def crea_cliente_pubblico(
     if not dealer:
         raise HTTPException(status_code=404, detail="Dealer non trovato.")
 
-    # Verifica se email è già presente in clienti
+    # Controlla se il cliente è già censito
     cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(payload.email)).first()
-    if cliente_esistente:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Email già presente per cliente assegnato al dealer con ID {cliente_esistente.dealer_id}."
-        )
 
-    # Genera token e date
+    # Genera token e scadenza
     token = str(uuid.uuid4())
     data_creazione = datetime.utcnow()
     data_scadenza = data_creazione + timedelta(days=7)
 
+    stato_cliente = "nuovo_cliente"
+    if cliente_esistente:
+        if cliente_esistente.dealer_id == dealer.id:
+            stato_cliente = "cliente_stesso_dealer"
+        else:
+            stato_cliente = "cliente_altro_dealer"
+
+    # Salva nella tabella NltClientiPubblici
     nuovo_cliente_pubblico = NltClientiPubblici(
         email=payload.email,
         dealer_slug=payload.dealer_slug,
@@ -467,25 +481,45 @@ def crea_cliente_pubblico(
     db.commit()
     db.refresh(nuovo_cliente_pubblico)
 
-    # 🔥 Invio mail con link frontend contenente il token
+    # Gestione email differenziata
+    admin_id = dealer.parent_id or dealer.id
     subject = "Completa la tua richiesta di preventivo"
-    url_conferma = f"https://corewebapp-azcore.up.railway.app/AZURELease/html/conferma-dati-cliente.html?token={token}"
-    body = f"""
-    <p>Gentile cliente,</p>
-    <p>clicca sul seguente link per completare la tua richiesta di preventivo:</p>
-    <p><a href="{url_conferma}">{url_conferma}</a></p>
-    <p>Il link è valido fino al {data_scadenza.strftime('%d/%m/%Y %H:%M')}.</p>
-    <p>Grazie.</p>
-    """
+
+    base_url_frontend = "https://corewebapp-azcore.up.railway.app/AZURELease/html"
+
+    if stato_cliente == "nuovo_cliente":
+        url = f"{base_url_frontend}/conferma-dati-cliente.html?token={token}"
+        body = f"""
+        <p>Gentile cliente, clicca per completare i tuoi dati:</p>
+        <p><a href="{url}">{url}</a></p>
+        """
+    elif stato_cliente == "cliente_stesso_dealer":
+        url = f"{base_url_frontend}/scarica-preventivo.html?token={token}"
+        body = f"""
+        <p>Gentile cliente, il tuo preventivo è già pronto:</p>
+        <p><a href="{url}">Scarica preventivo</a></p>
+        """
+    else:  # cliente_altro_dealer
+        url = f"{base_url_frontend}/scelta-dealer.html?token={token}"
+        body = f"""
+        <p>Gentile cliente, risultano i tuoi dati già registrati presso un altro dealer.</p>
+        <p>Clicca per scegliere da chi vuoi ricevere il preventivo:</p>
+        <p><a href="{url}">{url}</a></p>
+        """
 
     try:
-        admin_id = dealer.parent_id or dealer.id
         send_email(admin_id, payload.email, subject, body)
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Errore invio email: {str(e)}")
 
-    return nuovo_cliente_pubblico
+    return NltClientePublicoResponse(
+        email=payload.email,
+        dealer_slug=payload.dealer_slug,
+        stato=stato_cliente,
+        token=token,
+        data_scadenza=data_scadenza
+    )
 
 
 @router.get("/public/clienti/conferma/{token}")
