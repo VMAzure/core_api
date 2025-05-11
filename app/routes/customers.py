@@ -770,10 +770,17 @@ async def genera_e_invia_preventivo(
         cliente_pubblico = db_session.query(NltClientiPubblici).filter(
             NltClientiPubblici.token == cliente_pubblico_token
         ).first()
+
         cliente = db_session.query(Cliente).get(cliente_id)
+
         dealer = db_session.query(User).get(dealer_id)
+
         offerta = db_session.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
+
         dealer_settings = db_session.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
+
+        # ✅ Recupera informazioni Admin da utenti
+        admin = db_session.query(User).get(dealer_settings.admin_id)
 
         servizi = db_session.query(NltService).filter(NltService.is_active == True).all()
         documenti = db_session.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
@@ -805,26 +812,32 @@ async def genera_e_invia_preventivo(
                 "Anticipo": cliente_pubblico.anticipo,
                 "Canone": cliente_pubblico.canone
             },
+
+            # ✅ Usando colonne confermate dalla tabella utenti
             "AdminInfo": {
-                "Email": dealer_settings.email,
-                "CompanyName": dealer_settings.ragione_sociale,
-                "LogoUrl": dealer_settings.logo_url
+                "Email": admin.email,
+                "CompanyName": admin.ragione_sociale,
+                "LogoUrl": admin.logo_url
             },
-            "DealerInfo": None,
+
+            # (opzionale) anche informazioni Dealer se necessarie
+            "DealerInfo": {
+                "Email": dealer.email,
+                "CompanyName": dealer.ragione_sociale,
+                "LogoUrl": dealer.logo_url
+            } if dealer else None,
+
             "NoteAuto": "Richiesta da sito web",
             "Player": "Web"
         }
 
-        # STEP PDF GENERATION
-        print("[DEBUG]: Avvio generazione PDF...")
+        # PDF Generation
         async with httpx.AsyncClient(timeout=120) as client:
             pdf_res = await client.post("https://corewebapp-azcore.up.railway.app/api/Pdf/GenerateOffer", json=payload_pdf)
             pdf_res.raise_for_status()
             pdf_blob = pdf_res.content
-        print("[DEBUG]: PDF generato con successo!")
 
-        # STEP SUPABASE UPLOAD
-        print("[DEBUG]: Avvio upload PDF su Supabase...")
+        # Upload Supabase
         file_name = f"{uuid.uuid4()}.pdf"
         supabase_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_name}"
         headers = {"Authorization": f"Bearer {SUPABASE_API_KEY}", "Content-Type": "application/pdf"}
@@ -832,10 +845,8 @@ async def genera_e_invia_preventivo(
             upload_res = await client.put(supabase_url, content=pdf_blob, headers=headers)
             upload_res.raise_for_status()
         file_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{file_name}"
-        print("[DEBUG]: PDF caricato con successo su Supabase:", file_url)
 
-        # STEP DB SAVE
-        print("[DEBUG]: Salvataggio preventivo nel DB...")
+        # Salvataggio preventivo nel DB
         nuovo_preventivo = NltPreventivi(
             cliente_id=cliente.id,
             file_url=file_url,
@@ -854,14 +865,11 @@ async def genera_e_invia_preventivo(
         )
         db_session.add(nuovo_preventivo)
         db_session.commit()
-        print("[DEBUG]: Preventivo salvato con successo nel DB.")
 
-        # STEP EMAIL
-        print("[DEBUG]: Invio email finale...")
+        # Email finale
         subject = "Il tuo preventivo è pronto!"
         body = f"Clicca il link per scaricare il preventivo: {file_url}"
         send_email(dealer.id, cliente.email, subject, body)
-        print("[DEBUG]: Email inviata con successo.")
 
     except Exception as e:
         db_session.rollback()
