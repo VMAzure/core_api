@@ -457,68 +457,36 @@ def crea_cliente_pubblico(
     if cliente_esistente:
         if cliente_esistente.dealer_id == dealer.id:
             stato_cliente = "cliente_stesso_dealer"
-
-            # Genera il preventivo in background
-            background_tasks = BackgroundTasks()
-            background_tasks.add_task(
-                genera_e_invia_preventivo,
-                cliente_pubblico_token=token,
-                slug_offerta=payload.slug_offerta,
-                dealer_slug=payload.dealer_slug,
-                tipo_cliente=cliente_esistente.tipo_cliente,
-                cliente_id=cliente_esistente.id,
-                dealer_id=dealer.id
-            )
-
-            nuovo_cliente_pubblico = NltClientiPubblici(
-                email=payload.email,
-                dealer_slug=payload.dealer_slug,
-                token=token,
-                data_creazione=data_creazione,
-                data_scadenza=data_scadenza,
-                confermato=True,
-                slug_offerta=payload.slug_offerta,
-                anticipo=payload.anticipo,
-                canone=payload.canone,
-                durata=payload.durata,
-                km=payload.km
-            )
-
+            confermato = True
         else:
             stato_cliente = "cliente_altro_dealer"
-            nuovo_cliente_pubblico = NltClientiPubblici(
-                email=payload.email,
-                dealer_slug=payload.dealer_slug,
-                token=token,
-                data_creazione=data_creazione,
-                data_scadenza=data_scadenza,
-                confermato=False,
-                slug_offerta=payload.slug_offerta,
-                anticipo=payload.anticipo,
-                canone=payload.canone,
-                durata=payload.durata,
-                km=payload.km
-            )
-
+            confermato = False
     else:
         stato_cliente = "nuovo_cliente"
-        nuovo_cliente_pubblico = NltClientiPubblici(
-            email=payload.email,
-            dealer_slug=payload.dealer_slug,
-            token=token,
-            data_creazione=data_creazione,
-            data_scadenza=data_scadenza,
-            confermato=False,
-            slug_offerta=payload.slug_offerta,
-            anticipo=payload.anticipo,
-            canone=payload.canone,
-            durata=payload.durata,
-            km=payload.km
-        )
+        confermato = False
+
+    nuovo_cliente_pubblico = NltClientiPubblici(
+        email=payload.email,
+        dealer_slug=payload.dealer_slug,
+        token=token,
+        data_creazione=data_creazione,
+        data_scadenza=data_scadenza,
+        confermato=confermato,
+        slug_offerta=payload.slug_offerta,
+        anticipo=payload.anticipo,
+        canone=payload.canone,
+        durata=payload.durata,
+        km=payload.km
+    )
 
     db.add(nuovo_cliente_pubblico)
     db.commit()
     db.refresh(nuovo_cliente_pubblico)
+
+    # ✅ recupera dealer_settings (aggiunto ora correttamente)
+    dealer_settings = db.query(SiteAdminSettings).filter(
+        SiteAdminSettings.slug == payload.dealer_slug
+    ).first()
 
     return NltClientiPubbliciResponse(
         id=nuovo_cliente_pubblico.id,
@@ -527,10 +495,10 @@ def crea_cliente_pubblico(
         token=token,
         data_creazione=data_creazione,
         data_scadenza=data_scadenza,
-        confermato=nuovo_cliente_pubblico.confermato,
+        confermato=confermato,
         stato=stato_cliente,
         email_esistente=cliente_esistente.email if stato_cliente == "cliente_altro_dealer" else None,
-        dealer_corrente=dealer_settings.slug if stato_cliente == "cliente_altro_dealer" else None,
+        dealer_corrente=dealer_settings.slug if stato_cliente == "cliente_altro_dealer" else None,  # ✅ ora corretto
         assegnatario_nome=cliente_esistente.dealer.ragione_sociale if stato_cliente == "cliente_altro_dealer" else None
     )
 
