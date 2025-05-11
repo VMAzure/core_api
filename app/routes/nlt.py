@@ -461,21 +461,32 @@ async def get_preventivo_completo(preventivo_id: str, dealerId: Optional[int] = 
         "CarImages": []
     }
 
+
+def get_current_user_optional(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    try:
+        Authorize.jwt_required()
+        user_email = Authorize.get_jwt_subject()
+        user = db.query(User).filter(User.email == user_email).first()
+        if not user:
+            return None
+        return user
+    except:
+        return None  # Utente non autenticato (chiamata interna server)
+
 @router.post("/preventivi/{preventivo_id}/genera-link")
 async def genera_link_preventivo(
     preventivo_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
-    # 🔍 Verifica che il preventivo esista
+    # Verifica preventivo
     preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
     if not preventivo:
         raise HTTPException(status_code=404, detail="Preventivo non trovato")
 
-    # 🔐 Genera il token univoco
+    # genera token
     token = str(uuid.uuid4())
 
-    # 📌 Salva il token nella tabella
     nuovo_link = NltPreventiviLinks(
         token=token,
         preventivo_id=preventivo.id
@@ -484,7 +495,6 @@ async def genera_link_preventivo(
     db.add(nuovo_link)
     db.commit()
 
-    # 🔗 URL completo restituito al frontend
     url_download = f"https://coreapi-production-ca29.up.railway.app/nlt/preventivi/download/{token}"
 
     return {
