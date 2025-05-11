@@ -609,7 +609,10 @@ def recupera_preventivo_da_token_cliente(token: str, db: Session = Depends(get_d
     if not cliente_definitivo:
         raise HTTPException(status_code=404, detail="Cliente definitivo non trovato")
 
-    preventivo = db.query(NltPreventivi).filter_by(cliente_id=cliente_definitivo.id).order_by(NltPreventivi.created_at.desc()).first()
+    preventivo = db.query(NltPreventivi)\
+        .filter_by(cliente_id=cliente_definitivo.id)\
+        .order_by(NltPreventivi.created_at.desc())\
+        .first()
 
     if not preventivo:
         return {"preventivo_id": None}

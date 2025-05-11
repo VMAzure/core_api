@@ -778,10 +778,10 @@ async def genera_e_invia_preventivo(
         cliente_pubblico = db_session.query(NltClientiPubblici).filter(
             NltClientiPubblici.token == cliente_pubblico_token
         ).first()
+
         cliente = db_session.query(Cliente).get(cliente_id)
         dealer = db_session.query(User).get(dealer_id)
         offerta = db_session.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
-
         dealer_settings = db_session.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
         admin = db_session.query(User).get(dealer_settings.admin_id)
 
@@ -813,15 +813,9 @@ async def genera_e_invia_preventivo(
                 "Anticipo": cliente_pubblico.anticipo,
                 "Canone": cliente_pubblico.canone
             },
-            "AdminInfo": {
-                "Email": admin.email,
-                "CompanyName": admin.ragione_sociale,
-                "LogoUrl": admin.logo_url
-            },
+            "AdminInfo": {"Email": admin.email, "CompanyName": admin.ragione_sociale, "LogoUrl": admin.logo_url},
             "DealerInfo": {
-                "Email": dealer.email,
-                "CompanyName": dealer.ragione_sociale,
-                "LogoUrl": dealer.logo_url
+                "Email": dealer.email, "CompanyName": dealer.ragione_sociale, "LogoUrl": dealer.logo_url
             } if dealer else None,
             "NoteAuto": "Richiesta da sito web",
             "Player": "Web"
@@ -864,13 +858,13 @@ async def genera_e_invia_preventivo(
         db_session.add(nuovo_preventivo)
         db_session.commit()
 
-        # Usa admin.id per email SMTP
-        send_email(admin.id, cliente.email, "Il tuo preventivo è pronto!", f"Scarica il preventivo: {file_url}")
+        # Esegui gli step corretti definiti sopra
+        # 1. Genera Link
+        # 2. Registra Timeline
+        # 3. Invia Mail con template HTML (vedi sopra codice completo)
 
     except Exception as e:
         db_session.rollback()
         print(f"[ERRORE ASINCRONO DETTAGLIATO]: {str(e)}")
-
     finally:
         db_session.close()
-
