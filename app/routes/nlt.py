@@ -543,9 +543,10 @@ async def download_preventivo(token: str, db: Session = Depends(get_db)):
 async def invia_mail_preventivo(
     preventivo_id: UUID,
     body: dict,
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
+
     preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
     if not preventivo:
         raise HTTPException(status_code=404, detail="Preventivo non trovato")
@@ -557,7 +558,15 @@ async def invia_mail_preventivo(
     email_destinatario = cliente.email
 
     # recupera SMTP (admin)
-    smtp_settings = get_smtp_settings(current_user.parent_id or current_user.id, db)
+    if current_user:
+        user_id = current_user.parent_id or current_user.id
+    else:
+        creatore = db.query(User).filter(User.id == preventivo.creato_da).first()
+        if not creatore:
+            raise HTTPException(status_code=404, detail="Creatore preventivo non trovato")
+        user_id = creatore.parent_id or creatore.id
+
+    smtp_settings = get_smtp_settings(user_id, db)
 
     if not smtp_settings:
         raise HTTPException(status_code=500, detail="SMTP non configurato")
@@ -567,7 +576,7 @@ async def invia_mail_preventivo(
 
     msg = MIMEText(html_body, "html", "utf-8")
     msg["Subject"] = f"Preventivo {preventivo.marca} {preventivo.modello}"
-    msg["From"] = formataddr((smtp_settings.smtp_alias or current_user.email, smtp_settings.smtp_user))
+    msg["From"] = formataddr((smtp_settings.smtp_alias or "Preventivi", smtp_settings.smtp_user))
     msg["To"] = email_destinatario
 
     # Invia mail
@@ -596,7 +605,6 @@ async def invia_mail_preventivo(
 
         db.add(evento)
         db.commit()
-
 
     except smtplib.SMTPException as smtp_err:
         print("❌ Errore SMTP:", smtp_err)
