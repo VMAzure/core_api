@@ -1,7 +1,8 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from app.database import get_db
+from app.database import get_db, engine  # sostituisci con import corretto
+
 from app.models import User, Cliente, ClienteModifica, NltPreventivi, NltPreventiviLinks, NltClientiPubblici, SiteAdminSettings
 from fastapi_jwt_auth import AuthJWT
 from typing import List, Optional
@@ -737,97 +738,112 @@ def completa_registrazione_cliente_pubblico(
         cliente_pubblico=cliente_pubblico,
         tipo_cliente=cliente.tipo_cliente,
         cliente=nuovo_cliente,
-        dealer=dealer,
-        db_session=db
+        dealer=dealer
     )
+
 
     return {"success": True, "message": "Dati ricevuti correttamente! Riceverai presto il preventivo via email."}
 
-async def genera_e_invia_preventivo(cliente_pubblico, tipo_cliente, cliente, dealer, db_session):
+from sqlalchemy.orm import sessionmaker
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+async def genera_e_invia_preventivo(cliente_pubblico, tipo_cliente, cliente, dealer):
     import httpx
+    db_session = SessionLocal()
 
-    # Recupero offerta completa da DB
-    offerta = db_session.query(NltOfferte).filter(NltOfferte.slug == cliente_pubblico.slug_offerta).first()
-    dealer_settings = db_session.query(SiteAdminSettings).filter(SiteAdminSettings.slug == cliente_pubblico.dealer_slug).first()
+    try:
+        # Recupero offerta completa da DB
+        offerta = db_session.query(NltOfferte).filter(NltOfferte.slug == cliente_pubblico.slug_offerta).first()
+        dealer_settings = db_session.query(SiteAdminSettings).filter(SiteAdminSettings.slug == cliente_pubblico.dealer_slug).first()
 
-    # Recupero servizi e documenti
-    servizi = db_session.query(NltService).filter(NltService.is_active == True).all()
-    documenti = db_session.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
+        # Recupero servizi e documenti
+        servizi = db_session.query(NltService).filter(NltService.is_active == True).all()
+        documenti = db_session.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
 
-    # Immagini auto
-    main_image_url = f"{offerta.default_img}&angle=203&width=800"
-    angles = [29, 17, 13, 9, 21]
+        # Immagini auto
+        main_image_url = f"{offerta.default_img}&angle=203&width=800"
+        angles = [29, 17, 13, 9, 21]
 
-    car_images = [{"Url": f"{offerta.default_img}&angle={angle}&width=800", "Angle": angle, "Color": "N.D."} for angle in angles]
+        car_images = [{"Url": f"{offerta.default_img}&angle={angle}&width=800", "Angle": angle, "Color": "N.D."} for angle in angles]
 
-    # Payload completo per il PDF
-    payload_pdf = {
-        "CustomerFirstName": cliente.nome,
-        "CustomerLastName": cliente.cognome,
-        "CustomerCompanyName": cliente.ragione_sociale or "",
-        "TipoCliente": tipo_cliente,
-        "DocumentiNecessari": [doc.documento for doc in documenti],
-        "CarMainImageUrl": main_image_url,
-        "CarImages": car_images,
-        "Auto": {
-            "Marca": offerta.marca,
-            "Modello": offerta.modello,
-            "Versione": offerta.versione,
-            "DescrizioneVersione": offerta.versione,
-            "Note": "Richiesta preventivo web"
-        },
-        "Servizi": [{"Nome": s.name, "Opzione": s.conditions["options"][0]} for s in servizi],
-        "DatiEconomici": {
-            "Durata": cliente_pubblico.durata,
-            "KmTotali": cliente_pubblico.km,
-            "Anticipo": cliente_pubblico.anticipo,
-            "Canone": cliente_pubblico.canone
-        },
-        "AdminInfo": {
-            "Email": dealer_settings.email,
-            "CompanyName": dealer_settings.ragione_sociale,
-            "LogoUrl": dealer_settings.logo_url
-        },
-        "DealerInfo": None,
-        "NoteAuto": "Richiesta da sito web",
-        "Player": "Web"
-    }
+        # Payload completo per il PDF
+        payload_pdf = {
+            "CustomerFirstName": cliente.nome,
+            "CustomerLastName": cliente.cognome,
+            "CustomerCompanyName": cliente.ragione_sociale or "",
+            "TipoCliente": tipo_cliente,
+            "DocumentiNecessari": [doc.documento for doc in documenti],
+            "CarMainImageUrl": main_image_url,
+            "CarImages": car_images,
+            "Auto": {
+                "Marca": offerta.marca,
+                "Modello": offerta.modello,
+                "Versione": offerta.versione,
+                "DescrizioneVersione": offerta.versione,
+                "Note": "Richiesta preventivo web"
+            },
+            "Servizi": [{"Nome": s.name, "Opzione": s.conditions["options"][0]} for s in servizi],
+            "DatiEconomici": {
+                "Durata": cliente_pubblico.durata,
+                "KmTotali": cliente_pubblico.km,
+                "Anticipo": cliente_pubblico.anticipo,
+                "Canone": cliente_pubblico.canone
+            },
+            "AdminInfo": {
+                "Email": dealer_settings.email,
+                "CompanyName": dealer_settings.ragione_sociale,
+                "LogoUrl": dealer_settings.logo_url
+            },
+            "DealerInfo": None,
+            "NoteAuto": "Richiesta da sito web",
+            "Player": "Web"
+        }
 
-    # Genera PDF (usando endpoint attuale)
-    async with httpx.AsyncClient() as client:
-        pdf_res = await client.post("https://corewebapp-azcore.up.railway.app/api/Pdf/GenerateOffer", json=payload_pdf)
-        pdf_blob = pdf_res.content
+        # Genera PDF (usando endpoint attuale)
+        async with httpx.AsyncClient(timeout=120) as client:
+            pdf_res = await client.post("https://corewebapp-azcore.up.railway.app/api/Pdf/GenerateOffer", json=payload_pdf)
+            pdf_res.raise_for_status()
+            pdf_blob = pdf_res.content
 
-    # Salva su Supabase e DB
-    file_name = f"{uuid.uuid4()}.pdf"
-    supabase_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_name}"
+        # Salva su Supabase e DB
+        file_name = f"{uuid.uuid4()}.pdf"
+        supabase_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_name}"
 
-    headers = {"Authorization": f"Bearer {SUPABASE_API_KEY}", "Content-Type": "application/pdf"}
-    async with httpx.AsyncClient() as client:
-        upload_res = await client.put(supabase_url, content=pdf_blob, headers=headers)
+        headers = {"Authorization": f"Bearer {SUPABASE_API_KEY}", "Content-Type": "application/pdf"}
+        async with httpx.AsyncClient(timeout=120) as client:
+            upload_res = await client.put(supabase_url, content=pdf_blob, headers=headers)
+            upload_res.raise_for_status()
 
-    file_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{file_name}"
+        file_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{file_name}"
 
-    nuovo_preventivo = NltPreventivi(
-        cliente_id=cliente.id,
-        file_url=file_url,
-        creato_da=dealer.id,
-        marca=offerta.marca,
-        modello=offerta.modello,
-        durata=cliente_pubblico.durata,
-        km_totali=cliente_pubblico.km,
-        anticipo=cliente_pubblico.anticipo,
-        canone=cliente_pubblico.canone,
-        visibile=1,
-        preventivo_assegnato_a=dealer.id,
-        note="Richiesta web",
-        player="Web"
-    )
+        nuovo_preventivo = NltPreventivi(
+            cliente_id=cliente.id,
+            file_url=file_url,
+            creato_da=dealer.id,
+            marca=offerta.marca,
+            modello=offerta.modello,
+            durata=cliente_pubblico.durata,
+            km_totali=cliente_pubblico.km,
+            anticipo=cliente_pubblico.anticipo,
+            canone=cliente_pubblico.canone,
+            visibile=1,
+            preventivo_assegnato_a=dealer.id,
+            note="Richiesta web",
+            player="Web"
+        )
 
-    db_session.add(nuovo_preventivo)
-    db_session.commit()
+        db_session.add(nuovo_preventivo)
+        db_session.commit()
 
-    # invia mail all'utente con link preventivo
-    subject = "Il tuo preventivo è pronto!"
-    body = f"Clicca il link per scaricare il preventivo: {file_url}"
-    send_email(dealer.id, cliente.email, subject, body)
+        # invia mail all'utente con link preventivo
+        subject = "Il tuo preventivo è pronto!"
+        body = f"Clicca il link per scaricare il preventivo: {file_url}"
+        send_email(dealer.id, cliente.email, subject, body)
+
+    except Exception as e:
+        db_session.rollback()
+        print("Errore nel task asincrono:", str(e))
+
+    finally:
+        db_session.close()
