@@ -778,10 +778,10 @@ async def genera_e_invia_preventivo(
         cliente_pubblico = db_session.query(NltClientiPubblici).filter(
             NltClientiPubblici.token == cliente_pubblico_token
         ).first()
-
         cliente = db_session.query(Cliente).get(cliente_id)
         dealer = db_session.query(User).get(dealer_id)
         offerta = db_session.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
+
         dealer_settings = db_session.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
         admin = db_session.query(User).get(dealer_settings.admin_id)
 
@@ -813,9 +813,15 @@ async def genera_e_invia_preventivo(
                 "Anticipo": cliente_pubblico.anticipo,
                 "Canone": cliente_pubblico.canone
             },
-            "AdminInfo": {"Email": admin.email, "CompanyName": admin.ragione_sociale, "LogoUrl": admin.logo_url},
+            "AdminInfo": {
+                "Email": admin.email,
+                "CompanyName": admin.ragione_sociale,
+                "LogoUrl": admin.logo_url
+            },
             "DealerInfo": {
-                "Email": dealer.email, "CompanyName": dealer.ragione_sociale, "LogoUrl": dealer.logo_url
+                "Email": dealer.email,
+                "CompanyName": dealer.ragione_sociale,
+                "LogoUrl": dealer.logo_url
             } if dealer else None,
             "NoteAuto": "Richiesta da sito web",
             "Player": "Web"
@@ -858,13 +864,59 @@ async def genera_e_invia_preventivo(
         db_session.add(nuovo_preventivo)
         db_session.commit()
 
-        # Esegui gli step corretti definiti sopra
-        # 1. Genera Link
-        # 2. Registra Timeline
-        # 3. Invia Mail con template HTML (vedi sopra codice completo)
+        preventivo_id = nuovo_preventivo.id
+
+        # ⬇️ AGGIUNGI QUESTO: genera link e invia email (corretto, definitivo)
+        async with httpx.AsyncClient() as client:
+            # genera link
+            response_link = await client.post(
+                f"https://coreapi-production-ca29.up.railway.app/nlt/preventivi/{preventivo_id}/genera-link"
+            )
+            response_link.raise_for_status()
+            link_data = response_link.json()
+            url_download = link_data["url_download"]
+
+            # recupera preventivo completo
+            response_dettagli = await client.get(
+                f"https://coreapi-production-ca29.up.railway.app/nlt/preventivo-completo/{preventivo_id}?dealerId={dealer.id}"
+            )
+            response_dettagli.raise_for_status()
+            dettagli = response_dettagli.json()
+
+            # recupera il template HTML già esistente
+            template_html_res = await client.get('https://corewebapp-azcore.up.railway.app/templates/email_preventivo.html')
+            template_html_res.raise_for_status()
+            template_html = template_html_res.text
+
+            from jinja2 import Template
+            template = Template(template_html)
+            html_body = template.render(
+                logo_url=dettagli["DealerInfo"]["LogoUrl"],
+                cliente_nome=f"{dettagli['CustomerFirstName']} {dettagli['CustomerLastName']}",
+                marca=dettagli["Auto"]["Marca"],
+                modello=dettagli["Auto"]["Modello"],
+                url_download=url_download,
+                dealer_name=dettagli["DealerInfo"]["CompanyName"],
+                indirizzo=dettagli["DealerInfo"]["Address"],
+                citta=dettagli["DealerInfo"]["City"],
+                telefono=dettagli["DealerInfo"]["MobilePhone"],
+                email=dettagli["DealerInfo"]["Email"]
+            )
+
+            # invia mail usando l'endpoint corretto
+            await client.post(
+                f"https://coreapi-production-ca29.up.railway.app/nlt/preventivi/{preventivo_id}/invia-mail",
+                json={
+                    "url_download": url_download,
+                    "to_email": dettagli["CustomerEmail"],
+                    "subject": f"Il tuo preventivo {dettagli['Auto']['Marca']} {dettagli['Auto']['Modello']} è pronto",
+                    "html_body": html_body
+                }
+            )
 
     except Exception as e:
         db_session.rollback()
         print(f"[ERRORE ASINCRONO DETTAGLIATO]: {str(e)}")
+
     finally:
         db_session.close()
