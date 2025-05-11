@@ -666,10 +666,10 @@ def switch_cliente_anagrafica(
 
 @router.post("/public/clienti/completa-registrazione")
 def completa_registrazione_cliente_pubblico(
-    background_tasks: BackgroundTasks,       # 👈 messo per primo
-    token: str = Query(...),
+    token: str = Query(...), # <--- dalla query
     cliente: ClienteCreateRequest = Body(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
 
     # verifica token
