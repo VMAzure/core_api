@@ -41,7 +41,6 @@ class ChangePasswordRequest(BaseModel):
 
 
 class ClienteCreateRequest(BaseModel):
-    token: str  # 👈✅ AGGIUNGI QUESTO CAMPO (obbligatorio!)
     tipo_cliente: str
     nome: Optional[str] = None
     cognome: Optional[str] = None
