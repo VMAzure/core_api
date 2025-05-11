@@ -627,7 +627,7 @@ def crea_cliente_pubblico(payload: NltClientiPubbliciCreate, db: Session = Depen
     )
 
 class SwitchClienteRequest(BaseModel):
-    cliente_id: int
+    email_cliente: str
     nuovo_dealer_slug: str
     nuova_email: str
 
