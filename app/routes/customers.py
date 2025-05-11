@@ -755,22 +755,6 @@ from sqlalchemy.orm import sessionmaker
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-import uuid
-import httpx
-from sqlalchemy.orm import sessionmaker
-from app.db import engine
-from app.models import (
-    NltClientiPubblici,
-    Cliente,
-    User,
-    NltOfferte,
-    SiteAdminSettings,
-    NltService,
-    NltDocumentiRichiesti,
-    NltPreventivi
-)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Configurazione Supabase confermata
 SUPABASE_URL = "https://vqfloobaovtdtcuflqeu.supabase.co"
