@@ -2,7 +2,7 @@
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User, NltPreventivi, NltPreventiviLinks, NltPreventiviTimeline
+from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User, NltPreventivi, NltPreventiviLinks, NltPreventiviTimeline, NltClientiPubblici
 from pydantic import BaseModel, BaseSettings
 from jose import jwt, JWTError  # ✅ Aggiunto import corretto per decodificare il token JWT
 from fastapi_jwt_auth import AuthJWT
@@ -595,3 +595,18 @@ async def invia_mail_preventivo(
     except Exception as e:
         print("❌ Errore generico invio email:", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/preventivi/cliente-token/{token}")
+def recupera_preventivo_da_token_cliente(token: str, db: Session = Depends(get_db)):
+    cliente_pubblico = db.query(NltClientiPubblici).filter_by(token=token).first()
+
+    if not cliente_pubblico:
+        raise HTTPException(status_code=404, detail="Cliente pubblico non trovato")
+
+    preventivo = db.query(NltPreventivi).filter_by(cliente_id=cliente_pubblico.id).order_by(NltPreventivi.created_at.desc()).first()
+
+    if not preventivo:
+        return {"preventivo_id": None}
+
+    return {"preventivo_id": str(preventivo.id)}
