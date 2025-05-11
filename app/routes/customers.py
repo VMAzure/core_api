@@ -735,27 +735,50 @@ def completa_registrazione_cliente_pubblico(
     # Genera il PDF e invia mail asincrona
     background_tasks.add_task(
         genera_e_invia_preventivo,
-        cliente_pubblico=cliente_pubblico,
+        cliente_pubblico_token=cliente_pubblico.token,
+        slug_offerta=cliente_pubblico.slug_offerta,
+        dealer_slug=cliente_pubblico.dealer_slug,
         tipo_cliente=cliente.tipo_cliente,
-        cliente=nuovo_cliente,
-        dealer=dealer
+        cliente_id=nuovo_cliente.id,
+        dealer_id=dealer.id
     )
 
 
-    return {"success": True, "message": "Dati ricevuti correttamente! Riceverai presto il preventivo via email."}
+
+    return {
+        "success": True,
+        "status": "cliente_creato",  # fondamentale per il frontend
+        "message": "Dati ricevuti correttamente! Riceverai presto il preventivo via email."
+    }
 
 from sqlalchemy.orm import sessionmaker
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-async def genera_e_invia_preventivo(cliente_pubblico, tipo_cliente, cliente, dealer):
+async def genera_e_invia_preventivo(
+    cliente_pubblico_token,
+    slug_offerta,
+    dealer_slug,
+    tipo_cliente,
+    cliente_id,
+    dealer_id
+):
     import httpx
     db_session = SessionLocal()
 
     try:
-        # Recupero offerta completa da DB
-        offerta = db_session.query(NltOfferte).filter(NltOfferte.slug == cliente_pubblico.slug_offerta).first()
-        dealer_settings = db_session.query(SiteAdminSettings).filter(SiteAdminSettings.slug == cliente_pubblico.dealer_slug).first()
+        # recupera nuovamente gli oggetti usando i dati primitivi
+        cliente_pubblico = db_session.query(NltClientiPubblici).filter(
+            NltClientiPubblici.token == cliente_pubblico_token
+        ).first()
+
+        cliente = db_session.query(Cliente).get(cliente_id)
+
+        dealer = db_session.query(User).get(dealer_id)
+
+        offerta = db_session.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
+
+        dealer_settings = db_session.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
 
         # Recupero servizi e documenti
         servizi = db_session.query(NltService).filter(NltService.is_active == True).all()
@@ -800,13 +823,13 @@ async def genera_e_invia_preventivo(cliente_pubblico, tipo_cliente, cliente, dea
             "Player": "Web"
         }
 
-        # Genera PDF (usando endpoint attuale)
+        # Genera PDF
         async with httpx.AsyncClient(timeout=120) as client:
             pdf_res = await client.post("https://corewebapp-azcore.up.railway.app/api/Pdf/GenerateOffer", json=payload_pdf)
             pdf_res.raise_for_status()
             pdf_blob = pdf_res.content
 
-        # Salva su Supabase e DB
+        # Upload Supabase
         file_name = f"{uuid.uuid4()}.pdf"
         supabase_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_name}"
 
@@ -817,6 +840,7 @@ async def genera_e_invia_preventivo(cliente_pubblico, tipo_cliente, cliente, dea
 
         file_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{file_name}"
 
+        # Salvataggio preventivo nel DB
         nuovo_preventivo = NltPreventivi(
             cliente_id=cliente.id,
             file_url=file_url,
@@ -836,14 +860,14 @@ async def genera_e_invia_preventivo(cliente_pubblico, tipo_cliente, cliente, dea
         db_session.add(nuovo_preventivo)
         db_session.commit()
 
-        # invia mail all'utente con link preventivo
+        # invia mail finale
         subject = "Il tuo preventivo è pronto!"
         body = f"Clicca il link per scaricare il preventivo: {file_url}"
         send_email(dealer.id, cliente.email, subject, body)
 
     except Exception as e:
         db_session.rollback()
-        print("Errore nel task asincrono:", str(e))
+        print(f"[ERRORE ASINCRONO]: {str(e)}")
 
     finally:
         db_session.close()
