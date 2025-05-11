@@ -495,12 +495,13 @@ def crea_cliente_pubblico(
         token=token,
         data_creazione=data_creazione,
         data_scadenza=data_scadenza,
-        confermato=confermato,
+        confermato=nuovo_cliente_pubblico.confermato,
         stato=stato_cliente,
-        email_esistente=cliente_esistente.email if stato_cliente == "cliente_altro_dealer" else None,
-        dealer_corrente=dealer_settings.slug if stato_cliente == "cliente_altro_dealer" else None,  # ✅ ora corretto
-        assegnatario_nome=cliente_esistente.dealer.ragione_sociale if stato_cliente == "cliente_altro_dealer" else None
+        email_esistente=cliente_esistente.email if cliente_esistente else None,  # ✅ fondamentale
+        dealer_corrente=dealer.slug if stato_cliente == "cliente_altro_dealer" else None, # ✅ usa dealer.slug
+        assegnatario_nome=cliente_esistente.dealer.ragione_sociale if cliente_esistente and cliente_esistente.dealer else None
     )
+
 
 
 
