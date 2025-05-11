@@ -863,7 +863,8 @@ async def genera_e_invia_preventivo(
         db_session.add(nuovo_preventivo)
         db_session.commit()
 
-        send_email(dealer.id, cliente.email, "Il tuo preventivo è pronto!", f"Scarica il preventivo: {file_url}")
+        # Usa admin.id per email SMTP
+        send_email(admin.id, cliente.email, "Il tuo preventivo è pronto!", f"Scarica il preventivo: {file_url}")
 
     except Exception as e:
         db_session.rollback()
