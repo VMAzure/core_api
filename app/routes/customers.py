@@ -691,13 +691,19 @@ def completa_registrazione_cliente_pubblico(
         raise HTTPException(status_code=404, detail="Dealer non trovato")
 
     # controlla presenza cliente esistente (per CF o P.IVA)
-    cliente_esistente = db.query(Cliente).filter(
-        (Cliente.codice_fiscale == cliente.codice_fiscale) |
-        (Cliente.partita_iva == cliente.partita_iva)
-    ).first()
+    cliente_esistente = None
+
+    if cliente.tipo_cliente == "Privato":
+        cliente_esistente = db.query(Cliente).filter(
+            Cliente.codice_fiscale == cliente.codice_fiscale
+        ).first()
+
+    elif cliente.tipo_cliente in ["Società", "Professionista"]:
+        cliente_esistente = db.query(Cliente).filter(
+            Cliente.partita_iva == cliente.partita_iva
+        ).first()
 
     if cliente_esistente:
-        # gestire eventualmente switch dealer o altro
         raise HTTPException(status_code=400, detail="Cliente già presente")
 
     # Inserisce nuovo cliente
