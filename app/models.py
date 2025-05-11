@@ -720,7 +720,6 @@ class NltClientiPubbliciCreate(BaseModel):
     km: Optional[int] = None
 
 class ClienteCreateRequest(BaseModel):
-    token: str
     tipo_cliente: str
     nome: str
     cognome: str
