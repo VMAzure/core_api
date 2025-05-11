@@ -530,11 +530,10 @@ def crea_cliente_pubblico(
         confermato=nuovo_cliente_pubblico.confermato,
         stato=stato_cliente,
         email_esistente=cliente_esistente.email if stato_cliente == "cliente_altro_dealer" else None,
-        dealer_corrente=dealer.ragione_sociale if stato_cliente == "cliente_altro_dealer" else None,
-        assegnatario_nome=cliente_esistente.dealer.ragione_sociale if stato_cliente == "cliente_altro_dealer" else None,
-        dealer_corrente=dealer.slug if stato_cliente == "cliente_altro_dealer" else None
-
+        dealer_corrente=dealer.slug if stato_cliente == "cliente_altro_dealer" else None,
+        assegnatario_nome=cliente_esistente.dealer.ragione_sociale if stato_cliente == "cliente_altro_dealer" else None
     )
+
 
 
 
