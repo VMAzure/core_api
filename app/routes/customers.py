@@ -752,6 +752,8 @@ def completa_registrazione_cliente_pubblico(
     }
 
 from sqlalchemy.orm import sessionmaker
+import httpx
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
