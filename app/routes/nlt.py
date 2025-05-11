@@ -597,7 +597,7 @@ async def invia_mail_preventivo(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/nlt/preventivi/cliente-token/{token}")
+@router.get("/preventivi/cliente-token/{token}")
 def recupera_preventivo_da_token_cliente(token: str, db: Session = Depends(get_db)):
     cliente_pubblico = db.query(NltClientiPubblici).filter_by(token=token).first()
 
