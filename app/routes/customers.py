@@ -755,6 +755,28 @@ from sqlalchemy.orm import sessionmaker
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+import uuid
+import httpx
+from sqlalchemy.orm import sessionmaker
+from app.db import engine
+from app.models import (
+    NltClientiPubblici,
+    Cliente,
+    User,
+    NltOfferte,
+    SiteAdminSettings,
+    NltService,
+    NltDocumentiRichiesti,
+    NltPreventivi
+)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Configurazione Supabase confermata
+SUPABASE_URL = "https://vqfloobaovtdtcuflqeu.supabase.co"
+SUPABASE_BUCKET = "nlt-preventivi"
+SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxZmxvb2Jhb3Z0ZHRjdWZscWV1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczOTUzOTUzMCwiZXhwIjoyMDU1MTE1NTMwfQ.Lq-uIgXYZiBJK4ChfF_D7i5qYBDuxMfL2jY5GGKDuVk"
+
 async def genera_e_invia_preventivo(
     cliente_pubblico_token,
     slug_offerta,
@@ -763,32 +785,21 @@ async def genera_e_invia_preventivo(
     cliente_id,
     dealer_id
 ):
-    import httpx
     db_session = SessionLocal()
 
     try:
         cliente_pubblico = db_session.query(NltClientiPubblici).filter(
             NltClientiPubblici.token == cliente_pubblico_token
         ).first()
-
         cliente = db_session.query(Cliente).get(cliente_id)
-
         dealer = db_session.query(User).get(dealer_id)
-
         offerta = db_session.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
 
         dealer_settings = db_session.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
-
-        # ✅ Recupera informazioni Admin da utenti
         admin = db_session.query(User).get(dealer_settings.admin_id)
 
         servizi = db_session.query(NltService).filter(NltService.is_active == True).all()
         documenti = db_session.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
-
-        main_image_url = f"{offerta.default_img}&angle=203&width=800"
-        angles = [29, 17, 13, 9, 21]
-
-        car_images = [{"Url": f"{offerta.default_img}&angle={angle}&width=800", "Angle": angle, "Color": "N.D."} for angle in angles]
 
         payload_pdf = {
             "CustomerFirstName": cliente.nome,
@@ -796,8 +807,11 @@ async def genera_e_invia_preventivo(
             "CustomerCompanyName": cliente.ragione_sociale or "",
             "TipoCliente": tipo_cliente,
             "DocumentiNecessari": [doc.documento for doc in documenti],
-            "CarMainImageUrl": main_image_url,
-            "CarImages": car_images,
+            "CarMainImageUrl": f"{offerta.default_img}&angle=203&width=800",
+            "CarImages": [
+                {"Url": f"{offerta.default_img}&angle={angle}&width=800", "Angle": angle, "Color": "N.D."}
+                for angle in [29, 17, 13, 9, 21]
+            ],
             "Auto": {
                 "Marca": offerta.marca,
                 "Modello": offerta.modello,
@@ -812,41 +826,38 @@ async def genera_e_invia_preventivo(
                 "Anticipo": cliente_pubblico.anticipo,
                 "Canone": cliente_pubblico.canone
             },
-
-            # ✅ Usando colonne confermate dalla tabella utenti
             "AdminInfo": {
                 "Email": admin.email,
                 "CompanyName": admin.ragione_sociale,
                 "LogoUrl": admin.logo_url
             },
-
-            # (opzionale) anche informazioni Dealer se necessarie
             "DealerInfo": {
                 "Email": dealer.email,
                 "CompanyName": dealer.ragione_sociale,
                 "LogoUrl": dealer.logo_url
             } if dealer else None,
-
             "NoteAuto": "Richiesta da sito web",
             "Player": "Web"
         }
 
-        # PDF Generation
         async with httpx.AsyncClient(timeout=120) as client:
             pdf_res = await client.post("https://corewebapp-azcore.up.railway.app/api/Pdf/GenerateOffer", json=payload_pdf)
             pdf_res.raise_for_status()
             pdf_blob = pdf_res.content
 
-        # Upload Supabase
         file_name = f"{uuid.uuid4()}.pdf"
-        supabase_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_name}"
-        headers = {"Authorization": f"Bearer {SUPABASE_API_KEY}", "Content-Type": "application/pdf"}
-        async with httpx.AsyncClient(timeout=120) as client:
-            upload_res = await client.put(supabase_url, content=pdf_blob, headers=headers)
-            upload_res.raise_for_status()
-        file_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{file_name}"
+        file_path = f"{SUPABASE_BUCKET}/{file_name}"
 
-        # Salvataggio preventivo nel DB
+        async with httpx.AsyncClient(timeout=120) as client:
+            upload_res = await client.put(
+                f"{SUPABASE_URL}/storage/v1/object/{file_path}",
+                headers={"Authorization": f"Bearer {SUPABASE_API_KEY}", "Content-Type": "application/pdf"},
+                content=pdf_blob
+            )
+            upload_res.raise_for_status()
+
+        file_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_path}"
+
         nuovo_preventivo = NltPreventivi(
             cliente_id=cliente.id,
             file_url=file_url,
@@ -866,10 +877,7 @@ async def genera_e_invia_preventivo(
         db_session.add(nuovo_preventivo)
         db_session.commit()
 
-        # Email finale
-        subject = "Il tuo preventivo è pronto!"
-        body = f"Clicca il link per scaricare il preventivo: {file_url}"
-        send_email(dealer.id, cliente.email, subject, body)
+        send_email(dealer.id, cliente.email, "Il tuo preventivo è pronto!", f"Scarica il preventivo: {file_url}")
 
     except Exception as e:
         db_session.rollback()
