@@ -743,13 +743,14 @@ def completa_registrazione_cliente_pubblico(
         dealer_id=dealer.id
     )
 
-
-
     return {
         "success": True,
-        "status": "cliente_creato",  # fondamentale per il frontend
-        "message": "Dati ricevuti correttamente! Riceverai presto il preventivo via email."
+        "status": "cliente_creato",
+        "message": "Dati ricevuti correttamente! Riceverai presto il preventivo via email.",
+        "cliente_token": cliente_pubblico.token  # <--- passa token già esistente e subito disponibile
     }
+
+
 
 from sqlalchemy.orm import sessionmaker
 import httpx
@@ -872,3 +873,17 @@ async def genera_e_invia_preventivo(
 
     finally:
         db_session.close()
+
+@router.get("/nlt/preventivi/cliente-token/{token}")
+def recupera_preventivo_da_token_cliente(token: str, db: Session = Depends(get_db)):
+    cliente_pubblico = db.query(NltClientiPubblici).filter_by(token=token).first()
+
+    if not cliente_pubblico:
+        raise HTTPException(status_code=404, detail="Cliente pubblico non trovato")
+
+    preventivo = db.query(NltPreventivi).filter_by(cliente_id=cliente_pubblico.id).order_by(NltPreventivi.created_at.desc()).first()
+
+    if not preventivo:
+        return {"preventivo_id": None}
+
+    return {"preventivo_id": str(preventivo.id)}
