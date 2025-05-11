@@ -611,12 +611,22 @@ def switch_cliente_anagrafica(
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
 
-    nuovo_dealer = db.query(User).join(SiteAdminSettings).filter(
+    # Cerca il nuovo dealer o admin usando lo slug dai SiteAdminSettings
+    settings = db.query(SiteAdminSettings).filter(
         SiteAdminSettings.slug == payload.nuovo_dealer_slug
     ).first()
 
+    if not settings:
+        raise HTTPException(status_code=404, detail="Dealer/Admin non trovato tramite slug")
+
+    # Recupera il dealer/admin dal risultato di SiteAdminSettings
+    if settings.dealer_id:
+        nuovo_dealer = db.query(User).filter(User.id == settings.dealer_id).first()
+    else:
+        nuovo_dealer = db.query(User).filter(User.id == settings.admin_id).first()
+
     if not nuovo_dealer:
-        raise HTTPException(status_code=404, detail="Dealer non trovato")
+        raise HTTPException(status_code=404, detail="Utente dealer/admin non trovato")
 
     vecchio_dealer = cliente.dealer or cliente.admin
     vecchio_nome = vecchio_dealer.ragione_sociale or f"{vecchio_dealer.nome} {vecchio_dealer.cognome}"
@@ -632,13 +642,13 @@ def switch_cliente_anagrafica(
     send_email(
         vecchio_dealer.id, vecchio_dealer.email,
         "Notifica cambio assegnazione cliente",
-        f"Il cliente {cliente.nome} {cliente.cognome} ha trasferito la sua anagrafica al nuovo dealer: {payload.nuovo_dealer_slug}"
+        f"Il cliente {cliente.nome} {cliente.cognome} ha trasferito la sua anagrafica al nuovo dealer/admin: {payload.nuovo_dealer_slug}"
     )
 
-    # Invia preventivo al cliente con nuovo dealer
+    # Invia preventivo al cliente con nuovo dealer/admin
     send_email(
         cliente.admin_id, cliente.email,
-        "Preventivo aggiornato con nuovo dealer",
+        "Preventivo aggiornato con nuovo dealer/admin",
         "Ecco il tuo preventivo aggiornato (link o allegato)."
     )
 
@@ -647,7 +657,6 @@ def switch_cliente_anagrafica(
         "cliente_email": cliente.email, 
         "nuovo_dealer": payload.nuovo_dealer_slug
     }
-
 
 
 @router.post("/public/clienti/completa-registrazione")
