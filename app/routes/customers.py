@@ -767,30 +767,22 @@ async def genera_e_invia_preventivo(
     db_session = SessionLocal()
 
     try:
-        # recupera nuovamente gli oggetti usando i dati primitivi
         cliente_pubblico = db_session.query(NltClientiPubblici).filter(
             NltClientiPubblici.token == cliente_pubblico_token
         ).first()
-
         cliente = db_session.query(Cliente).get(cliente_id)
-
         dealer = db_session.query(User).get(dealer_id)
-
         offerta = db_session.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
-
         dealer_settings = db_session.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
 
-        # Recupero servizi e documenti
         servizi = db_session.query(NltService).filter(NltService.is_active == True).all()
         documenti = db_session.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
 
-        # Immagini auto
         main_image_url = f"{offerta.default_img}&angle=203&width=800"
         angles = [29, 17, 13, 9, 21]
 
         car_images = [{"Url": f"{offerta.default_img}&angle={angle}&width=800", "Angle": angle, "Color": "N.D."} for angle in angles]
 
-        # Payload completo per il PDF
         payload_pdf = {
             "CustomerFirstName": cliente.nome,
             "CustomerLastName": cliente.cognome,
@@ -823,30 +815,34 @@ async def genera_e_invia_preventivo(
             "Player": "Web"
         }
 
-        # Genera PDF
+        # STEP PDF GENERATION
+        print("[DEBUG]: Avvio generazione PDF...")
         async with httpx.AsyncClient(timeout=120) as client:
             pdf_res = await client.post("https://corewebapp-azcore.up.railway.app/api/Pdf/GenerateOffer", json=payload_pdf)
             pdf_res.raise_for_status()
             pdf_blob = pdf_res.content
+        print("[DEBUG]: PDF generato con successo!")
 
-        # Upload Supabase
+        # STEP SUPABASE UPLOAD
+        print("[DEBUG]: Avvio upload PDF su Supabase...")
         file_name = f"{uuid.uuid4()}.pdf"
         supabase_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{file_name}"
-
         headers = {"Authorization": f"Bearer {SUPABASE_API_KEY}", "Content-Type": "application/pdf"}
         async with httpx.AsyncClient(timeout=120) as client:
             upload_res = await client.put(supabase_url, content=pdf_blob, headers=headers)
             upload_res.raise_for_status()
-
         file_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{file_name}"
+        print("[DEBUG]: PDF caricato con successo su Supabase:", file_url)
 
-        # Salvataggio preventivo nel DB
+        # STEP DB SAVE
+        print("[DEBUG]: Salvataggio preventivo nel DB...")
         nuovo_preventivo = NltPreventivi(
             cliente_id=cliente.id,
             file_url=file_url,
             creato_da=dealer.id,
             marca=offerta.marca,
             modello=offerta.modello,
+            versione=offerta.versione,
             durata=cliente_pubblico.durata,
             km_totali=cliente_pubblico.km,
             anticipo=cliente_pubblico.anticipo,
@@ -856,18 +852,20 @@ async def genera_e_invia_preventivo(
             note="Richiesta web",
             player="Web"
         )
-
         db_session.add(nuovo_preventivo)
         db_session.commit()
+        print("[DEBUG]: Preventivo salvato con successo nel DB.")
 
-        # invia mail finale
+        # STEP EMAIL
+        print("[DEBUG]: Invio email finale...")
         subject = "Il tuo preventivo è pronto!"
         body = f"Clicca il link per scaricare il preventivo: {file_url}"
         send_email(dealer.id, cliente.email, subject, body)
+        print("[DEBUG]: Email inviata con successo.")
 
     except Exception as e:
         db_session.rollback()
-        print(f"[ERRORE ASINCRONO]: {str(e)}")
+        print(f"[ERRORE ASINCRONO DETTAGLIATO]: {str(e)}")
 
     finally:
         db_session.close()
