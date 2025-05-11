@@ -200,6 +200,8 @@ class NltPreventivi(Base):
     # ✅ Aggiunti i nuovi campi
     marca = Column(Text, nullable=True)
     modello = Column(Text, nullable=True)
+    versione = Column(Text, nullable=True)  # 👈✅ AGGIUNGI QUESTA RIGA
+
     durata = Column(Integer, nullable=True)
     km_totali = Column(Integer, nullable=True)
     anticipo = Column(Float, nullable=True)
