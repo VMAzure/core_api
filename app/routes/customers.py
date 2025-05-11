@@ -874,16 +874,3 @@ async def genera_e_invia_preventivo(
     finally:
         db_session.close()
 
-@router.get("/nlt/preventivi/cliente-token/{token}")
-def recupera_preventivo_da_token_cliente(token: str, db: Session = Depends(get_db)):
-    cliente_pubblico = db.query(NltClientiPubblici).filter_by(token=token).first()
-
-    if not cliente_pubblico:
-        raise HTTPException(status_code=404, detail="Cliente pubblico non trovato")
-
-    preventivo = db.query(NltPreventivi).filter_by(cliente_id=cliente_pubblico.id).order_by(NltPreventivi.created_at.desc()).first()
-
-    if not preventivo:
-        return {"preventivo_id": None}
-
-    return {"preventivo_id": str(preventivo.id)}

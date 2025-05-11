@@ -597,14 +597,19 @@ async def invia_mail_preventivo(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/preventivi/cliente-token/{token}")
+@router.get("/nlt/preventivi/cliente-token/{token}")
 def recupera_preventivo_da_token_cliente(token: str, db: Session = Depends(get_db)):
     cliente_pubblico = db.query(NltClientiPubblici).filter_by(token=token).first()
 
     if not cliente_pubblico:
         raise HTTPException(status_code=404, detail="Cliente pubblico non trovato")
 
-    preventivo = db.query(NltPreventivi).filter_by(cliente_id=cliente_pubblico.id).order_by(NltPreventivi.created_at.desc()).first()
+    cliente_definitivo = db.query(Cliente).filter_by(email=cliente_pubblico.email).first()
+
+    if not cliente_definitivo:
+        raise HTTPException(status_code=404, detail="Cliente definitivo non trovato")
+
+    preventivo = db.query(NltPreventivi).filter_by(cliente_id=cliente_definitivo.id).order_by(NltPreventivi.created_at.desc()).first()
 
     if not preventivo:
         return {"preventivo_id": None}
