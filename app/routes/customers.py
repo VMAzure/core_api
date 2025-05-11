@@ -633,16 +633,17 @@ class SwitchClienteRequest(BaseModel):
 
 @router.post("/public/clienti/switch-anagrafica")
 def switch_cliente_anagrafica(
-    request: SwitchClienteRequest,
+    email_cliente: str,
+    nuovo_dealer_slug: str,
+    nuova_email: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-
-    cliente = db.query(Cliente).filter(Cliente.id == request.cliente_id).first()
+    cliente = db.query(Cliente).filter(Cliente.email.ilike(email_cliente)).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
 
     nuovo_dealer = db.query(User).join(SiteAdminSettings).filter(
-        SiteAdminSettings.slug == request.nuovo_dealer_slug
+        SiteAdminSettings.slug == nuovo_dealer_slug
     ).first()
 
     if not nuovo_dealer:
@@ -653,7 +654,10 @@ def switch_cliente_anagrafica(
 
     cliente.admin_id = nuovo_dealer.parent_id or nuovo_dealer.id
     cliente.dealer_id = None if nuovo_dealer.role == "admin" else nuovo_dealer.id
-    cliente.email = request.nuova_email
+
+    if nuova_email:
+        cliente.email = nuova_email
+
     cliente.updated_at = datetime.utcnow()
 
     db.commit()
@@ -662,21 +666,22 @@ def switch_cliente_anagrafica(
     send_email(
         vecchio_dealer.id, vecchio_dealer.email,
         "Notifica cambio assegnazione cliente",
-        f"Il cliente {cliente.nome} {cliente.cognome} ha trasferito la sua anagrafica al nuovo dealer: {request.nuovo_dealer_slug}"
+        f"Il cliente {cliente.nome} {cliente.cognome} ha trasferito la sua anagrafica al nuovo dealer: {nuovo_dealer_slug}"
     )
 
-    # Invia preventivo al cliente con nuovo dealer
+    # Puoi anche eventualmente inviare il preventivo aggiornato
     send_email(
         cliente.admin_id, cliente.email,
         "Preventivo aggiornato con nuovo dealer",
-        "Ecco il tuo preventivo aggiornato (link o allegato)."
+        "Ecco il tuo preventivo aggiornato."
     )
 
     return {
         "status": "cliente_switch_avvenuto",
-        "cliente_id": cliente.id,
-        "nuovo_dealer": request.nuovo_dealer_slug
+        "cliente_email": cliente.email,
+        "nuovo_dealer": nuovo_dealer_slug
     }
+
 
 @router.post("/public/clienti/completa-registrazione")
 def completa_registrazione_cliente_pubblico(
