@@ -438,7 +438,6 @@ def crea_cliente_pubblico(
     payload: NltClientiPubbliciCreate,
     db: Session = Depends(get_db)
 ):
-    # Recupera il dealer tramite slug
     dealer = db.query(User).join(
         SiteAdminSettings,
         ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
@@ -449,75 +448,77 @@ def crea_cliente_pubblico(
     if not dealer:
         raise HTTPException(status_code=404, detail="Dealer non trovato.")
 
-    # Controlla se il cliente è già censito
     cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(payload.email)).first()
 
-    # Genera token e scadenza
     token = str(uuid.uuid4())
     data_creazione = datetime.utcnow()
     data_scadenza = data_creazione + timedelta(days=7)
 
-    # Determina stato cliente
     if cliente_esistente:
         if cliente_esistente.dealer_id == dealer.id:
             stato_cliente = "cliente_stesso_dealer"
+
+            # Genera il preventivo in background
+            background_tasks = BackgroundTasks()
+            background_tasks.add_task(
+                genera_e_invia_preventivo,
+                cliente_pubblico_token=token,
+                slug_offerta=payload.slug_offerta,
+                dealer_slug=payload.dealer_slug,
+                tipo_cliente=cliente_esistente.tipo_cliente,
+                cliente_id=cliente_esistente.id,
+                dealer_id=dealer.id
+            )
+
+            nuovo_cliente_pubblico = NltClientiPubblici(
+                email=payload.email,
+                dealer_slug=payload.dealer_slug,
+                token=token,
+                data_creazione=data_creazione,
+                data_scadenza=data_scadenza,
+                confermato=True,
+                slug_offerta=payload.slug_offerta,
+                anticipo=payload.anticipo,
+                canone=payload.canone,
+                durata=payload.durata,
+                km=payload.km
+            )
+
         else:
             stato_cliente = "cliente_altro_dealer"
+            nuovo_cliente_pubblico = NltClientiPubblici(
+                email=payload.email,
+                dealer_slug=payload.dealer_slug,
+                token=token,
+                data_creazione=data_creazione,
+                data_scadenza=data_scadenza,
+                confermato=False,
+                slug_offerta=payload.slug_offerta,
+                anticipo=payload.anticipo,
+                canone=payload.canone,
+                durata=payload.durata,
+                km=payload.km
+            )
+
     else:
         stato_cliente = "nuovo_cliente"
-
-    # Salva nella tabella NltClientiPubblici
-    nuovo_cliente_pubblico = NltClientiPubblici(
-        email=payload.email,
-        dealer_slug=payload.dealer_slug,
-        token=token,
-        data_creazione=data_creazione,
-        data_scadenza=data_scadenza,
-        confermato=False,
-        slug_offerta=str(payload.slug_offerta) if payload.slug_offerta else None,
-        anticipo=float(payload.anticipo) if payload.anticipo is not None else None,
-        canone=float(payload.canone) if payload.canone is not None else None,
-        durata=int(payload.durata) if payload.durata is not None else None,
-        km=int(payload.km) if payload.km is not None else None
-    )
-
+        nuovo_cliente_pubblico = NltClientiPubblici(
+            email=payload.email,
+            dealer_slug=payload.dealer_slug,
+            token=token,
+            data_creazione=data_creazione,
+            data_scadenza=data_scadenza,
+            confermato=False,
+            slug_offerta=payload.slug_offerta,
+            anticipo=payload.anticipo,
+            canone=payload.canone,
+            durata=payload.durata,
+            km=payload.km
+        )
 
     db.add(nuovo_cliente_pubblico)
     db.commit()
     db.refresh(nuovo_cliente_pubblico)
-
-    # Gestione email differenziata
-    admin_id = dealer.parent_id or dealer.id
-    subject = "Completa la tua richiesta di preventivo"
-
-    base_url_frontend = "https://corewebapp-azcore.up.railway.app/AZURELease/html"
-
-    if stato_cliente == "nuovo_cliente":
-        url = f"{base_url_frontend}/conferma-dati-cliente.html?token={token}"
-        body = f"""
-        <p>Gentile cliente, clicca per completare i tuoi dati:</p>
-        <p><a href="{url}">{url}</a></p>
-        """
-    elif stato_cliente == "cliente_stesso_dealer":
-        url = f"{base_url_frontend}/scarica-preventivo.html?token={token}"
-        body = f"""
-        <p>Gentile cliente, il tuo preventivo è già pronto:</p>
-        <p><a href="{url}">Scarica preventivo</a></p>
-        """
-    else:  # cliente_altro_dealer
-        url = f"{base_url_frontend}/scelta-dealer.html?token={token}"
-        body = f"""
-        <p>Gentile cliente, risultano i tuoi dati già registrati presso un altro dealer.</p>
-        <p>Clicca per scegliere da chi vuoi ricevere il preventivo:</p>
-        <p><a href="{url}">{url}</a></p>
-        """
-
-    # try:
-    #     send_email(admin_id, payload.email, subject, body)
-    # except Exception as e:
-    #     db.rollback()
-    #     raise HTTPException(status_code=500, detail=f"Errore invio email: {str(e)}")
-
 
     return NltClientiPubbliciResponse(
         id=nuovo_cliente_pubblico.id,
@@ -526,9 +527,14 @@ def crea_cliente_pubblico(
         token=token,
         data_creazione=data_creazione,
         data_scadenza=data_scadenza,
-        confermato=False,
-        stato=stato_cliente
+        confermato=nuovo_cliente_pubblico.confermato,
+        stato=stato_cliente,
+        email_esistente=cliente_esistente.email if stato_cliente == "cliente_altro_dealer" else None,
+        dealer_corrente=dealer.ragione_sociale if stato_cliente == "cliente_altro_dealer" else None,
+        assegnatario_nome=cliente_esistente.dealer.ragione_sociale if stato_cliente == "cliente_altro_dealer" else None
     )
+
+
 
 @router.get("/public/clienti/conferma/{token}", response_model=NltClientiPubbliciResponse)
 def conferma_cliente_pubblico(token: str, db: Session = Depends(get_db)):
