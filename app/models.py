@@ -233,10 +233,11 @@ class SmtpSettings(Base):
 
 class SiteAdminSettings(Base):
     __tablename__ = 'site_admin_settings'
+    __table_args__ = {"schema": "public"}  # assicurati che ci sia questo!
 
     id = Column(Integer, primary_key=True, index=True)
     admin_id = Column(Integer, nullable=False, index=True)
-    dealer_id = Column(Integer, ForeignKey("utenti.id"), nullable=True) 
+    dealer_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)  # 👈 MODIFICATO QUI
 
     slug = Column(String(255), unique=True, nullable=False, index=True)
 
@@ -266,6 +267,7 @@ class SiteAdminSettings(Base):
     servizi_visibili = Column(JSONB, nullable=False, server_default=text("""
         '{"NLT": false, "REWIND": false, "NOS": false, "NBT": false}'
     """))
+
 
 
 
