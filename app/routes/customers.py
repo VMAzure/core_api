@@ -611,7 +611,11 @@ def switch_cliente_anagrafica(
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
 
-    nuovo_dealer = db.query(User).join(SiteAdminSettings).filter(
+    # 🚩 QUI LA QUERY DEFINITIVA CHE RISOLVE
+    nuovo_dealer = db.query(User).join(
+        SiteAdminSettings,
+        ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
+    ).filter(
         SiteAdminSettings.slug == payload.nuovo_dealer_slug
     ).first()
 
@@ -621,21 +625,20 @@ def switch_cliente_anagrafica(
     vecchio_dealer = cliente.dealer or cliente.admin
     vecchio_nome = vecchio_dealer.ragione_sociale or f"{vecchio_dealer.nome} {vecchio_dealer.cognome}"
 
-    # ✅ Aggiorna assegnazione cliente
     cliente.admin_id = nuovo_dealer.parent_id or nuovo_dealer.id
     cliente.dealer_id = None if nuovo_dealer.role == "admin" else nuovo_dealer.id
     cliente.updated_at = datetime.utcnow()
     db.commit()
 
-    # ✅ Notifica email al VECCHIO dealer (corretto)
+    # Invia email al VECCHIO dealer/admin
     send_email(
-        vecchio_dealer.parent_id or vecchio_dealer.id,  # admin_id corretto del vecchio dealer
-        vecchio_dealer.email,                           # email del vecchio dealer
+        vecchio_dealer.parent_id or vecchio_dealer.id,
+        vecchio_dealer.email,
         "Notifica cambio assegnazione cliente",
         f"Il cliente {cliente.nome} {cliente.cognome} ha trasferito la sua anagrafica al nuovo dealer: {payload.nuovo_dealer_slug}"
     )
 
-    # ✅ Genera preventivo corretto e invia al cliente con dati NUOVO dealer
+    # Genera e invia preventivo aggiornato al cliente
     token = str(uuid.uuid4())
     nuovo_cliente_pubblico = NltClientiPubblici(
         email=cliente.email,
@@ -652,7 +655,7 @@ def switch_cliente_anagrafica(
     background_tasks.add_task(
         genera_e_invia_preventivo,
         cliente_pubblico_token=token,
-        slug_offerta=None,  # personalizza se hai informazioni precise
+        slug_offerta=None,
         dealer_slug=payload.nuovo_dealer_slug,
         tipo_cliente=cliente.tipo_cliente,
         cliente_id=cliente.id,
