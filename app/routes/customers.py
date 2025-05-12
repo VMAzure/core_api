@@ -671,7 +671,9 @@ def switch_cliente_anagrafica(
         dealer_slug=payload.nuovo_dealer_slug,
         tipo_cliente=cliente.tipo_cliente,
         cliente_id=cliente.id,
-        dealer_id=nuovo_dealer.id
+        dealer_id=nuovo_dealer.id,
+        db=db  # 👈 aggiungi questa riga
+
     )
 
     return {
@@ -757,7 +759,9 @@ def completa_registrazione_cliente_pubblico(
         dealer_slug=cliente_pubblico.dealer_slug,
         tipo_cliente=cliente.tipo_cliente,
         cliente_id=nuovo_cliente.id,
-        dealer_id=dealer.id
+        dealer_id=dealer.id,
+        db=db  # 👈 aggiungi questa riga
+
     )
 
     return {
@@ -787,23 +791,24 @@ async def genera_e_invia_preventivo(
     dealer_slug,
     tipo_cliente,
     cliente_id,
-    dealer_id
+    dealer_id,
+    db: Session  # usa questa sessione db
 ):
-    db_session = SessionLocal()
 
     try:
-        cliente_pubblico = db_session.query(NltClientiPubblici).filter(
+        cliente_pubblico = db.query(NltClientiPubblici).filter(
             NltClientiPubblici.token == cliente_pubblico_token
         ).first()
-        cliente = db_session.query(Cliente).get(cliente_id)
-        dealer = db_session.query(User).get(dealer_id)
-        offerta = db_session.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
 
-        dealer_settings = db_session.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
-        admin = db_session.query(User).get(dealer_settings.admin_id)
+        cliente = db.query(Cliente).get(cliente_id)
+        dealer = db.query(User).get(dealer_id)
+        offerta = db.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
 
-        servizi = db_session.query(NltService).filter(NltService.is_active == True).all()
-        documenti = db_session.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
+        dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
+        admin = db.query(User).get(dealer_settings.admin_id)
+
+        servizi = db.query(NltService).filter(NltService.is_active == True).all()
+        documenti = db.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
 
         payload_pdf = {
             "CustomerFirstName": cliente.nome,
@@ -845,7 +850,10 @@ async def genera_e_invia_preventivo(
         }
 
         async with httpx.AsyncClient(timeout=120) as client:
-            pdf_res = await client.post("https://corewebapp-azcore.up.railway.app/api/Pdf/GenerateOffer", json=payload_pdf)
+            pdf_res = await client.post(
+                "https://corewebapp-azcore.up.railway.app/api/Pdf/GenerateOffer", 
+                json=payload_pdf
+            )
             pdf_res.raise_for_status()
             pdf_blob = pdf_res.content
 
@@ -855,7 +863,10 @@ async def genera_e_invia_preventivo(
         async with httpx.AsyncClient(timeout=120) as client:
             upload_res = await client.put(
                 f"{SUPABASE_URL}/storage/v1/object/{file_path}",
-                headers={"Authorization": f"Bearer {SUPABASE_API_KEY}", "Content-Type": "application/pdf"},
+                headers={
+                    "Authorization": f"Bearer {SUPABASE_API_KEY}",
+                    "Content-Type": "application/pdf"
+                },
                 content=pdf_blob
             )
             upload_res.raise_for_status()
@@ -878,14 +889,14 @@ async def genera_e_invia_preventivo(
             note="Richiesta web",
             player="Web"
         )
-        db_session.add(nuovo_preventivo)
-        db_session.commit()
+
+        db.add(nuovo_preventivo)
+        db.commit()
+        db.refresh(nuovo_preventivo)  # importante per sincronizzare l'ID generato
 
         preventivo_id = nuovo_preventivo.id
 
-        # ⬇️ AGGIUNGI QUESTO: genera link e invia email (corretto, definitivo)
         async with httpx.AsyncClient() as client:
-            # genera link
             response_link = await client.post(
                 f"https://coreapi-production-ca29.up.railway.app/nlt/preventivi/{preventivo_id}/genera-link"
             )
@@ -893,15 +904,15 @@ async def genera_e_invia_preventivo(
             link_data = response_link.json()
             url_download = link_data["url_download"]
 
-            # recupera preventivo completo
             response_dettagli = await client.get(
                 f"https://coreapi-production-ca29.up.railway.app/nlt/preventivo-completo/{preventivo_id}?dealerId={dealer.id}"
             )
             response_dettagli.raise_for_status()
             dettagli = response_dettagli.json()
 
-            # recupera il template HTML già esistente
-            template_html_res = await client.get('https://corewebapp-azcore.up.railway.app/templates/email_preventivo.html')
+            template_html_res = await client.get(
+                'https://corewebapp-azcore.up.railway.app/templates/email_preventivo.html'
+            )
             template_html_res.raise_for_status()
             template_html = template_html_res.text
 
@@ -920,7 +931,6 @@ async def genera_e_invia_preventivo(
                 email=dettagli["DealerInfo"]["Email"]
             )
 
-            # invia mail usando l'endpoint corretto
             await client.post(
                 f"https://coreapi-production-ca29.up.railway.app/nlt/preventivi/{preventivo_id}/invia-mail",
                 json={
@@ -932,8 +942,8 @@ async def genera_e_invia_preventivo(
             )
 
     except Exception as e:
-        db_session.rollback()
+        db.rollback()
         print(f"[ERRORE ASINCRONO DETTAGLIATO]: {str(e)}")
 
     finally:
-        db_session.close()
+        db.close()
