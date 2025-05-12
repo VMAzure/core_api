@@ -605,18 +605,13 @@ class ClienteSwitchRequest(BaseModel):
 @router.post("/public/clienti/switch-anagrafica")
 def switch_cliente_anagrafica(
     payload: ClienteSwitchRequest,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     cliente = db.query(Cliente).filter(Cliente.email == payload.email_cliente).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
 
-    # 👇 QUERY CORRETTA (Admin o Dealer)
-    nuovo_dealer = db.query(User).join(
-        SiteAdminSettings,
-        ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
-    ).filter(
+    nuovo_dealer = db.query(User).join(SiteAdminSettings).filter(
         SiteAdminSettings.slug == payload.nuovo_dealer_slug
     ).first()
 
@@ -624,38 +619,44 @@ def switch_cliente_anagrafica(
         raise HTTPException(status_code=404, detail="Dealer non trovato")
 
     vecchio_dealer = cliente.dealer or cliente.admin
-    vecchio_dealer_id = vecchio_dealer.id
-    vecchio_dealer_email = vecchio_dealer.email
+    vecchio_nome = vecchio_dealer.ragione_sociale or f"{vecchio_dealer.nome} {vecchio_dealer.cognome}"
 
+    # ✅ Aggiorna assegnazione cliente
     cliente.admin_id = nuovo_dealer.parent_id or nuovo_dealer.id
     cliente.dealer_id = None if nuovo_dealer.role == "admin" else nuovo_dealer.id
     cliente.updated_at = datetime.utcnow()
-
     db.commit()
 
+    # ✅ Notifica email al VECCHIO dealer (corretto)
     send_email(
-        vecchio_dealer_id, vecchio_dealer_email,
+        vecchio_dealer.parent_id or vecchio_dealer.id,  # admin_id corretto del vecchio dealer
+        vecchio_dealer.email,                           # email del vecchio dealer
         "Notifica cambio assegnazione cliente",
-        f"Il cliente {cliente.nome} {cliente.cognome} ha trasferito la sua anagrafica al nuovo dealer: {payload.nuovo_dealer_slug}",
-        db
+        f"Il cliente {cliente.nome} {cliente.cognome} ha trasferito la sua anagrafica al nuovo dealer: {payload.nuovo_dealer_slug}"
     )
 
-    cliente_pubblico = db.query(NltClientiPubblici).filter(
-        NltClientiPubblici.email.ilike(payload.email_cliente),
-        NltClientiPubblici.confermato == False
-    ).first()
+    # ✅ Genera preventivo corretto e invia al cliente con dati NUOVO dealer
+    token = str(uuid.uuid4())
+    nuovo_cliente_pubblico = NltClientiPubblici(
+        email=cliente.email,
+        dealer_slug=payload.nuovo_dealer_slug,
+        token=token,
+        data_creazione=datetime.utcnow(),
+        data_scadenza=datetime.utcnow() + timedelta(days=7),
+        confermato=True
+    )
+    db.add(nuovo_cliente_pubblico)
+    db.commit()
 
-    if not cliente_pubblico:
-        raise HTTPException(status_code=404, detail="Cliente pubblico non trovato")
-
+    background_tasks = BackgroundTasks()
     background_tasks.add_task(
         genera_e_invia_preventivo,
-        cliente_pubblico_token=cliente_pubblico.token,
-        slug_offerta=cliente_pubblico.slug_offerta,
-        dealer_slug=payload.nuovo_dealer_slug,  
+        cliente_pubblico_token=token,
+        slug_offerta=None,  # personalizza se hai informazioni precise
+        dealer_slug=payload.nuovo_dealer_slug,
         tipo_cliente=cliente.tipo_cliente,
         cliente_id=cliente.id,
-        dealer_id=cliente.admin_id,  
+        dealer_id=nuovo_dealer.id
     )
 
     return {
