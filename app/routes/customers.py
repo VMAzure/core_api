@@ -792,8 +792,10 @@ async def genera_e_invia_preventivo(
     tipo_cliente,
     cliente_id,
     dealer_id,
-    db: Session  # usa questa sessione db
+    db: Session
 ):
+
+    print(f"🔵 genera_e_invia_preventivo CHIAMATA con: cliente_id={cliente_id}, dealer_id={dealer_id}, slug_offerta={slug_offerta}")
 
     try:
         cliente_pubblico = db.query(NltClientiPubblici).filter(
@@ -806,6 +808,8 @@ async def genera_e_invia_preventivo(
 
         dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
         admin = db.query(User).get(dealer_settings.admin_id)
+
+        print(f"🔵 Dati recuperati correttamente: Cliente={cliente.id}, Dealer={dealer.id}, Offerta={offerta.id_offerta}")
 
         servizi = db.query(NltService).filter(NltService.is_active == True).all()
         documenti = db.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
@@ -891,68 +895,18 @@ async def genera_e_invia_preventivo(
         )
 
         db.add(nuovo_preventivo)
+        db.commit()
+        db.refresh(nuovo_preventivo)
 
-        try:
-            db.commit()
-            db.refresh(nuovo_preventivo)
-            print(f"✅ Preventivo creato correttamente con ID: {nuovo_preventivo.id}")
-        except Exception as e:
-            db.rollback()
-            print(f"❌ ERRORE inserimento preventivo: {str(e)}")
-            return  # 🚨 Ferma tutto se c'è errore!
-
-        # 🚀 Codice seguente deve essere fuori dal try-except:
         preventivo_id = nuovo_preventivo.id
 
-        async with httpx.AsyncClient() as client:
-            response_link = await client.post(
-                f"https://coreapi-production-ca29.up.railway.app/nlt/preventivi/{preventivo_id}/genera-link"
-            )
-            response_link.raise_for_status()
-            link_data = response_link.json()
-            url_download = link_data["url_download"]
-
-            response_dettagli = await client.get(
-                f"https://coreapi-production-ca29.up.railway.app/nlt/preventivo-completo/{preventivo_id}?dealerId={dealer.id}"
-            )
-            response_dettagli.raise_for_status()
-            dettagli = response_dettagli.json()
-
-            template_html_res = await client.get(
-                'https://corewebapp-azcore.up.railway.app/templates/email_preventivo.html'
-            )
-            template_html_res.raise_for_status()
-            template_html = template_html_res.text
-
-            from jinja2 import Template
-            template = Template(template_html)
-            html_body = template.render(
-                logo_url=dettagli["DealerInfo"]["LogoUrl"],
-                cliente_nome=f"{dettagli['CustomerFirstName']} {dettagli['CustomerLastName']}",
-                marca=dettagli["Auto"]["Marca"],
-                modello=dettagli["Auto"]["Modello"],
-                url_download=url_download,
-                dealer_name=dettagli["DealerInfo"]["CompanyName"],
-                indirizzo=dettagli["DealerInfo"]["Address"],
-                citta=dettagli["DealerInfo"]["City"],
-                telefono=dettagli["DealerInfo"]["MobilePhone"],
-                email=dettagli["DealerInfo"]["Email"]
-            )
-
-            await client.post(
-                f"https://coreapi-production-ca29.up.railway.app/nlt/preventivi/{preventivo_id}/invia-mail",
-                json={
-                    "url_download": url_download,
-                    "to_email": dettagli["CustomerEmail"],
-                    "subject": f"Il tuo preventivo {dettagli['Auto']['Marca']} {dettagli['Auto']['Modello']} è pronto",
-                    "html_body": html_body
-                }
-            )
-
+        print(f"✅ Preventivo creato con ID: {preventivo_id}")
 
     except Exception as e:
         db.rollback()
-        print(f"[ERRORE ASINCRONO DETTAGLIATO]: {str(e)}")
+        print(f"❌ ERRORE inserimento preventivo: {str(e)}")
+        return
 
-    finally:
-        db.close()
+    print(f"🔵 preventivo_id dopo inserimento: {preventivo_id}")
+
+    # STOP: Non aggiungere altro codice per ora.
