@@ -646,6 +646,15 @@ def switch_cliente_anagrafica(
     if not ultima_offerta_cliente or not ultima_offerta_cliente.slug_offerta:
         raise HTTPException(status_code=400, detail="Nessuna offerta valida trovata per generare il preventivo.")
 
+    # ✅ Recupera l'offerta equivalente per il nuovo dealer
+    offerta_nuovo_dealer = db.query(NltOfferte).filter(
+        NltOfferte.slug == ultima_offerta_cliente.slug_offerta,
+        NltOfferte.id_admin == (nuovo_dealer.parent_id or nuovo_dealer.id)
+    ).first()
+
+    if not offerta_nuovo_dealer:
+        raise HTTPException(status_code=404, detail="Offerta equivalente non trovata per il nuovo dealer.")
+
     # Genera e invia preventivo aggiornato al cliente
     token = str(uuid.uuid4())
     nuovo_cliente_pubblico = NltClientiPubblici(
@@ -655,25 +664,25 @@ def switch_cliente_anagrafica(
         data_creazione=datetime.utcnow(),
         data_scadenza=datetime.utcnow() + timedelta(days=7),
         confermato=True,
-        slug_offerta=ultima_offerta_cliente.slug_offerta,  # 🚩 fondamentale valorizzare questo
+        slug_offerta=offerta_nuovo_dealer.slug,  # ✅ OFFERTA CORRETTA DEL NUOVO DEALER
         anticipo=ultima_offerta_cliente.anticipo,
         canone=ultima_offerta_cliente.canone,
         durata=ultima_offerta_cliente.durata,
         km=ultima_offerta_cliente.km
     )
+
     db.add(nuovo_cliente_pubblico)
     db.commit()
 
     background_tasks.add_task(
         genera_e_invia_preventivo,
         cliente_pubblico_token=token,
-        slug_offerta=ultima_offerta_cliente.slug_offerta,  # 🚩 Passiamo slug_offerta valorizzato
+        slug_offerta=offerta_nuovo_dealer.slug,  # ✅ OFFERTA CORRETTA
         dealer_slug=payload.nuovo_dealer_slug,
         tipo_cliente=cliente.tipo_cliente,
         cliente_id=cliente.id,
         dealer_id=nuovo_dealer.id,
-        db=db  # 👈 aggiungi questa riga
-
+        db=db
     )
 
     return {
