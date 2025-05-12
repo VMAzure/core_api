@@ -891,9 +891,17 @@ async def genera_e_invia_preventivo(
         )
 
         db.add(nuovo_preventivo)
-        db.commit()
-        db.refresh(nuovo_preventivo)  # importante per sincronizzare l'ID generato
 
+        try:
+            db.commit()
+            db.refresh(nuovo_preventivo)
+            print(f"✅ Preventivo creato correttamente con ID: {nuovo_preventivo.id}")
+        except Exception as e:
+            db.rollback()
+            print(f"❌ ERRORE inserimento preventivo: {str(e)}")
+            return  # 🚨 Ferma tutto se c'è errore!
+
+        # 🚀 Codice seguente deve essere fuori dal try-except:
         preventivo_id = nuovo_preventivo.id
 
         async with httpx.AsyncClient() as client:
@@ -940,6 +948,7 @@ async def genera_e_invia_preventivo(
                     "html_body": html_body
                 }
             )
+
 
     except Exception as e:
         db.rollback()
