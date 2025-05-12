@@ -455,7 +455,8 @@ def crea_cliente_pubblico(
     data_scadenza = data_creazione + timedelta(days=7)
 
     if cliente_esistente:
-        if cliente_esistente.dealer_id == dealer.id:
+        if (cliente_esistente.dealer_id is not None and cliente_esistente.dealer_id == dealer.id) \
+        or (cliente_esistente.dealer_id is None and cliente_esistente.admin_id == dealer.id):
             stato_cliente = "cliente_stesso_dealer"
             confermato = True
         else:
@@ -483,11 +484,6 @@ def crea_cliente_pubblico(
     db.commit()
     db.refresh(nuovo_cliente_pubblico)
 
-    # ✅ recupera dealer_settings (aggiunto ora correttamente)
-    dealer_settings = db.query(SiteAdminSettings).filter(
-        SiteAdminSettings.slug == payload.dealer_slug
-    ).first()
-
     return NltClientiPubbliciResponse(
         id=nuovo_cliente_pubblico.id,
         email=payload.email,
@@ -498,13 +494,9 @@ def crea_cliente_pubblico(
         confermato=nuovo_cliente_pubblico.confermato,
         stato=stato_cliente,
         email_esistente=cliente_esistente.email if cliente_esistente else None,
-        dealer_corrente=payload.dealer_slug if stato_cliente == "cliente_altro_dealer" else None,  # 🔥 FIX DEFINITIVO QUI
+        dealer_corrente=payload.dealer_slug if stato_cliente == "cliente_altro_dealer" else None,
         assegnatario_nome=cliente_esistente.dealer.ragione_sociale if cliente_esistente and cliente_esistente.dealer else None
     )
-
-
-
-
 
 
 @router.get("/public/clienti/conferma/{token}", response_model=NltClientiPubbliciResponse)
