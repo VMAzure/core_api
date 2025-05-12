@@ -612,7 +612,11 @@ def switch_cliente_anagrafica(
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
 
-    nuovo_dealer = db.query(User).join(SiteAdminSettings).filter(
+    # 👇 QUERY CORRETTA (Admin o Dealer)
+    nuovo_dealer = db.query(User).join(
+        SiteAdminSettings,
+        ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
+    ).filter(
         SiteAdminSettings.slug == payload.nuovo_dealer_slug
     ).first()
 
@@ -623,14 +627,12 @@ def switch_cliente_anagrafica(
     vecchio_dealer_id = vecchio_dealer.id
     vecchio_dealer_email = vecchio_dealer.email
 
-    # Aggiornamento cliente con nuovi riferimenti dealer/admin
     cliente.admin_id = nuovo_dealer.parent_id or nuovo_dealer.id
     cliente.dealer_id = None if nuovo_dealer.role == "admin" else nuovo_dealer.id
     cliente.updated_at = datetime.utcnow()
 
     db.commit()
 
-    # Mail di avviso a vecchio dealer/admin
     send_email(
         vecchio_dealer_id, vecchio_dealer_email,
         "Notifica cambio assegnazione cliente",
@@ -646,15 +648,14 @@ def switch_cliente_anagrafica(
     if not cliente_pubblico:
         raise HTTPException(status_code=404, detail="Cliente pubblico non trovato")
 
-    # Genera preventivo aggiornato con nuovi riferimenti dealer/admin
     background_tasks.add_task(
         genera_e_invia_preventivo,
         cliente_pubblico_token=cliente_pubblico.token,
         slug_offerta=cliente_pubblico.slug_offerta,
-        dealer_slug=payload.nuovo_dealer_slug,  # 👈 Nuovo dealer slug aggiornato
+        dealer_slug=payload.nuovo_dealer_slug,  
         tipo_cliente=cliente.tipo_cliente,
         cliente_id=cliente.id,
-        dealer_id=cliente.admin_id,  # 👈 Usa nuovo admin_id aggiornato
+        dealer_id=cliente.admin_id,  
     )
 
     return {
@@ -662,6 +663,7 @@ def switch_cliente_anagrafica(
         "cliente_email": cliente.email,
         "nuovo_dealer": payload.nuovo_dealer_slug
     }
+
 
 
 @router.post("/public/clienti/completa-registrazione")
