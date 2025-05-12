@@ -605,13 +605,13 @@ class ClienteSwitchRequest(BaseModel):
 @router.post("/public/clienti/switch-anagrafica")
 def switch_cliente_anagrafica(
     payload: ClienteSwitchRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     cliente = db.query(Cliente).filter(Cliente.email == payload.email_cliente).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
 
-    # 🚩 QUI LA QUERY DEFINITIVA CHE RISOLVE
     nuovo_dealer = db.query(User).join(
         SiteAdminSettings,
         ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
@@ -623,20 +623,28 @@ def switch_cliente_anagrafica(
         raise HTTPException(status_code=404, detail="Dealer non trovato")
 
     vecchio_dealer = cliente.dealer or cliente.admin
-    vecchio_nome = vecchio_dealer.ragione_sociale or f"{vecchio_dealer.nome} {vecchio_dealer.cognome}"
 
     cliente.admin_id = nuovo_dealer.parent_id or nuovo_dealer.id
     cliente.dealer_id = None if nuovo_dealer.role == "admin" else nuovo_dealer.id
     cliente.updated_at = datetime.utcnow()
     db.commit()
 
-    # Invia email al VECCHIO dealer/admin
+    # Invia email al vecchio dealer/admin
     send_email(
         vecchio_dealer.parent_id or vecchio_dealer.id,
         vecchio_dealer.email,
         "Notifica cambio assegnazione cliente",
         f"Il cliente {cliente.nome} {cliente.cognome} ha trasferito la sua anagrafica al nuovo dealer: {payload.nuovo_dealer_slug}"
     )
+
+    # Recupera l'ultima offerta visualizzata dal cliente (in base all'email)
+    ultima_offerta_cliente = db.query(NltClientiPubblici).filter(
+        NltClientiPubblici.email == payload.email_cliente,
+        NltClientiPubblici.slug_offerta != None
+    ).order_by(NltClientiPubblici.data_creazione.desc()).first()
+
+    if not ultima_offerta_cliente or not ultima_offerta_cliente.slug_offerta:
+        raise HTTPException(status_code=400, detail="Nessuna offerta valida trovata per generare il preventivo.")
 
     # Genera e invia preventivo aggiornato al cliente
     token = str(uuid.uuid4())
@@ -646,16 +654,20 @@ def switch_cliente_anagrafica(
         token=token,
         data_creazione=datetime.utcnow(),
         data_scadenza=datetime.utcnow() + timedelta(days=7),
-        confermato=True
+        confermato=True,
+        slug_offerta=ultima_offerta_cliente.slug_offerta,  # 🚩 fondamentale valorizzare questo
+        anticipo=ultima_offerta_cliente.anticipo,
+        canone=ultima_offerta_cliente.canone,
+        durata=ultima_offerta_cliente.durata,
+        km=ultima_offerta_cliente.km
     )
     db.add(nuovo_cliente_pubblico)
     db.commit()
 
-    background_tasks = BackgroundTasks()
     background_tasks.add_task(
         genera_e_invia_preventivo,
         cliente_pubblico_token=token,
-        slug_offerta=None,
+        slug_offerta=ultima_offerta_cliente.slug_offerta,  # 🚩 Passiamo slug_offerta valorizzato
         dealer_slug=payload.nuovo_dealer_slug,
         tipo_cliente=cliente.tipo_cliente,
         cliente_id=cliente.id,
