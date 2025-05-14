@@ -120,7 +120,7 @@ async def get_offerte(
             "prezzo_totale": o.prezzo_totale,
             "default_img": o.default_img,  # 🔥 Qui aggiunto
             "solo_privati": o.solo_privati,
-
+            "attivo": o.attivo,
             "accessori": [
                 {
                     "codice": a.codice,
