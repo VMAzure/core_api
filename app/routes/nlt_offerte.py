@@ -19,6 +19,8 @@ import unidecode
 import re
 import requests
 import httpx
+from app.routes.image import get_vehicle_image
+
 
 from app.auth_helpers import (
     get_admin_id,
@@ -342,7 +344,8 @@ async def crea_offerta(
         params = {
             "angle": angle,
             "width": 800,
-            "return_url": "false"
+            "return_url": False,
+            "random_paint": "true"
         }
 
         if solo_privati:
@@ -360,29 +363,41 @@ async def crea_offerta(
                 params["surrounding"] = "sur2"
                 params["viewPoint"] = "4"
 
-        # Recupera immagine dalla CDN (tuo endpoint esistente)
-        headers = {"Authorization": f"Bearer {token}"}
+        # Chiamata interna diretta (senza httpx)
+        try:
+            internal_response = await get_vehicle_image(
+                codice_modello=codice_modello,
+                angle=params["angle"],
+                random_paint=params["random_paint"],
+                width=params["width"],
+                return_url=params["return_url"],
+                db=db,
+                current_user=current_user,
+                surrounding=params.get("surrounding"),
+                viewPoint=params.get("viewPoint")
+            )
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Errore interno immagine {view}: {e}")
 
-        response = httpx.get(
-            f"{backend_base_url}/{codice_modello}",
-            params=params,
-            headers=headers,
-            timeout=30.0  # 👈 timeout chiaramente aumentato a 30 secondi
-        )
+        # internal_response è un oggetto Response di FastAPI/Starlette
+        response_content = internal_response.body
 
-        if response.status_code != 200:
-            raise HTTPException(status_code=502, detail=f"Errore CDN immagine {view}.")
-
-        # Converti immagine ricevuta in webp
-        image = Image.open(BytesIO(response.content)).convert("RGB")
-        img_byte_arr = BytesIO()
-        image.save(img_byte_arr, format='WEBP', quality=90)
-        img_byte_arr.seek(0)
+        # Conversione in WEBP
+        try:
+            image = Image.open(BytesIO(response_content)).convert("RGB")
+            img_byte_arr = BytesIO()
+            image.save(img_byte_arr, format='WEBP', quality=90)
+            img_byte_arr.seek(0)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Errore conversione immagine {view}: {e}")
 
         # Upload su Supabase
         unique_filename = f"{nuova_offerta.id_offerta}_{view}_{uuid.uuid4().hex}.webp"
-        supabase_url = upload_to_supabase(img_byte_arr.getvalue(), unique_filename)
-        urls_supabase[view] = supabase_url
+        try:
+            supabase_url = upload_to_supabase(img_byte_arr.getvalue(), unique_filename)
+            urls_supabase[view] = supabase_url
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Errore upload Supabase immagine {view}: {e}")
 
     # Salvataggio definitivo URL immagini su DB
     nuove_immagini_nlt = ImmaginiNlt(
@@ -394,8 +409,8 @@ async def crea_offerta(
     db.add(nuove_immagini_nlt)
     db.commit()
 
-
     return {"success": True, "id_offerta": nuova_offerta.id_offerta}
+
 
 
 # ✅ PUT Attiva/Disattiva Offerta
