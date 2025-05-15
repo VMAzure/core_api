@@ -14,6 +14,7 @@ router = APIRouter(
 
 IMAGIN_CDN_BASE_URL = "https://cdn.imagin.studio/getImage"
 
+
 @router.get("/{codice_modello}")
 async def get_vehicle_image(
     codice_modello: str,
