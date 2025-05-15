@@ -512,7 +512,10 @@ async def offerte_nlt_pubbliche(
     for offerta, quotazione in offerte:
         canone_minimo = float(quotazione.mesi_36_10) - (float(offerta.prezzo_listino) * 0.25 / 36)
 
-        immagine_url = f"https://coreapi-production-ca29.up.railway.app/api/image/{offerta.codice_modello}?angle=29&width=600&return_url=true"
+        immagine_url = (
+            f"https://coreapi-production-ca29.up.railway.app/api/image/public/{offerta.codice_modello}"
+            f"?angle=29&width=600&return_url=true&billingtag={slug}"
+        )
 
         risultato.append({
             "id_offerta": offerta.id_offerta,
