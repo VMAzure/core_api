@@ -363,7 +363,12 @@ async def crea_offerta(
         # Recupera immagine dalla CDN (tuo endpoint esistente)
         headers = {"Authorization": f"Bearer {token}"}
 
-        response = httpx.get(f"{backend_base_url}/{codice_modello}", params=params, headers=headers)
+        response = httpx.get(
+            f"{backend_base_url}/{codice_modello}",
+            params=params,
+            headers=headers,
+            timeout=30.0  # 👈 timeout chiaramente aumentato a 30 secondi
+        )
 
         if response.status_code != 200:
             raise HTTPException(status_code=502, detail=f"Errore CDN immagine {view}.")
