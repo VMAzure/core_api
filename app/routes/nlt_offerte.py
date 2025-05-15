@@ -176,13 +176,26 @@ BUCKET_NAME = "nlt-images"
 supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
-def upload_to_supabase(image_content: bytes, filename: str) -> str:
-    path = f"offerte/{filename}"
-    supabase_client.storage.from_(BUCKET_NAME).upload(path, image_content, {
-        "content-type": "image/webp"
-    })
+def upload_to_supabase(file_bytes, filename, content_type="image/webp"):
+    from supabase import create_client
+    import os
 
-    return f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET_NAME}/{path}"
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+    client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+    try:
+        result = client.storage.from_("nlt-images").upload(
+            filename, file_bytes, {"content-type": content_type}
+        )
+    except Exception as e:  # 👈 cattura l'errore generale chiaramente qui
+        print(f"❌ Errore Supabase: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore upload Supabase: {e}")
+
+    public_url = client.storage.from_("nlt-images").get_public_url(filename)
+    return public_url
+
+
 
 
 @router.post("/")
