@@ -2,19 +2,21 @@
 from sqlalchemy.orm import Session, selectinload
 from typing import Optional, List
 from app.database import get_db
-from app.models import NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings
+from app.models import NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt  
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
 from .motornet import get_motornet_token
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from app.routes.openai_config import genera_descrizione_gpt
-
+from supabase import create_client
+import uuid
+from PIL import Image
+from io import BytesIO
+import os
 import logging
-
 import unidecode
 import re
-
 import requests
 import httpx
 
@@ -162,6 +164,20 @@ async def get_offerte(
     return {"success": True, "offerte": risultati}
 
 
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+BUCKET_NAME = "nlt-images"
+
+supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+def upload_to_supabase(image_content: bytes, filename: str) -> str:
+    path = f"offerte/{filename}"
+    supabase_client.storage.from_(BUCKET_NAME).upload(path, image_content, {
+        "content-type": "image/webp"
+    })
+
+    return f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET_NAME}/{path}"
 
 
 @router.post("/")
@@ -314,6 +330,61 @@ async def crea_offerta(
         db.add(immagine_principale)
         db.commit()
 
+    # Recupero immagini da CDN e salvataggio in Supabase
+    backend_base_url = "https://coreapi-production-ca29.up.railway.app/api/image"
+    angles = {"front": 203, "back": 213}
+    urls_supabase = {}
+
+    for view, angle in angles.items():
+        params = {
+            "angle": angle,
+            "width": 800,
+            "return_url": "false"
+        }
+
+        if solo_privati:
+            if angle == 203:
+                params["surrounding"] = "sur5"
+                params["viewPoint"] = "1"
+            else:  # angle == 213
+                params["surrounding"] = "sur5"
+                params["viewPoint"] = "2"
+        else:
+            if angle == 203:
+                params["surrounding"] = "sur2"
+                params["viewPoint"] = "1"
+            else:  # angle == 213
+                params["surrounding"] = "sur2"
+                params["viewPoint"] = "4"
+
+        # Recupera immagine dalla CDN (tuo endpoint esistente)
+        headers = {"Authorization": f"Bearer {current_user.token}"}
+
+        response = httpx.get(f"{backend_base_url}/{codice_modello}", params=params, headers=headers)
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Errore CDN immagine {view}.")
+
+        # Converti immagine ricevuta in webp
+        image = Image.open(BytesIO(response.content)).convert("RGB")
+        img_byte_arr = BytesIO()
+        image.save(img_byte_arr, format='WEBP', quality=90)
+        img_byte_arr.seek(0)
+
+        # Upload su Supabase
+        unique_filename = f"{nuova_offerta.id_offerta}_{view}_{uuid.uuid4().hex}.webp"
+        supabase_url = upload_to_supabase(img_byte_arr.getvalue(), unique_filename)
+        urls_supabase[view] = supabase_url
+
+    # Salvataggio definitivo URL immagini su DB
+    nuove_immagini_nlt = ImmaginiNlt(
+        id_offerta=nuova_offerta.id_offerta,
+        url_immagine_front=urls_supabase["front"],
+        url_immagine_back=urls_supabase["back"]
+    )
+
+    db.add(nuove_immagini_nlt)
+    db.commit()
 
 
     return {"success": True, "id_offerta": nuova_offerta.id_offerta}

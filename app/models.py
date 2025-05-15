@@ -737,3 +737,11 @@ class ClienteCreateRequest(BaseModel):
     newsletter: bool
     marketing: bool
     dealer_slug: str
+
+class ImmaginiNlt(Base):
+    __tablename__ = 'immagini_nlt'
+
+    id_offerta = Column(Integer, ForeignKey('nlt_offerte.id_offerta', ondelete='CASCADE'), primary_key=True)
+    url_immagine_front = Column(String(512), nullable=False)
+    url_immagine_back = Column(String(512), nullable=False)
+    data_creazione = Column(DateTime(timezone=True), server_default=func.now())
