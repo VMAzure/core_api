@@ -15,6 +15,9 @@ if TYPE_CHECKING:
 # Configurazione hashing password
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+Base.metadata.clear()
+
+
 class Services(Base):
     __tablename__ = "services"
     __table_args__ = {"schema": "public"}
@@ -741,12 +744,12 @@ class ClienteCreateRequest(BaseModel):
     dealer_slug: str
 
 class ImmaginiNlt(Base):
-    __tablename__ = "nlt_immagini"
+    __tablename__ = 'nlt_immagini'
+    __table_args__ = {'extend_existing': True}
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    id_offerta = Column(Integer, ForeignKey("nlt_offerte.id_offerta"), nullable=False, unique=True)
+    id = Column(Integer, primary_key=True, index=True)
+    id_offerta = Column(Integer, ForeignKey('nlt_offerte.id_offerta'), nullable=False)
     url_immagine_front = Column(String, nullable=False)
     url_immagine_back = Column(String, nullable=False)
 
     offerta = relationship("NltOfferte", back_populates="immagini_nlt")
-
