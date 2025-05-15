@@ -351,6 +351,8 @@ class NltOfferte(Base):
     slug = Column(String(255), nullable=False, unique=True)
     solo_privati = Column(Boolean, nullable=False, default=False)
     descrizione_ai = Column(Text, nullable=True)
+    immagini_nlt = relationship("ImmaginiNlt", uselist=False, back_populates="offerta")
+
 
 
 
@@ -739,9 +741,12 @@ class ClienteCreateRequest(BaseModel):
     dealer_slug: str
 
 class ImmaginiNlt(Base):
-    __tablename__ = 'immagini_nlt'
+    __tablename__ = "nlt_immagini"
 
-    id_offerta = Column(Integer, ForeignKey('nlt_offerte.id_offerta', ondelete='CASCADE'), primary_key=True)
-    url_immagine_front = Column(String(512), nullable=False)
-    url_immagine_back = Column(String(512), nullable=False)
-    data_creazione = Column(DateTime(timezone=True), server_default=func.now())
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_offerta = Column(Integer, ForeignKey("nlt_offerte.id_offerta"), nullable=False, unique=True)
+    url_immagine_front = Column(String, nullable=False)
+    url_immagine_back = Column(String, nullable=False)
+
+    offerta = relationship("NltOfferte", back_populates="immagini_nlt")
+

@@ -81,28 +81,29 @@ async def get_offerte(
         selectinload(NltOfferte.player)
     )
 
-    # 👇 Logica aggiornata con filtro attivo=True di default se non specificato
+    # 👇 Filtro default attivo=True se non specificato
     if attivo is None:
         query = query.filter(NltOfferte.attivo.is_(True))
     else:
         query = query.filter(NltOfferte.attivo == attivo)
 
     if current_user.role == "superadmin":
-        pass  # nessun filtro, vede tutte le offerte (solo filtro attivo)
-
+        pass
     elif is_admin_user(current_user):
         admin_id = get_admin_id(current_user)
         query = query.filter(NltOfferte.id_admin == admin_id)
-
     elif is_dealer_user(current_user):
         admin_id = get_admin_id(current_user)
         query = query.filter(NltOfferte.id_admin == admin_id)
 
-    # 👇 Ordinamento per prezzo_listino ASC (prezzo più basso prima)
+    # Ordinamento prezzo_listino ASC
     offerte = query.order_by(NltOfferte.prezzo_listino.asc()).all()
 
     risultati = []
     for o in offerte:
+        # Recupera chiaramente gli URL immagini front e back
+        immagine_nlt = db.query(ImmaginiNlt).filter(ImmaginiNlt.id_offerta == o.id_offerta).first()
+
         risultati.append({
             "id_offerta": o.id_offerta,
             "marca": o.marca,
@@ -125,7 +126,7 @@ async def get_offerte(
             "prezzo_accessori": o.prezzo_accessori,
             "prezzo_mss": o.prezzo_mss,
             "prezzo_totale": o.prezzo_totale,
-            "default_img": o.default_img,  # 🔥 Qui aggiunto
+            "default_img": o.default_img,
             "solo_privati": o.solo_privati,
             "attivo": o.attivo,
             "accessori": [
@@ -163,10 +164,16 @@ async def get_offerte(
                 "60_30": o.quotazioni[0].mesi_60_30 if o.quotazioni else None,
                 "60_40": o.quotazioni[0].mesi_60_40 if o.quotazioni else None,
             },
-                "immagine": next((img.url_imagin for img in o.immagini if img.principale), None)
+            # 👇 Immagine principale pre-esistente (se presente)
+            "immagine": next((img.url_imagin for img in o.immagini if img.principale), None),
+
+            # 🔥 Nuovi campi Supabase front/back
+            "immagine_front": immagine_nlt.url_immagine_front if immagine_nlt else None,
+            "immagine_back": immagine_nlt.url_immagine_back if immagine_nlt else None
         })
 
     return {"success": True, "offerte": risultati}
+
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
