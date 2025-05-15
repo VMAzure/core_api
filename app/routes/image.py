@@ -57,7 +57,7 @@ async def get_vehicle_image(
         "modelFamily": modello,
         "angle": angle,
         "customer": "it-azureautomotive",
-        "billingtag": "core",
+        "billingtag": f"CORE&{current_user.id}",
         "zoomlevel": 1,
         "zoomType": "fullscreen",
         "randomPaint": random_paint,
@@ -89,9 +89,10 @@ async def get_vehicle_image(
 @router.get("/public/{codice_modello}")
 async def get_vehicle_image_public(
     codice_modello: str,
-    angle: int = Query(29, ge=0, le=360),  # 🔥 angolo libero personalizzabile
+    angle: int = Query(29, ge=0, le=360),
     random_paint: str = Query("true"),
     width: int = Query(600, ge=150, le=2600),
+    billingtag: Optional[str] = Query("CORE_PUBLIC"),
     db: Session = Depends(get_db)
 ):
     alias = db.query(AzImage).filter(AzImage.codice_modello == codice_modello).first()
@@ -124,7 +125,7 @@ async def get_vehicle_image_public(
         "modelFamily": modello,
         "angle": angle,
         "customer": "it-azureautomotive",
-        "billingtag": "core",
+        "billingtag": billingtag,  # 👈 billingtag dinamico
         "zoomlevel": 1,
         "zoomType": "fullscreen",
         "randomPaint": random_paint,
@@ -136,6 +137,5 @@ async def get_vehicle_image_public(
 
     cdn_url = f"{IMAGIN_CDN_BASE_URL}?{requests.compat.urlencode(params)}"
 
-    # Ritorna URL diretto alla CDN pubblica
     return {"url": cdn_url}
 

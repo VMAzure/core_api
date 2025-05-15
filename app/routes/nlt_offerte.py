@@ -73,107 +73,107 @@ async def get_offerte(
     db: Session = Depends(get_db),
     attivo: Optional[bool] = Query(None)
 ):
-    query = db.query(NltOfferte).options(
-        selectinload(NltOfferte.accessori),
-        selectinload(NltOfferte.tags),
-        selectinload(NltOfferte.quotazioni),
-        selectinload(NltOfferte.immagini),
-        selectinload(NltOfferte.player)
-    )
+    try:
+        query = db.query(NltOfferte).options(
+            selectinload(NltOfferte.accessori),
+            selectinload(NltOfferte.tags),
+            selectinload(NltOfferte.quotazioni),
+            selectinload(NltOfferte.immagini),
+            selectinload(NltOfferte.player),
+            selectinload(NltOfferte.immagini_nlt)  # Aggiungi questo per immagini_nlt
+        )
 
-    # 👇 Filtro default attivo=True se non specificato
-    if attivo is None:
-        query = query.filter(NltOfferte.attivo.is_(True))
-    else:
-        query = query.filter(NltOfferte.attivo == attivo)
+        if attivo is None:
+            query = query.filter(NltOfferte.attivo.is_(True))
+        else:
+            query = query.filter(NltOfferte.attivo == attivo)
 
-    if current_user.role == "superadmin":
-        pass
-    elif is_admin_user(current_user):
-        admin_id = get_admin_id(current_user)
-        query = query.filter(NltOfferte.id_admin == admin_id)
-    elif is_dealer_user(current_user):
-        admin_id = get_admin_id(current_user)
-        query = query.filter(NltOfferte.id_admin == admin_id)
+        if current_user.role == "superadmin":
+            pass
+        elif is_admin_user(current_user):
+            admin_id = get_admin_id(current_user)
+            query = query.filter(NltOfferte.id_admin == admin_id)
+        elif is_dealer_user(current_user):
+            admin_id = get_admin_id(current_user)
+            query = query.filter(NltOfferte.id_admin == admin_id)
 
-    # Ordinamento prezzo_listino ASC
-    offerte = query.order_by(NltOfferte.prezzo_listino.asc()).all()
+        offerte = query.order_by(NltOfferte.prezzo_listino.asc()).all()
 
-    risultati = []
-    for o in offerte:
-        # Recupera chiaramente gli URL immagini front e back
-        immagine_nlt = db.query(ImmaginiNlt).filter(ImmaginiNlt.id_offerta == o.id_offerta).first()
+        risultati = []
+        for o in offerte:
+            risultati.append({
+                "id_offerta": o.id_offerta,
+                "marca": o.marca,
+                "modello": o.modello,
+                "versione": o.versione,
+                "codice_motornet": o.codice_motornet,
+                "codice_modello": o.codice_modello,
+                "id_player": o.id_player,
+                "player": {
+                    "nome": o.player.nome,
+                    "colore": o.player.colore
+                } if o.player else None,
+                "alimentazione": o.alimentazione,
+                "cambio": o.cambio,
+                "segmento": o.segmento,
+                "descrizione_breve": o.descrizione_breve,
+                "valido_da": o.valido_da,
+                "valido_fino": o.valido_fino,
+                "prezzo_listino": o.prezzo_listino,
+                "prezzo_accessori": o.prezzo_accessori,
+                "prezzo_mss": o.prezzo_mss,
+                "prezzo_totale": o.prezzo_totale,
+                "default_img": o.default_img,
+                "solo_privati": o.solo_privati,
+                "attivo": o.attivo,
+                "accessori": [
+                    {
+                        "codice": a.codice,
+                        "descrizione": a.descrizione,
+                        "prezzo": float(a.prezzo)
+                    } for a in o.accessori
+                ],
+                "tags": [
+                    {
+                        "id_tag": t.id_tag,
+                        "nome": t.nome,
+                        "fa_icon": t.fa_icon,
+                        "colore": t.colore
+                    } for t in o.tags
+                ],
+                "quotazioni": {
+                    "36_10": o.quotazioni[0].mesi_36_10 if o.quotazioni else None,
+                    "36_15": o.quotazioni[0].mesi_36_15 if o.quotazioni else None,
+                    "36_20": o.quotazioni[0].mesi_36_20 if o.quotazioni else None,
+                    "36_25": o.quotazioni[0].mesi_36_25 if o.quotazioni else None,
+                    "36_30": o.quotazioni[0].mesi_36_30 if o.quotazioni else None,
+                    "36_40": o.quotazioni[0].mesi_36_40 if o.quotazioni else None,
+                    "48_10": o.quotazioni[0].mesi_48_10 if o.quotazioni else None,
+                    "48_15": o.quotazioni[0].mesi_48_15 if o.quotazioni else None,
+                    "48_20": o.quotazioni[0].mesi_48_20 if o.quotazioni else None,
+                    "48_25": o.quotazioni[0].mesi_48_25 if o.quotazioni else None,
+                    "48_30": o.quotazioni[0].mesi_48_30 if o.quotazioni else None,
+                    "48_40": o.quotazioni[0].mesi_48_40 if o.quotazioni else None,
+                    "60_10": o.quotazioni[0].mesi_60_10 if o.quotazioni else None,
+                    "60_15": o.quotazioni[0].mesi_60_15 if o.quotazioni else None,
+                    "60_20": o.quotazioni[0].mesi_60_20 if o.quotazioni else None,
+                    "60_25": o.quotazioni[0].mesi_60_25 if o.quotazioni else None,
+                    "60_30": o.quotazioni[0].mesi_60_30 if o.quotazioni else None,
+                    "60_40": o.quotazioni[0].mesi_60_40 if o.quotazioni else None,
+                },
+                # Immagine principale pre-esistente (se presente)
+                "immagine": next((img.url_imagin for img in o.immagini if img.principale), None),
 
-        risultati.append({
-            "id_offerta": o.id_offerta,
-            "marca": o.marca,
-            "modello": o.modello,
-            "versione": o.versione,
-            "codice_motornet": o.codice_motornet,
-            "codice_modello": o.codice_modello,
-            "id_player": o.id_player,
-            "player": {
-                "nome": o.player.nome,
-                "colore": o.player.colore
-            } if o.player else None,
-            "alimentazione": o.alimentazione,
-            "cambio": o.cambio,
-            "segmento": o.segmento,
-            "descrizione_breve": o.descrizione_breve,
-            "valido_da": o.valido_da,
-            "valido_fino": o.valido_fino,
-            "prezzo_listino": o.prezzo_listino,
-            "prezzo_accessori": o.prezzo_accessori,
-            "prezzo_mss": o.prezzo_mss,
-            "prezzo_totale": o.prezzo_totale,
-            "default_img": o.default_img,
-            "solo_privati": o.solo_privati,
-            "attivo": o.attivo,
-            "accessori": [
-                {
-                    "codice": a.codice,
-                    "descrizione": a.descrizione,
-                    "prezzo": float(a.prezzo)
-                } for a in o.accessori
-            ],
-            "tags": [
-                {
-                    "id_tag": t.id_tag,
-                    "nome": t.nome,
-                    "fa_icon": t.fa_icon,
-                    "colore": t.colore
-                } for t in o.tags
-            ],
-            "quotazioni": {
-                "36_10": o.quotazioni[0].mesi_36_10 if o.quotazioni else None,
-                "36_15": o.quotazioni[0].mesi_36_15 if o.quotazioni else None,
-                "36_20": o.quotazioni[0].mesi_36_20 if o.quotazioni else None,
-                "36_25": o.quotazioni[0].mesi_36_25 if o.quotazioni else None,
-                "36_30": o.quotazioni[0].mesi_36_30 if o.quotazioni else None,
-                "36_40": o.quotazioni[0].mesi_36_40 if o.quotazioni else None,
-                "48_10": o.quotazioni[0].mesi_48_10 if o.quotazioni else None,
-                "48_15": o.quotazioni[0].mesi_48_15 if o.quotazioni else None,
-                "48_20": o.quotazioni[0].mesi_48_20 if o.quotazioni else None,
-                "48_25": o.quotazioni[0].mesi_48_25 if o.quotazioni else None,
-                "48_30": o.quotazioni[0].mesi_48_30 if o.quotazioni else None,
-                "48_40": o.quotazioni[0].mesi_48_40 if o.quotazioni else None,
-                "60_10": o.quotazioni[0].mesi_60_10 if o.quotazioni else None,
-                "60_15": o.quotazioni[0].mesi_60_15 if o.quotazioni else None,
-                "60_20": o.quotazioni[0].mesi_60_20 if o.quotazioni else None,
-                "60_25": o.quotazioni[0].mesi_60_25 if o.quotazioni else None,
-                "60_30": o.quotazioni[0].mesi_60_30 if o.quotazioni else None,
-                "60_40": o.quotazioni[0].mesi_60_40 if o.quotazioni else None,
-            },
-            # 👇 Immagine principale pre-esistente (se presente)
-            "immagine": next((img.url_imagin for img in o.immagini if img.principale), None),
+                # 🔥 Utilizza la relazione invece di nuova query
+                "immagine_front": o.immagini_nlt.url_immagine_front if o.immagini_nlt else None,
+                "immagine_back": o.immagini_nlt.url_immagine_back if o.immagini_nlt else None
+            })
 
-            # 🔥 Nuovi campi Supabase front/back
-            "immagine_front": immagine_nlt.url_immagine_front if immagine_nlt else None,
-            "immagine_back": immagine_nlt.url_immagine_back if immagine_nlt else None
-        })
+        return {"success": True, "offerte": risultati}
 
-    return {"success": True, "offerte": risultati}
-
+    except Exception as e:
+        print(f"❌ Errore interno nella GET offerte: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
