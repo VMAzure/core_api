@@ -744,7 +744,7 @@ class ClienteCreateRequest(BaseModel):
     dealer_slug: str
 
 class ImmaginiNlt(Base):
-    __tablename__ = 'nlt_immagini'
+    __tablename__ = 'immagini_nlt'
     __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
