@@ -27,6 +27,9 @@ from app.auth_helpers import (
     is_dealer_user
 )
 
+from fastapi.security import OAuth2PasswordBearer
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
 router = APIRouter(
@@ -206,7 +209,7 @@ async def crea_offerta(
     segmento: Optional[str] = Body(None),
     solo_privati: bool = Body(False),  # 👈 aggiungi questo, default False
 
-
+    token: str = Depends(oauth2_scheme),  # 👈 aggiungi questo chiaramente
     db: Session = Depends(get_db)
 ):
     verify_admin_or_superadmin(current_user)
@@ -358,7 +361,7 @@ async def crea_offerta(
                 params["viewPoint"] = "4"
 
         # Recupera immagine dalla CDN (tuo endpoint esistente)
-        headers = {"Authorization": f"Bearer {current_user.token}"}
+        headers = {"Authorization": f"Bearer {token}"}
 
         response = httpx.get(f"{backend_base_url}/{codice_modello}", params=params, headers=headers)
 
