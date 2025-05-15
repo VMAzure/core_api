@@ -693,7 +693,6 @@ def aggiorna_quotazioni(
         "48_10", "48_15", "48_20", "48_25", "48_30", "48_40",
         "60_10", "60_15", "60_20", "60_25", "60_30", "60_40"
     ]
-
     # Aggiorna solo campi presenti e non nulli
     for campo in campi_validi:
         valore = quotazioni.get(campo)
