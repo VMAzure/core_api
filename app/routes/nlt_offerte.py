@@ -567,3 +567,41 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
         "motornet_status": motornet_status,
         "dettagli_motornet": dettagli_motornet
     }
+
+
+@router.put("/quotazioni/{id_offerta}")
+def aggiorna_quotazioni(
+    id_offerta: int,
+    quotazioni: dict = Body(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    verify_admin_or_superadmin(current_user)
+
+    offerta = db.query(NltOfferte).filter(NltOfferte.id_offerta == id_offerta).first()
+
+    if not offerta:
+        raise HTTPException(status_code=404, detail="Offerta non trovata.")
+
+    quotazione = db.query(NltQuotazioni).filter(NltQuotazioni.id_offerta == id_offerta).first()
+
+    if not quotazione:
+        quotazione = NltQuotazioni(id_offerta=id_offerta)
+        db.add(quotazione)
+
+    campi_validi = [
+        "36_10", "36_15", "36_20", "36_25", "36_30", "36_40",
+        "48_10", "48_15", "48_20", "48_25", "48_30", "48_40",
+        "60_10", "60_15", "60_20", "60_25", "60_30", "60_40"
+    ]
+
+    # Aggiorna solo campi presenti e non nulli
+    for campo in campi_validi:
+        valore = quotazioni.get(campo)
+        if valore is not None:
+            setattr(quotazione, f"mesi_{campo}", valore)
+
+    db.commit()
+    db.refresh(quotazione)
+
+    return {"success": True, "quotazioni": quotazioni}
