@@ -412,7 +412,7 @@ async def crea_offerta(
             raise HTTPException(status_code=500, detail=f"Errore conversione immagine {view}: {e}")
 
         # Upload su Supabase
-        unique_filename = f"offerte/{nuova_offerta.id_offerta}_{view}.webp"
+        unique_filename = f"{nuova_offerta.id_offerta}_{view}.webp"
         try:
             supabase_url = upload_to_supabase(
                 file_bytes=img_byte_arr.getvalue(),

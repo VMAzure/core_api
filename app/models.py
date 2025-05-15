@@ -744,12 +744,12 @@ class ClienteCreateRequest(BaseModel):
     dealer_slug: str
 
 class ImmaginiNlt(Base):
-    __tablename__ = 'immagini_nlt'
-    __table_args__ = {'extend_existing': True}
+    __tablename__ = "immagini_nlt"
 
-    id = Column(Integer, primary_key=True, index=True)
-    id_offerta = Column(Integer, ForeignKey('nlt_offerte.id_offerta'), nullable=False)
-    url_immagine_front = Column(String, nullable=False)
-    url_immagine_back = Column(String, nullable=False)
+    id_immagine = Column(Integer, primary_key=True)  # ✅ Corretta colonna primaria
+    id_offerta = Column(Integer, ForeignKey("nlt_offerte.id_offerta"))
+    url_immagine_front = Column(String(1000))
+    url_immagine_back = Column(String(1000))
+    data_creazione = Column(DateTime, default=datetime.utcnow)
 
     offerta = relationship("NltOfferte", back_populates="immagini_nlt")
