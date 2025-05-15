@@ -207,12 +207,17 @@ async def crea_offerta(
 
      # Genera descrizione tramite OpenAI
         prompt_descrizione = (
-        f"Descrivi in circa 350 caratteri (minimo 300, massimo 350 spazi inclusi) "
-        f"le principali peculiarità e caratteristiche tecniche della {marca} {modello}. "
-        f"Utilizza il grassetto (** **) esclusivamente per le parole chiave più importanti. "
-        f"Non citare il noleggio, parla solo di estetica, prestazioni, comfort e tecnologia."
-    )
-    descrizione_ai_generata = await genera_descrizione_gpt(prompt_descrizione)
+            f"Descrivi in circa 350 caratteri (minimo 300, massimo 350 spazi inclusi) "
+            f"le principali peculiarità e caratteristiche tecniche della {marca} {modello}. "
+            f"Utilizza il grassetto (** **) esclusivamente per le parole chiave più importanti. "
+            f"Non citare il noleggio, parla solo di estetica, prestazioni, comfort e tecnologia."
+        )
+        # Gestione errore chiamata OpenAI, descrizione AI diventa None in caso di fallimento
+        try:
+            descrizione_ai_generata = await genera_descrizione_gpt(prompt_descrizione)
+        except Exception as e:
+            print(f"Errore generazione descrizione OpenAI: {e}")
+            descrizione_ai_generata = None
 
     # Ora crei sempre nuova_offerta, anche se codice_modello è None
     nuova_offerta = NltOfferte(
