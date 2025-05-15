@@ -4,6 +4,8 @@ from app.database import get_db
 from app.models import AzImage, MnetModelli, MnetMarche, User
 from app.routes.nlt import get_current_user
 import requests
+from typing import Optional
+
 
 router = APIRouter(
     prefix="/api/image",
@@ -19,6 +21,8 @@ async def get_vehicle_image(
     random_paint: str = Query("true"),
     width: int = Query(400, ge=150, le=2600),
     return_url: bool = Query(False),  # 🔹 nuovo parametro per switch blob/url
+    surrounding: Optional[str] = Query(None),  # 👈 aggiunto chiaramente qui
+    viewPoint: Optional[str] = Query(None),    # 👈 aggiunto chiaramente qui
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -58,6 +62,11 @@ async def get_vehicle_image(
         "randomPaint": random_paint,
         "width": width
     }
+    if surrounding:
+        params["surrounding"] = surrounding
+
+    if viewPoint:
+        params["viewPoint"] = viewPoint
 
     if model_variant:
         params["modelVariant"] = model_variant
