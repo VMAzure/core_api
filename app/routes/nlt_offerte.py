@@ -503,6 +503,8 @@ async def offerte_nlt_pubbliche(
         admin_id = user.id  # admin stesso
 
     # 4. Ottieni offerte pubbliche legate all'admin_id corretto
+    from sqlalchemy import or_
+
     offerte = db.query(NltOfferte, NltQuotazioni).join(
         NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
     ).filter(
@@ -510,12 +512,11 @@ async def offerte_nlt_pubbliche(
         NltOfferte.attivo == True,
         NltOfferte.prezzo_listino.isnot(None),
         or_(
-            NltQuotazioni.__dict__['36_10'].isnot(None),
-            NltQuotazioni.__dict__['48_10'].isnot(None),
-            NltQuotazioni.__dict__['48_30'].isnot(None)
+            getattr(NltQuotazioni, "36_10").isnot(None),
+            getattr(NltQuotazioni, "48_10").isnot(None),
+            getattr(NltQuotazioni, "48_30").isnot(None)
         )
     ).order_by(NltOfferte.id_offerta.asc()).all()
-
 
     risultato = []
     for offerta, quotazione in offerte:
