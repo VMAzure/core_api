@@ -515,22 +515,27 @@ async def offerte_nlt_pubbliche(
     risultato = []
     for offerta, quotazione in offerte:
 
-        # Se solo_privati=False → usa 48 mesi / 30.000 km (mesi_48_30)
-        if offerta.solo_privati is False and quotazione.mesi_48_30 is not None:
+        if offerta.solo_privati is False:
+            if quotazione.mesi_36_10 is not None:
+                canone_riferimento = quotazione.mesi_36_10
+                durata = 36
+                km_inclusi = 10000
+            elif quotazione.mesi_48_10 is not None:
+                canone_riferimento = quotazione.mesi_48_10
+                durata = 48
+                km_inclusi = 10000
+            else:
+                continue  # nessuna quotazione valida, salta offerta
+
+        elif offerta.solo_privati is True and quotazione.mesi_48_30 is not None:
             canone_riferimento = quotazione.mesi_48_30
             durata = 48
             km_inclusi = 30000
 
-        # Se solo_privati=True → usa 36 mesi / 10.000 km (mesi_36_10)
-        elif quotazione.mesi_36_10 is not None:
-            canone_riferimento = quotazione.mesi_36_10
-            durata = 36
-            km_inclusi = 10000
-
         else:
-            # Nessuna quotazione valida, salta
-            continue
+            continue  # nessuna quotazione valida, salta offerta
 
+        # Calcolo del canone minimo
         canone_minimo = float(canone_riferimento) - (float(offerta.prezzo_listino) * 0.25 / durata)
 
         immagine_url = (
@@ -551,7 +556,7 @@ async def offerte_nlt_pubbliche(
             "default_img": offerta.default_img,
             "slug": offerta.slug,
             "solo_privati": offerta.solo_privati,
-            "durata_mesi": durata,  
+            "durata_mesi": durata,
             "km_inclusi": km_inclusi
         })
 
