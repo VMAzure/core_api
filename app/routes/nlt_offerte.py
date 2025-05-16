@@ -480,22 +480,22 @@ async def get_tags(db: Session = Depends(get_db)):
     return {"success": True, "tags": tags}
 
 
+# Importa modello necessario
+from app.models import MnetModelli
+
 @router.get("/offerte-nlt-pubbliche/{slug}")
 async def offerte_nlt_pubbliche(
     slug: str,
     db: Session = Depends(get_db)
 ):
-    # 1. Trova settings tramite slug
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
         raise HTTPException(status_code=404, detail=f"Slug '{slug}' non trovato.")
 
-    # 2. Recupera utente collegato ai settings
     user = db.query(User).filter(User.id == settings.admin_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato per questo slug.")
 
-    # 3. Imposta admin_id corretto (dealer o admin)
     if user.role == "dealer":
         if user.parent_id is None:
             raise HTTPException(status_code=400, detail="Dealer senza admin principale associato.")
@@ -503,7 +503,6 @@ async def offerte_nlt_pubbliche(
     else:
         admin_id = user.id
 
-    # 4. Recupera offerte pubbliche con quotazioni disponibili
     offerte = db.query(NltOfferte, NltQuotazioni).join(
         NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
     ).filter(
@@ -527,19 +526,22 @@ async def offerte_nlt_pubbliche(
         elif quotazione.mesi_48_10:
             durata_mesi, km_inclusi, canone = 48, 10000, quotazione.mesi_48_10
         else:
-            continue  # Salta offerta se non ha quotazioni valide
+            continue
 
         anticipo = float(offerta.prezzo_listino) * 0.25
         canone_finale = float(canone) - (anticipo / durata_mesi)
 
-        immagine_url = (
-            f"https://coreapi-production-ca29.up.railway.app/api/image/public/{offerta.codice_modello}"
-            f"?angle=23&width=600&return_url=true&billingtag={slug}"
-        )
+        # Usa direttamente default_img da mnet_modelli
+        modello_db = db.query(MnetModelli).filter(MnetModelli.codice_modello == offerta.codice_modello).first()
+        
+        if modello_db and modello_db.default_img:
+            immagine_url = modello_db.default_img
+        else:
+            immagine_url = "/default-placeholder.png"
 
         risultato.append({
             "id_offerta": offerta.id_offerta,
-            "immagine": immagine_url,
+            "immagine": immagine_url,  # 👈 URL diretto CDN
             "marca": offerta.marca,
             "modello": offerta.modello,
             "versione": offerta.versione,
