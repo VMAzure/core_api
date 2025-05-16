@@ -20,6 +20,8 @@ import re
 import requests
 import httpx
 from app.routes.image import get_vehicle_image
+from sqlalchemy import or_
+
 
 
 from app.auth_helpers import (
@@ -506,11 +508,14 @@ async def offerte_nlt_pubbliche(
     ).filter(
         NltOfferte.id_admin == admin_id,
         NltOfferte.attivo == True,
-        NltQuotazioni.mesi_36_10.isnot(None),
-        NltOfferte.prezzo_listino.isnot(None)
-    ).order_by(
-        (NltQuotazioni.mesi_36_10 - (NltOfferte.prezzo_listino * 0.25 / 36)).asc()
-    ).all()
+        NltOfferte.prezzo_listino.isnot(None),
+        or_(
+            NltQuotazioni.__dict__['36_10'].isnot(None),
+            NltQuotazioni.__dict__['48_10'].isnot(None),
+            NltQuotazioni.__dict__['48_30'].isnot(None)
+        )
+    ).order_by(NltOfferte.id_offerta.asc()).all()
+
 
     risultato = []
     for offerta, quotazione in offerte:
