@@ -519,32 +519,25 @@ async def offerte_nlt_pubbliche(
     ).order_by(NltOfferte.id_offerta.asc()).all()
 
     risultato = []
+
     for offerta, quotazione in offerte:
+        if offerta.solo_privati:
+            canone = quotazione.mesi_48_30
+            durata_mesi = 48
+            km_inclusi = 30000
+        elif quotazione.mesi_36_10:
+            canone = quotazione.mesi_36_10
+            durata_mesi = 36
+            km_inclusi = 10000
+        elif quotazione.mesi_48_10:
+            canone = quotazione.mesi_48_10
+            durata_mesi = 48
+            km_inclusi = 10000
+        else:
+            continue  # Offerte senza valori utilizzabili vengono saltate
 
-        canone_riferimento = None
-        durata = None
-        km_inclusi = None
-
-        if offerta.solo_privati is False:
-            if quotazione.__dict__["36_10"] is not None:
-                canone_riferimento = quotazione.__dict__["36_10"]
-                durata = 36
-                km_inclusi = 10000
-            elif quotazione.__dict__["48_10"] is not None:
-                canone_riferimento = quotazione.__dict__["48_10"]
-                durata = 48
-                km_inclusi = 10000
-
-        elif offerta.solo_privati is True:
-            if quotazione.__dict__["48_30"] is not None:
-                canone_riferimento = quotazione.__dict__["48_30"]
-                durata = 48
-                km_inclusi = 30000
-
-        if canone_riferimento is None:
-            continue  # salta offerte senza quotazioni valide
-
-        canone_minimo = float(canone_riferimento) - (float(offerta.prezzo_listino) * 0.25 / durata)
+        anticipo = float(offerta.prezzo_listino) * 0.25
+        canone_minimo = float(canone) - (anticipo / durata_mesi)
 
         immagine_url = (
             f"https://coreapi-production-ca29.up.railway.app/api/image/public/{offerta.codice_modello}"
@@ -561,12 +554,12 @@ async def offerte_nlt_pubbliche(
             "alimentazione": offerta.alimentazione,
             "canone_mensile": round(canone_minimo, 2),
             "prezzo_listino": float(offerta.prezzo_listino),
-            "default_img": offerta.default_img,
             "slug": offerta.slug,
             "solo_privati": offerta.solo_privati,
-            "durata_mesi": durata,
+            "durata_mesi": durata_mesi,
             "km_inclusi": km_inclusi
         })
+
 
 
 
