@@ -518,7 +518,7 @@ async def offerte_nlt_pubbliche(
 
         immagine_url = (
             f"https://coreapi-production-ca29.up.railway.app/api/image/public/{offerta.codice_modello}"
-            f"?angle=29&width=600&return_url=true&billingtag={slug}"
+            f"?angle=23&width=600&return_url=true&billingtag={slug}"
         )
 
         risultato.append({
