@@ -484,60 +484,52 @@ async def offerte_nlt_pubbliche(
     slug: str,
     db: Session = Depends(get_db)
 ):
-    # 1. Controlla settings da slug
+    # 1. Trova settings tramite slug
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
         raise HTTPException(status_code=404, detail=f"Slug '{slug}' non trovato.")
 
-    # 2. Carica utente legato a settings
+    # 2. Recupera utente collegato ai settings
     user = db.query(User).filter(User.id == settings.admin_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato per questo slug.")
 
-    # 3. Determina admin_id corretto
+    # 3. Imposta admin_id corretto (dealer o admin)
     if user.role == "dealer":
         if user.parent_id is None:
             raise HTTPException(status_code=400, detail="Dealer senza admin principale associato.")
-        admin_id = user.parent_id  # admin principale
+        admin_id = user.parent_id
     else:
-        admin_id = user.id  # admin stesso
+        admin_id = user.id
 
-    # 4. Ottieni offerte pubbliche legate all'admin_id corretto
-    from sqlalchemy import or_
-
+    # 4. Recupera offerte pubbliche con quotazioni disponibili
     offerte = db.query(NltOfferte, NltQuotazioni).join(
         NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
     ).filter(
         NltOfferte.id_admin == admin_id,
-        NltOfferte.attivo == True,
+        NltOfferte.attivo.is_(True),
         NltOfferte.prezzo_listino.isnot(None),
         or_(
-            getattr(NltQuotazioni, "36_10").isnot(None),
-            getattr(NltQuotazioni, "48_10").isnot(None),
-            getattr(NltQuotazioni, "48_30").isnot(None)
+            NltQuotazioni.mesi_36_10.isnot(None),
+            NltQuotazioni.mesi_48_10.isnot(None),
+            NltQuotazioni.mesi_48_30.isnot(None)
         )
     ).order_by(NltOfferte.id_offerta.asc()).all()
 
     risultato = []
 
     for offerta, quotazione in offerte:
-        if offerta.solo_privati:
-            canone = quotazione.mesi_48_30
-            durata_mesi = 48
-            km_inclusi = 30000
+        if offerta.solo_privati and quotazione.mesi_48_30:
+            durata_mesi, km_inclusi, canone = 48, 30000, quotazione.mesi_48_30
         elif quotazione.mesi_36_10:
-            canone = quotazione.mesi_36_10
-            durata_mesi = 36
-            km_inclusi = 10000
+            durata_mesi, km_inclusi, canone = 36, 10000, quotazione.mesi_36_10
         elif quotazione.mesi_48_10:
-            canone = quotazione.mesi_48_10
-            durata_mesi = 48
-            km_inclusi = 10000
+            durata_mesi, km_inclusi, canone = 48, 10000, quotazione.mesi_48_10
         else:
-            continue  # Offerte senza valori utilizzabili vengono saltate
+            continue  # Salta offerta se non ha quotazioni valide
 
         anticipo = float(offerta.prezzo_listino) * 0.25
-        canone_minimo = float(canone) - (anticipo / durata_mesi)
+        canone_finale = float(canone) - (anticipo / durata_mesi)
 
         immagine_url = (
             f"https://coreapi-production-ca29.up.railway.app/api/image/public/{offerta.codice_modello}"
@@ -552,16 +544,13 @@ async def offerte_nlt_pubbliche(
             "versione": offerta.versione,
             "cambio": offerta.cambio,
             "alimentazione": offerta.alimentazione,
-            "canone_mensile": round(canone_minimo, 2),
+            "canone_mensile": round(canone_finale, 2),
             "prezzo_listino": float(offerta.prezzo_listino),
             "slug": offerta.slug,
             "solo_privati": offerta.solo_privati,
             "durata_mesi": durata_mesi,
             "km_inclusi": km_inclusi
         })
-
-
-
 
     return risultato
 
