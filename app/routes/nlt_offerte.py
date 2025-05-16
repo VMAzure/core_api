@@ -552,7 +552,7 @@ async def offerte_nlt_pubbliche(
             "slug": offerta.slug,
             "solo_privati": offerta.solo_privati,
             "durata_mesi": durata_mesi,
-            "km_inclusi": km_inclusi
+            "km_inclusi": km_inclusi,
             "anticipo": round(float(offerta.prezzo_listino) * 0.25, 2)
 
         })
