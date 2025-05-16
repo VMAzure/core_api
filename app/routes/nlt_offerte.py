@@ -290,14 +290,15 @@ async def crea_offerta(
 
 
     # 🔥 Genera slug subito dopo aver creato nuova_offerta
+    # 🔥 Genera slug subito dopo aver creato nuova_offerta
+    prefisso_slug = "privati-" if solo_privati else "business-"
+
     nuova_offerta.slug = generate_unique_slug(
-        nuova_offerta.marca,
+        prefisso_slug + nuova_offerta.marca,
         nuova_offerta.modello,
         nuova_offerta.versione,
         db
     )
-
-
 
     db.add(nuova_offerta)
     db.commit()
