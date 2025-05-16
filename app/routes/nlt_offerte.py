@@ -514,7 +514,24 @@ async def offerte_nlt_pubbliche(
 
     risultato = []
     for offerta, quotazione in offerte:
-        canone_minimo = float(quotazione.mesi_36_10) - (float(offerta.prezzo_listino) * 0.25 / 36)
+
+        # Se solo_privati=False → usa 48 mesi / 30.000 km (mesi_48_30)
+        if offerta.solo_privati is False and quotazione.mesi_48_30 is not None:
+            canone_riferimento = quotazione.mesi_48_30
+            durata = 48
+            km_inclusi = 30000
+
+        # Se solo_privati=True → usa 36 mesi / 10.000 km (mesi_36_10)
+        elif quotazione.mesi_36_10 is not None:
+            canone_riferimento = quotazione.mesi_36_10
+            durata = 36
+            km_inclusi = 10000
+
+        else:
+            # Nessuna quotazione valida, salta
+            continue
+
+        canone_minimo = float(canone_riferimento) - (float(offerta.prezzo_listino) * 0.25 / durata)
 
         immagine_url = (
             f"https://coreapi-production-ca29.up.railway.app/api/image/public/{offerta.codice_modello}"
@@ -533,11 +550,12 @@ async def offerte_nlt_pubbliche(
             "prezzo_listino": float(offerta.prezzo_listino),
             "default_img": offerta.default_img,
             "slug": offerta.slug,
-            "solo_privati": offerta.solo_privati  # 👈 aggiungi solo questa riga
-
-
-
+            "solo_privati": offerta.solo_privati,
+            "durata_mesi": durata,  
+            "km_inclusi": km_inclusi
         })
+
+
 
     return risultato
 
