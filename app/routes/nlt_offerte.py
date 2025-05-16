@@ -515,27 +515,29 @@ async def offerte_nlt_pubbliche(
     risultato = []
     for offerta, quotazione in offerte:
 
+        canone_riferimento = None
+        durata = None
+        km_inclusi = None
+
         if offerta.solo_privati is False:
-            if quotazione.mesi_36_10 is not None:
-                canone_riferimento = quotazione.mesi_36_10
+            if quotazione.__dict__["36_10"] is not None:
+                canone_riferimento = quotazione.__dict__["36_10"]
                 durata = 36
                 km_inclusi = 10000
-            elif quotazione.mesi_48_10 is not None:
-                canone_riferimento = quotazione.mesi_48_10
+            elif quotazione.__dict__["48_10"] is not None:
+                canone_riferimento = quotazione.__dict__["48_10"]
                 durata = 48
                 km_inclusi = 10000
-            else:
-                continue  # nessuna quotazione valida, salta offerta
 
-        elif offerta.solo_privati is True and quotazione.mesi_48_30 is not None:
-            canone_riferimento = quotazione.mesi_48_30
-            durata = 48
-            km_inclusi = 30000
+        elif offerta.solo_privati is True:
+            if quotazione.__dict__["48_30"] is not None:
+                canone_riferimento = quotazione.__dict__["48_30"]
+                durata = 48
+                km_inclusi = 30000
 
-        else:
-            continue  # nessuna quotazione valida, salta offerta
+        if canone_riferimento is None:
+            continue  # salta offerte senza quotazioni valide
 
-        # Calcolo del canone minimo
         canone_minimo = float(canone_riferimento) - (float(offerta.prezzo_listino) * 0.25 / durata)
 
         immagine_url = (
