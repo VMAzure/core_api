@@ -751,5 +751,7 @@ class ImmaginiNlt(Base):
     url_immagine_front = Column(String(1000))
     url_immagine_back = Column(String(1000))
     data_creazione = Column(DateTime, default=datetime.utcnow)
+    url_immagine_front_alt = Column(String(1000), nullable=True)
+    url_immagine_back_alt = Column(String(1000), nullable=True)
 
     offerta = relationship("NltOfferte", back_populates="immagini_nlt")

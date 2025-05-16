@@ -165,8 +165,8 @@ async def get_offerte(
                 "immagine": next((img.url_imagin for img in o.immagini if img.principale), None),
 
                 # 🔥 Utilizza la relazione invece di nuova query
-                "immagine_front": o.immagini_nlt.url_immagine_front if o.immagini_nlt else None,
-                "immagine_back": o.immagini_nlt.url_immagine_back if o.immagini_nlt else None
+                "immagine_front": o.immagini_nlt.url_immagine_front_alt if o.immagini_nlt else None,
+                "immagine_back": o.immagini_nlt.url_immagine_back_alt if o.immagini_nlt else None
             })
 
         return {"success": True, "offerte": risultati}
@@ -357,7 +357,7 @@ async def crea_offerta(
 
     # Recupero immagini da CDN e salvataggio in Supabase
     backend_base_url = "https://coreapi-production-ca29.up.railway.app/api/image"
-    angles = {"front": 203, "back": 213}
+    angles = {"front": 203, "back": 213, "front_alt": 23, "back_alt": 9}
     urls_supabase = {}
 
     for view, angle in angles.items():
@@ -368,20 +368,23 @@ async def crea_offerta(
             "random_paint": "true"
         }
 
-        if solo_privati:
-            if angle == 203:
-                params["surrounding"] = "sur5"
-                params["viewPoint"] = "1"
-            else:  # angle == 213
-                params["surrounding"] = "sur5"
-                params["viewPoint"] = "2"
-        else:
-            if angle == 203:
-                params["surrounding"] = "sur2"
-                params["viewPoint"] = "1"
-            else:  # angle == 213
-                params["surrounding"] = "sur2"
-                params["viewPoint"] = "4"
+        # SOLO per angoli originali (203 e 213)
+        if angle in [203, 213]:
+            if solo_privati:
+                if angle == 203:
+                    params["surrounding"] = "sur5"
+                    params["viewPoint"] = "1"
+                else:  # angle == 213
+                    params["surrounding"] = "sur5"
+                    params["viewPoint"] = "2"
+            else:
+                if angle == 203:
+                    params["surrounding"] = "sur2"
+                    params["viewPoint"] = "1"
+                else:  # angle == 213
+                    params["surrounding"] = "sur2"
+                    params["viewPoint"] = "4"
+        # Nuove immagini (23 e 9) NON hanno parametri aggiuntivi
 
         # Chiamata interna diretta (senza httpx)
         try:
@@ -417,17 +420,19 @@ async def crea_offerta(
             supabase_url = upload_to_supabase(
                 file_bytes=img_byte_arr.getvalue(),
                 filename=unique_filename,
-                content_type="image/webp"  # fondamentale
+                content_type="image/webp"
             )
             urls_supabase[view] = supabase_url
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Errore upload Supabase immagine {view}: {e}")
 
-    # Salvataggio definitivo URL immagini su DB
+        # Salvataggio definitivo URL immagini su DB
     nuove_immagini_nlt = ImmaginiNlt(
         id_offerta=nuova_offerta.id_offerta,
         url_immagine_front=urls_supabase["front"],
-        url_immagine_back=urls_supabase["back"]
+        url_immagine_back=urls_supabase["back"],
+        url_immagine_front_alt=urls_supabase["front_alt"],  # ✅ aggiunto
+        url_immagine_back_alt=urls_supabase["back_alt"]     # ✅ aggiunto
     )
 
     db.add(nuove_immagini_nlt)
