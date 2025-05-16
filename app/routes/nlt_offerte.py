@@ -407,10 +407,9 @@ async def crea_offerta(
 
         # Conversione in WEBP
         try:
-            image = Image.open(BytesIO(response_content)).convert("RGB")
-            img_byte_arr = BytesIO()
-            image.save(img_byte_arr, format='WEBP', quality=90)
+            img_byte_arr = BytesIO(response_content)
             img_byte_arr.seek(0)
+
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Errore conversione immagine {view}: {e}")
 

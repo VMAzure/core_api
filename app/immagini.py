@@ -70,10 +70,10 @@ def recupera_e_carica_immagine(codice_modello, angle, solo_privati=None):
         print(f"❌ Errore immagine {codice_modello} (status {e.response.status_code}): {e.response.text}")
         raise
 
-    image = Image.open(BytesIO(response.content)).convert("RGB")
-    img_byte_arr = BytesIO()
-    image.save(img_byte_arr, format='WEBP', quality=90)
+    # Usa direttamente il contenuto originale (no PIL, mantiene trasparenza)
+    img_byte_arr = BytesIO(response.content)
     img_byte_arr.seek(0)
+
 
     unique_filename = f"{codice_modello}_{angle}_{uuid.uuid4().hex}.webp"
     return upload_to_supabase(
