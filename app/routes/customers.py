@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, Query
+﻿from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks  
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from app.database import get_db, engine  # sostituisci con import corretto
@@ -433,9 +433,11 @@ def registra_consenso_pubblico(
     return {"success": True, "msg": "Consenso registrato"}
 
 
+
 @router.post("/public/clienti", response_model=NltClientiPubbliciResponse)
 def crea_cliente_pubblico(
     payload: NltClientiPubbliciCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     dealer = db.query(User).join(
@@ -466,38 +468,69 @@ def crea_cliente_pubblico(
         stato_cliente = "nuovo_cliente"
         confermato = False
 
-    nuovo_cliente_pubblico = NltClientiPubblici(
+    # Se già esiste un record pubblico per questa email e dealer_slug, aggiorna
+    cliente_pubblico = db.query(NltClientiPubblici).filter_by(
         email=payload.email,
-        dealer_slug=payload.dealer_slug,
-        token=token,
-        data_creazione=data_creazione,
-        data_scadenza=data_scadenza,
-        confermato=confermato,
-        slug_offerta=payload.slug_offerta,
-        anticipo=payload.anticipo,
-        canone=payload.canone,
-        durata=payload.durata,
-        km=payload.km
-    )
+        dealer_slug=payload.dealer_slug
+    ).order_by(NltClientiPubblici.data_creazione.desc()).first()
 
-    db.add(nuovo_cliente_pubblico)
+    if cliente_pubblico:
+        cliente_pubblico.token = token
+        cliente_pubblico.data_creazione = data_creazione
+        cliente_pubblico.data_scadenza = data_scadenza
+        cliente_pubblico.slug_offerta = payload.slug_offerta
+        cliente_pubblico.anticipo = payload.anticipo
+        cliente_pubblico.canone = payload.canone
+        cliente_pubblico.durata = payload.durata
+        cliente_pubblico.km = payload.km
+        cliente_pubblico.confermato = confermato
+    else:
+        cliente_pubblico = NltClientiPubblici(
+            email=payload.email,
+            dealer_slug=payload.dealer_slug,
+            token=token,
+            data_creazione=data_creazione,
+            data_scadenza=data_scadenza,
+            confermato=confermato,
+            slug_offerta=payload.slug_offerta,
+            anticipo=payload.anticipo,
+            canone=payload.canone,
+            durata=payload.durata,
+            km=payload.km
+        )
+        db.add(cliente_pubblico)
+
     db.commit()
-    db.refresh(nuovo_cliente_pubblico)
+    db.refresh(cliente_pubblico)
+
+    # ✅ Se è già cliente del dealer, attiva subito generazione + invio
+    if stato_cliente == "cliente_stesso_dealer" and cliente_esistente:
+        background_tasks.add_task(
+            genera_e_invia_preventivo,
+            cliente_pubblico_token=token,
+            slug_offerta=payload.slug_offerta,
+            dealer_slug=payload.dealer_slug,
+            tipo_cliente=cliente_esistente.tipo_cliente,
+            cliente_id=cliente_esistente.id,
+            dealer_id=dealer.id,
+            db=db
+        )
 
     return NltClientiPubbliciResponse(
-        id=nuovo_cliente_pubblico.id,
-        email=payload.email,
-        dealer_slug=payload.dealer_slug,
+        id=cliente_pubblico.id,
+        email=cliente_pubblico.email,
+        dealer_slug=cliente_pubblico.dealer_slug,
         token=token,
-        data_creazione=data_creazione,
-        data_scadenza=data_scadenza,
-        confermato=nuovo_cliente_pubblico.confermato,
+        data_creazione=cliente_pubblico.data_creazione,
+        data_scadenza=cliente_pubblico.data_scadenza,
+        confermato=cliente_pubblico.confermato,
         stato=stato_cliente,
         email_esistente=cliente_esistente.email if cliente_esistente else None,
         dealer_corrente=payload.dealer_slug if stato_cliente == "cliente_altro_dealer" else None,
-        id_cliente=cliente_esistente.id if cliente_esistente else None,  # 👈 AGGIUNTA
+        id_cliente=cliente_esistente.id if cliente_esistente else None,
         assegnatario_nome=cliente_esistente.dealer.ragione_sociale if cliente_esistente and cliente_esistente.dealer else None
     )
+
 
 
 @router.get("/public/clienti/conferma/{token}", response_model=NltClientiPubbliciResponse)

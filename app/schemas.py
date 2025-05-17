@@ -191,6 +191,13 @@ class NltClientiPubbliciResponse(NltClientiPubbliciBase):
     km: Optional[int] = None
     stato: Optional[str]
 
+    # ✅ aggiungi questi
+    email_esistente: Optional[str] = None
+    dealer_corrente: Optional[str] = None
+    id_cliente: Optional[int] = None  # ← questo già presente ma con nome diverso?
+    assegnatario_nome: Optional[str] = None
+
     class Config:
         orm_mode = True
+
 
