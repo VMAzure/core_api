@@ -838,3 +838,58 @@ async def genera_e_invia_preventivo(
                 "html_body": html_body
             }
         )
+
+@router.put("/public/clienti/switch-anagrafica")
+def switch_anagrafica_cliente_pubblico(
+    payload: dict = Body(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db)
+):
+    email_cliente = payload.get("email_cliente")
+    nuovo_dealer_slug = payload.get("nuovo_dealer_slug")
+    nuova_email = payload.get("nuova_email")
+
+    if not email_cliente or not nuovo_dealer_slug or not nuova_email:
+        raise HTTPException(status_code=400, detail="Parametri mancanti")
+
+    cliente = db.query(Cliente).filter(Cliente.email.ilike(email_cliente)).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+
+    nuovo_dealer = db.query(User).join(SiteAdminSettings).filter(
+        SiteAdminSettings.slug == nuovo_dealer_slug
+    ).first()
+    if not nuovo_dealer:
+        raise HTTPException(status_code=404, detail="Dealer non trovato")
+
+    # aggiorna anagrafica
+    cliente.dealer_id = nuovo_dealer.id
+    db.commit()
+
+    # aggiorna cliente pubblico
+    cliente_pubblico = db.query(NltClientiPubblici).filter_by(email=email_cliente).order_by(
+        NltClientiPubblici.data_creazione.desc()
+    ).first()
+
+    if not cliente_pubblico:
+        raise HTTPException(status_code=404, detail="Cliente pubblico non trovato")
+
+    cliente_pubblico.dealer_slug = nuovo_dealer_slug
+    db.commit()
+
+    # attiva generazione e invio preventivo
+    background_tasks.add_task(
+        genera_e_invia_preventivo,
+        cliente_pubblico_token=cliente_pubblico.token,
+        slug_offerta=cliente_pubblico.slug_offerta,
+        dealer_slug=nuovo_dealer_slug,
+        tipo_cliente=cliente.tipo_cliente,
+        cliente_id=cliente.id,
+        dealer_id=nuovo_dealer.id,
+        db=db
+    )
+
+    return {
+        "success": True,
+        "message": "Cliente assegnato al nuovo dealer e preventivo in fase di invio."
+    }
