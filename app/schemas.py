@@ -180,7 +180,7 @@ class NltClientiPubbliciCreate(NltClientiPubbliciBase):
 class NltClientiPubbliciResponse(NltClientiPubbliciBase):
     id: UUID
     token: str
-    cliente_id: Optional[int]
+    cliente_id: Optional[int] = None
     data_creazione: datetime
     data_scadenza: datetime
     confermato: bool

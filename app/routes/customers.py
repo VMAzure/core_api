@@ -495,6 +495,7 @@ def crea_cliente_pubblico(
         stato=stato_cliente,
         email_esistente=cliente_esistente.email if cliente_esistente else None,
         dealer_corrente=payload.dealer_slug if stato_cliente == "cliente_altro_dealer" else None,
+        id_cliente=cliente_esistente.id if cliente_esistente else None,  # 👈 AGGIUNTA
         assegnatario_nome=cliente_esistente.dealer.ragione_sociale if cliente_esistente and cliente_esistente.dealer else None
     )
 
