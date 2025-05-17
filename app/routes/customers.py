@@ -893,3 +893,45 @@ def switch_anagrafica_cliente_pubblico(
         "success": True,
         "message": "Cliente assegnato al nuovo dealer e preventivo in fase di invio."
     }
+
+@router.post("/public/clienti/forza-invio")
+def forza_invio_preventivo_cliente_pubblico(
+    token: str = Query(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db)
+):
+    cliente_pubblico = db.query(NltClientiPubblici).filter_by(token=token).first()
+    if not cliente_pubblico:
+        raise HTTPException(status_code=404, detail="Token non trovato")
+
+    cliente = db.query(Cliente).filter(Cliente.email.ilike(cliente_pubblico.email)).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+
+    # Recupera il dealer corretto dal cliente
+    dealer = db.query(User).filter(User.id == cliente.dealer_id).first()
+    if not dealer:
+        raise HTTPException(status_code=404, detail="Dealer non trovato")
+
+    # Recupera lo slug effettivo del dealer dai settings
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer.id).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail="Impostazioni dealer non trovate")
+
+    # Avvia l'invio preventivo
+    background_tasks.add_task(
+        genera_e_invia_preventivo,
+        cliente_pubblico_token=cliente_pubblico.token,
+        slug_offerta=cliente_pubblico.slug_offerta,
+        dealer_slug=settings.slug,
+        tipo_cliente=cliente.tipo_cliente,
+        cliente_id=cliente.id,
+        dealer_id=dealer.id,
+        db=db
+    )
+
+    return {
+        "success": True,
+        "message": "Preventivo inviato correttamente"
+    }
+
