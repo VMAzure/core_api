@@ -856,17 +856,26 @@ def switch_anagrafica_cliente_pubblico(
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
 
-    nuovo_dealer = db.query(User).join(SiteAdminSettings).filter(
-        SiteAdminSettings.slug == nuovo_dealer_slug
-    ).first()
-    if not nuovo_dealer:
-        raise HTTPException(status_code=404, detail="Dealer non trovato")
+    # Cerca lo slug tra i dealer
+    dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == nuovo_dealer_slug).first()
+    if not dealer_settings:
+        raise HTTPException(status_code=404, detail="Slug dealer non trovato")
 
-    # aggiorna anagrafica
+    # Prova a trovare il dealer reale
+    if dealer_settings.dealer_id:
+        nuovo_dealer = db.query(User).filter(User.id == dealer_settings.dealer_id).first()
+    else:
+        # Fallback su admin
+        nuovo_dealer = db.query(User).filter(User.id == dealer_settings.admin_id).first()
+
+    if not nuovo_dealer:
+        raise HTTPException(status_code=404, detail="Dealer o Admin non trovato")
+
+    # aggiorna assegnazione del cliente
     cliente.dealer_id = nuovo_dealer.id
     db.commit()
 
-    # aggiorna cliente pubblico
+    # aggiorna anche la tabella dei pubblici
     cliente_pubblico = db.query(NltClientiPubblici).filter_by(email=email_cliente).order_by(
         NltClientiPubblici.data_creazione.desc()
     ).first()
@@ -877,7 +886,7 @@ def switch_anagrafica_cliente_pubblico(
     cliente_pubblico.dealer_slug = nuovo_dealer_slug
     db.commit()
 
-    # attiva generazione e invio preventivo
+    # Attiva la generazione e invio preventivo
     background_tasks.add_task(
         genera_e_invia_preventivo,
         cliente_pubblico_token=cliente_pubblico.token,
@@ -891,8 +900,9 @@ def switch_anagrafica_cliente_pubblico(
 
     return {
         "success": True,
-        "message": "Cliente assegnato al nuovo dealer e preventivo in fase di invio."
+        "message": "Cliente riassegnato e preventivo in invio."
     }
+
 
 @router.post("/public/clienti/forza-invio")
 def forza_invio_preventivo_cliente_pubblico(
