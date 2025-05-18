@@ -126,16 +126,18 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:7026",
-        "https://localhost:7026",# 👉 la tua app in locale
-        "https://corewebapp-azcore.up.railway.app",  # 👉 dominio pubblico
+        "https://localhost:7026",
+        "https://corewebapp-azcore.up.railway.app",
         "https://cigpdfgenerator-production.up.railway.app",
         "https://cig.up.railway.app/",
+        "https://www.azcore.it",  # 👈 AGGIUNGI QUESTA RIGA
+        "https://azcore.it"       # 👈 AGGIUNGI ANCHE QUESTO SENZA WWW se usato
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
 )
-#   allow_credentials=True,
+
 #     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 #     allow_headers=["Authorization", "Content-Type"]
 
