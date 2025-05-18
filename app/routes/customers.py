@@ -1006,11 +1006,12 @@ def verifica_anagrafica_cliente_pubblico(
 
 class AggiornaEmailRequest(BaseModel):
     nuova_email: EmailStr
-
 @router.put("/public/clienti/{cliente_id}/aggiorna-email")
 def aggiorna_email_cliente_pubblico(
     cliente_id: int,
     payload: AggiornaEmailRequest,
+    token: str = Query(...),  # token da frontend
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db)
 ):
     nuova_email = payload.nuova_email
@@ -1020,18 +1021,39 @@ def aggiorna_email_cliente_pubblico(
         raise HTTPException(status_code=404, detail="Cliente non trovato")
 
     if cliente.email.lower() == nuova_email.lower():
-        raise HTTPException(status_code=400, detail="Email identica a quella già registrata")
+        raise HTTPException(status_code=400, detail="Email identica")
 
-    # Verifica che nessun altro cliente usi già quella email
     email_in_uso = db.query(Cliente).filter(Cliente.email.ilike(nuova_email)).first()
     if email_in_uso:
-        raise HTTPException(status_code=409, detail="Email già associata ad un altro cliente")
+        raise HTTPException(status_code=409, detail="Email già associata a un altro cliente")
 
     cliente.email = nuova_email
     cliente.updated_at = datetime.utcnow()
     db.commit()
 
+    # recupera cliente pubblico usando il token (più affidabile)
+    cliente_pubblico = db.query(NltClientiPubblici).filter_by(token=token).first()
+    if not cliente_pubblico:
+        raise HTTPException(status_code=404, detail="Cliente pubblico non trovato")
+
+    settings = db.query(SiteAdminSettings).filter_by(slug=cliente_pubblico.dealer_slug).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail="Dealer non trovato")
+
+    dealer_id = settings.dealer_id or settings.admin_id
+
+    background_tasks.add_task(
+        genera_e_invia_preventivo,
+        cliente_pubblico_token=cliente_pubblico.token,
+        slug_offerta=cliente_pubblico.slug_offerta,
+        dealer_slug=cliente_pubblico.dealer_slug,
+        tipo_cliente=cliente.tipo_cliente,
+        cliente_id=cliente.id,
+        dealer_id=dealer_id,
+        db=db
+    )
+
     return {
         "success": True,
-        "message": "Email aggiornata correttamente"
+        "message": "Email aggiornata. Preventivo in invio."
     }
