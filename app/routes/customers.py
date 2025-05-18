@@ -13,7 +13,7 @@ from pydantic import BaseModel, EmailStr
 
 import uuid
 from app.utils.email import send_email
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from app.models import NltOfferte, NltService, NltDocumentiRichiesti
 
 import os
@@ -955,6 +955,7 @@ class VerificaAnagraficaRequest(BaseModel):
     email: str
     dealer_slug: str
 
+
 @router.post("/public/clienti/verifica-anagrafica")
 def verifica_anagrafica_cliente_pubblico(
     dati: VerificaAnagraficaRequest = Body(...),
@@ -963,11 +964,11 @@ def verifica_anagrafica_cliente_pubblico(
     if dati.tipo_cliente == "Privato":
         if not dati.codice_fiscale:
             raise HTTPException(status_code=400, detail="Codice fiscale mancante")
-        filtro = Cliente.codice_fiscale == dati.codice_fiscale
+        filtro = func.upper(Cliente.codice_fiscale) == dati.codice_fiscale.upper()
     elif dati.tipo_cliente in ["Società", "Professionista"]:
         if not dati.partita_iva:
             raise HTTPException(status_code=400, detail="Partita IVA mancante")
-        filtro = Cliente.partita_iva == dati.partita_iva
+        filtro = func.upper(Cliente.partita_iva) == dati.partita_iva.upper()
     else:
         raise HTTPException(status_code=400, detail="Tipo cliente non valido")
 
@@ -999,8 +1000,8 @@ def verifica_anagrafica_cliente_pubblico(
             "email_registrata": cliente.email,
             "dealer_origine_id": dealer_registrato_id,
             "id_cliente": cliente.id
-
         }
+
 
 
 class AggiornaEmailRequest(BaseModel):
