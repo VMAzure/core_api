@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks  
+﻿from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Body  
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from app.database import get_db, engine  # sostituisci con import corretto
@@ -945,3 +945,55 @@ def forza_invio_preventivo_cliente_pubblico(
         "message": "Preventivo inviato correttamente"
     }
 
+
+
+class VerificaAnagraficaRequest(BaseModel):
+    tipo_cliente: str
+    codice_fiscale: str | None = None
+    partita_iva: str | None = None
+    email: str
+    dealer_slug: str
+
+@router.post("/public/clienti/verifica-anagrafica")
+def verifica_anagrafica_cliente_pubblico(
+    dati: VerificaAnagraficaRequest = Body(...),
+    db: Session = Depends(get_db)
+):
+    if dati.tipo_cliente == "Privato":
+        if not dati.codice_fiscale:
+            raise HTTPException(status_code=400, detail="Codice fiscale mancante")
+        filtro = Cliente.codice_fiscale == dati.codice_fiscale
+    elif dati.tipo_cliente in ["Società", "Professionista"]:
+        if not dati.partita_iva:
+            raise HTTPException(status_code=400, detail="Partita IVA mancante")
+        filtro = Cliente.partita_iva == dati.partita_iva
+    else:
+        raise HTTPException(status_code=400, detail="Tipo cliente non valido")
+
+    cliente = db.query(Cliente).filter(filtro).first()
+    if not cliente:
+        return { "stato": "anagrafica_disponibile" }
+
+    if cliente.email.lower() == dati.email.lower():
+        return { "stato": "anagrafica_presente_stessa_email" }
+
+    # Trova dealer corrente
+    dealer_settings = db.query(SiteAdminSettings).filter_by(slug=dati.dealer_slug).first()
+    if not dealer_settings:
+        raise HTTPException(status_code=404, detail="Dealer non trovato")
+
+    # Dealer origine (registrato) vs dealer corrente
+    dealer_corrente_id = dealer_settings.dealer_id or dealer_settings.admin_id
+    dealer_registrato_id = cliente.dealer_id or cliente.admin_id
+
+    if dealer_corrente_id == dealer_registrato_id:
+        return {
+            "stato": "stesso_dealer_email_differente",
+            "email_registrata": cliente.email
+        }
+    else:
+        return {
+            "stato": "altro_dealer_email_differente",
+            "email_registrata": cliente.email,
+            "dealer_origine_id": dealer_registrato_id
+        }
