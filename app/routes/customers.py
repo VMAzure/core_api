@@ -997,3 +997,43 @@ def verifica_anagrafica_cliente_pubblico(
             "email_registrata": cliente.email,
             "dealer_origine_id": dealer_registrato_id
         }
+
+    from fastapi import APIRouter, Body, HTTPException, Depends
+from sqlalchemy.orm import Session
+from pydantic import BaseModel, EmailStr
+from app.database import get_db
+from app.models import Cliente
+
+router = APIRouter()
+
+class AggiornaEmailRequest(BaseModel):
+    nuova_email: EmailStr
+
+@router.put("/public/clienti/{cliente_id}/aggiorna-email")
+def aggiorna_email_cliente_pubblico(
+    cliente_id: int,
+    payload: AggiornaEmailRequest,
+    db: Session = Depends(get_db)
+):
+    nuova_email = payload.nuova_email
+
+    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+
+    if cliente.email.lower() == nuova_email.lower():
+        raise HTTPException(status_code=400, detail="Email identica a quella già registrata")
+
+    # Verifica che nessun altro cliente usi già quella email
+    email_in_uso = db.query(Cliente).filter(Cliente.email.ilike(nuova_email)).first()
+    if email_in_uso:
+        raise HTTPException(status_code=409, detail="Email già associata ad un altro cliente")
+
+    cliente.email = nuova_email
+    cliente.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "Email aggiornata correttamente"
+    }
