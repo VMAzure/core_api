@@ -9,7 +9,8 @@ from typing import List, Optional
 from app.schemas import ClienteResponse, ClienteCreateRequest, NltClientiPubbliciCreate, NltClientiPubbliciResponse
 from fastapi import Query, Body, BackgroundTasks
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
+
 import uuid
 from app.utils.email import send_email
 from sqlalchemy import or_
@@ -989,22 +990,18 @@ def verifica_anagrafica_cliente_pubblico(
     if dealer_corrente_id == dealer_registrato_id:
         return {
             "stato": "stesso_dealer_email_differente",
-            "email_registrata": cliente.email
+            "email_registrata": cliente.email,
+            "id_cliente": cliente.id
         }
     else:
         return {
             "stato": "altro_dealer_email_differente",
             "email_registrata": cliente.email,
-            "dealer_origine_id": dealer_registrato_id
+            "dealer_origine_id": dealer_registrato_id,
+            "id_cliente": cliente.id
+
         }
 
-    from fastapi import APIRouter, Body, HTTPException, Depends
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
-from app.database import get_db
-from app.models import Cliente
-
-router = APIRouter()
 
 class AggiornaEmailRequest(BaseModel):
     nuova_email: EmailStr
