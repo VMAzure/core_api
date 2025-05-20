@@ -514,11 +514,12 @@ async def offerte_nlt_pubbliche(
             NltQuotazioni.mesi_48_10.isnot(None),
             NltQuotazioni.mesi_48_30.isnot(None)
         )
-    ).order_by(NltOfferte.id_offerta.asc()).all()
+    ).order_by(NltOfferte.prezzo_listino.asc()).all()  # Ordinamento per prezzo_listino crescente
 
     risultato = []
 
     for offerta, quotazione in offerte:
+        # Seleziona il canone iniziale in base a regole predefinite
         if offerta.solo_privati and quotazione.mesi_48_30:
             durata_mesi, km_inclusi, canone = 48, 30000, quotazione.mesi_48_30
         elif quotazione.mesi_36_10:
@@ -528,33 +529,25 @@ async def offerte_nlt_pubbliche(
         else:
             continue
 
-        anticipo = float(offerta.prezzo_listino) * 0.25
-        canone_finale = float(canone) - (anticipo / durata_mesi)
-
         # Usa direttamente default_img da mnet_modelli
         modello_db = db.query(MnetModelli).filter(MnetModelli.codice_modello == offerta.codice_modello).first()
-        
-        if modello_db and modello_db.default_img:
-            immagine_url = modello_db.default_img
-        else:
-            immagine_url = "/default-placeholder.png"
+
+        immagine_url = modello_db.default_img if modello_db and modello_db.default_img else "/default-placeholder.png"
 
         risultato.append({
             "id_offerta": offerta.id_offerta,
-            "immagine": immagine_url,  # 👈 URL diretto CDN
+            "immagine": immagine_url,
             "marca": offerta.marca,
             "modello": offerta.modello,
             "versione": offerta.versione,
             "cambio": offerta.cambio,
             "alimentazione": offerta.alimentazione,
-            "canone_mensile": round(canone_finale, 2),
+            "canone_mensile": float(canone),  # 👈 Canone diretto da tabella quotazioni (nessun anticipo!)
             "prezzo_listino": float(offerta.prezzo_listino),
             "slug": offerta.slug,
             "solo_privati": offerta.solo_privati,
             "durata_mesi": durata_mesi,
-            "km_inclusi": km_inclusi,
-            "anticipo": round(float(offerta.prezzo_listino) * 0.25, 2)
-
+            "km_inclusi": km_inclusi
         })
 
     return risultato
