@@ -21,6 +21,8 @@ import requests
 import httpx
 from app.routes.image import get_vehicle_image
 from sqlalchemy import or_
+from app.utils.quotazioni import calcola_quotazione
+
 
 
 
@@ -520,14 +522,10 @@ async def offerte_nlt_pubbliche(
 
     for offerta, quotazione in offerte:
         # Seleziona il canone iniziale in base a regole predefinite
-        if offerta.solo_privati and quotazione.mesi_48_30:
-            durata_mesi, km_inclusi, canone = 48, 30000, quotazione.mesi_48_30
-        elif quotazione.mesi_36_10:
-            durata_mesi, km_inclusi, canone = 36, 10000, quotazione.mesi_36_10
-        elif quotazione.mesi_48_10:
-            durata_mesi, km_inclusi, canone = 48, 10000, quotazione.mesi_48_10
-        else:
-            continue
+        durata_mesi, km_inclusi, canone = calcola_quotazione(offerta, quotazione)
+        if canone is None:
+            continue  # escludi offerte non quotabili
+
 
         # Usa direttamente default_img da mnet_modelli
         modello_db = db.query(MnetModelli).filter(MnetModelli.codice_modello == offerta.codice_modello).first()
@@ -691,6 +689,12 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
         motornet_status = "KO"
         logger.error(f"Motornet non raggiungibile per {offerta.codice_motornet}")
 
+    # Recupera quotazioni
+    quotazione = db.query(NltQuotazioni).filter(NltQuotazioni.id_offerta == offerta.id_offerta).first()
+
+    durata_mesi, km_inclusi, canone = calcola_quotazione(offerta, quotazione)
+
+
     return {
         "id_offerta": offerta.id_offerta,
         "immagine": offerta.default_img,
@@ -706,6 +710,10 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
         "solo_privati": offerta.solo_privati,
         "descrizione_ai": offerta.descrizione_ai,
         "motornet_status": motornet_status,
+        "canone_mensile": float(canone) if canone else None,
+        "durata_mesi": durata_mesi,
+        "km_inclusi": km_inclusi,
+
         "dettagli_motornet": dettagli_motornet
     }
 
