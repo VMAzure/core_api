@@ -1,6 +1,6 @@
-def calcola_quotazione(offerta, quotazione):
+﻿def calcola_quotazione(offerta, quotazione):
     """
-    Restituisce (durata_mesi, km_inclusi, canone_mensile) basandosi su priorit� aziendali:
+    Restituisce (durata_mesi, km_inclusi, canone_mensile) basandosi su priorità aziendali:
     - 48 mesi / 30k km per privati se disponibile
     - altrimenti 36 mesi / 10k km
     - altrimenti 48 mesi / 10k km
