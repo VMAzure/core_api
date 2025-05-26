@@ -162,7 +162,7 @@ async def create_or_update_site_settings(
         if existing_slug:
             raise HTTPException(status_code=409, detail="Slug già in uso")
 
-    data = payload.dict()
+    data = payload.dict(exclude_unset=True)
     if data.get("prov_vetrina") is None:
         data["prov_vetrina"] = 4
 
