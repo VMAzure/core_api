@@ -162,12 +162,14 @@ async def create_or_update_site_settings(
         if existing_slug:
             raise HTTPException(status_code=409, detail="Slug già in uso")
 
-    if settings:
-        # Includi sempre prov_vetrina anche se è 0
-        data = payload.dict()
-        if "prov_vetrina" not in data or data["prov_vetrina"] is None:
-            data["prov_vetrina"] = 4
+    data = payload.dict()
+    if data.get("prov_vetrina") is None:
+        data["prov_vetrina"] = 4
 
+    if settings:
+        for key, value in data.items():
+            setattr(settings, key, value)
+    else:
         if is_admin_user(current_user):
             settings = SiteAdminSettings(
                 admin_id=current_user.id,
@@ -180,8 +182,9 @@ async def create_or_update_site_settings(
                 dealer_id=current_user.id,
                 **data
             )
+        db.add(settings)
 
-    db.add(settings)
+
     db.commit()
     db.refresh(settings)
 
