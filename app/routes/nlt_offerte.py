@@ -496,7 +496,8 @@ async def offerte_nlt_pubbliche(
     if not settings:
         raise HTTPException(status_code=404, detail=f"Slug '{slug}' non trovato.")
 
-    user = db.query(User).filter(User.id == settings.dealer_id if settings.dealer_id else settings.admin_id).first()
+    user_id = settings.dealer_id if settings.dealer_id else settings.admin_id
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato per questo slug.")
 
@@ -677,7 +678,8 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
     if not settings:
         raise HTTPException(status_code=404, detail=f"Dealer '{slug_dealer}' non trovato.")
 
-    user = db.query(User).filter(User.id == settings.dealer_id if settings.dealer_id else settings.admin_id).first()
+    user_id = settings.dealer_id if settings.dealer_id else settings.admin_id
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utente admin non trovato per questo dealer.")
 
