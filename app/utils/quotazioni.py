@@ -24,6 +24,7 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session):
         return None, None, None
 
     prezzo_listino = float(offerta.prezzo_listino)
+    canone_base = float(canone_base)
 
     # Provvigione Admin
     settings_admin = db.query(SiteAdminSettings).filter(
