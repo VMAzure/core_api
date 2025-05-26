@@ -295,16 +295,17 @@ async def get_site_settings(
         raise HTTPException(status_code=403, detail="Non autorizzato")
 
     if is_admin_user(current_user):
-        settings = db.query(SiteAdminSettings).filter(
-            SiteAdminSettings.admin_id == current_user.id,
-            SiteAdminSettings.dealer_id == None
-        ).first()
-    else:  # dealer
+        admin_id = current_user.id
+        dealer_id = None
+    else:
         admin_id = get_admin_id(current_user)
-        settings = db.query(SiteAdminSettings).filter(
-            SiteAdminSettings.admin_id == admin_id,
-            SiteAdminSettings.dealer_id == current_user.id
-        ).first()
+        dealer_id = current_user.id
+
+    settings = db.query(SiteAdminSettings).filter(
+        SiteAdminSettings.admin_id == admin_id,
+        SiteAdminSettings.dealer_id == dealer_id
+    ).first()
+
 
     if not settings:
         mese_corrente = datetime.now().strftime('%B %Y').capitalize()
