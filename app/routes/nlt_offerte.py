@@ -106,7 +106,11 @@ async def get_offerte(
         risultati = []
         for o in offerte:
             quotazione = o.quotazioni[0] if o.quotazioni else None
-            durata_mesi, km_inclusi, canone = calcola_quotazione(o, quotazione, current_user, db)
+            dealer_context = is_dealer_user(current_user)
+            dealer_id_for_context = current_user.id if dealer_context else None
+            durata_mesi, km_inclusi, canone = calcola_quotazione(
+                o, quotazione, current_user, db, dealer_context=dealer_context, dealer_id=dealer_id_for_context
+            )
 
             risultati.append({
                 "id_offerta": o.id_offerta,
