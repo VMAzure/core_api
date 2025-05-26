@@ -27,26 +27,25 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, dealer_co
     canone_base = float(canone_base)
 
     # Provvigione Admin
+    # Recupero provvigioni
     settings_admin = db.query(SiteAdminSettings).filter(
         SiteAdminSettings.admin_id == offerta.id_admin,
         SiteAdminSettings.dealer_id.is_(None)
     ).first()
     prov_admin = (settings_admin.prov_vetrina or 0)
-    prov_admin_amount = prezzo_listino * prov_admin / 100
-    canone_admin = canone_base + (prov_admin_amount / durata)
 
-    # Se dealer → applica anche provvigione dealer
+    prov_dealer = 0
     if dealer_context or is_dealer_user(current_user):
         dealer_id_effettivo = dealer_id or current_user.id
         settings_dealer = db.query(SiteAdminSettings).filter(
             SiteAdminSettings.admin_id == offerta.id_admin,
             SiteAdminSettings.dealer_id == dealer_id_effettivo
         ).first()
-
         prov_dealer = (settings_dealer.prov_vetrina or 0) if settings_dealer else 0
-        prov_dealer_amount = prezzo_listino * prov_dealer / 100
-        canone_finale = canone_admin + (prov_dealer_amount / durata)
-    else:
-        canone_finale = canone_admin
+
+    # Calcolo unico dell'incremento totale
+    incremento_totale = prezzo_listino * (prov_admin + prov_dealer) / 100
+    canone_finale = canone_base + (incremento_totale / durata)
+
 
     return durata, km, round(canone_finale, 2)
