@@ -524,7 +524,9 @@ async def offerte_nlt_pubbliche(
 
     for offerta, quotazione in offerte:
         # Seleziona il canone iniziale in base a regole predefinite
-        durata_mesi, km_inclusi, canone = calcola_quotazione(offerta, quotazione, user, db)
+        dealer_context = settings.dealer_id is not None
+        durata_mesi, km_inclusi, canone = calcola_quotazione(offerta, quotazione, user, db, dealer_context=dealer_context)
+
         if canone is None:
             continue  # escludi offerte non quotabili
 
@@ -699,7 +701,9 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
     # Recupera quotazioni
     quotazione = db.query(NltQuotazioni).filter(NltQuotazioni.id_offerta == offerta.id_offerta).first()
 
-    durata_mesi, km_inclusi, canone = calcola_quotazione(offerta, quotazione, user, db)
+    dealer_context = settings.dealer_id is not None
+    durata_mesi, km_inclusi, canone = calcola_quotazione(offerta, quotazione, user, db, dealer_context=dealer_context)
+
 
 
     return {
