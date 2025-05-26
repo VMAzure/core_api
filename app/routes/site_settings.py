@@ -166,23 +166,19 @@ async def create_or_update_site_settings(
         # Includi sempre prov_vetrina anche se è 0
         data = payload.dict()
         if "prov_vetrina" not in data or data["prov_vetrina"] is None:
-            data["prov_vetrina"] = 4  # default
+            data["prov_vetrina"] = 4
 
-        for key, value in data.items():
-            setattr(settings, key, value)
-
-    else:
         if is_admin_user(current_user):
             settings = SiteAdminSettings(
                 admin_id=current_user.id,
                 dealer_id=None,
-                **payload.dict()
+                **data
             )
         else:
             settings = SiteAdminSettings(
                 admin_id=get_admin_id(current_user),
                 dealer_id=current_user.id,
-                **payload.dict()
+                **data
             )
 
     db.add(settings)
