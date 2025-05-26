@@ -496,7 +496,7 @@ async def offerte_nlt_pubbliche(
     if not settings:
         raise HTTPException(status_code=404, detail=f"Slug '{slug}' non trovato.")
 
-    user = db.query(User).filter(User.id == settings.admin_id).first()
+    user = db.query(User).filter(User.id == settings.dealer_id if settings.dealer_id else settings.admin_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato per questo slug.")
 
@@ -525,7 +525,10 @@ async def offerte_nlt_pubbliche(
     for offerta, quotazione in offerte:
         # Seleziona il canone iniziale in base a regole predefinite
         dealer_context = settings.dealer_id is not None
-        durata_mesi, km_inclusi, canone = calcola_quotazione(offerta, quotazione, user, db, dealer_context=dealer_context)
+        dealer_id_for_context = settings.dealer_id if dealer_context else None
+        durata_mesi, km_inclusi, canone = calcola_quotazione(
+        offerta, quotazione, user, db, dealer_context=dealer_context, dealer_id=dealer_id_for_context
+    )
 
         if canone is None:
             continue  # escludi offerte non quotabili
@@ -674,7 +677,7 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
     if not settings:
         raise HTTPException(status_code=404, detail=f"Dealer '{slug_dealer}' non trovato.")
 
-    user = db.query(User).filter(User.id == settings.admin_id).first()
+    user = db.query(User).filter(User.id == settings.dealer_id if settings.dealer_id else settings.admin_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utente admin non trovato per questo dealer.")
 
@@ -702,7 +705,10 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
     quotazione = db.query(NltQuotazioni).filter(NltQuotazioni.id_offerta == offerta.id_offerta).first()
 
     dealer_context = settings.dealer_id is not None
-    durata_mesi, km_inclusi, canone = calcola_quotazione(offerta, quotazione, user, db, dealer_context=dealer_context)
+    dealer_id_for_context = settings.dealer_id if dealer_context else None
+    durata_mesi, km_inclusi, canone = calcola_quotazione(
+        offerta, quotazione, user, db, dealer_context=dealer_context, dealer_id=dealer_id_for_context
+    )
 
 
 

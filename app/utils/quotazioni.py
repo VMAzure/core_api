@@ -3,7 +3,7 @@ from app.models import SiteAdminSettings
 from app.auth_helpers import is_dealer_user
 
 
-def calcola_quotazione(offerta, quotazione, current_user, db: Session, dealer_context=False):
+def calcola_quotazione(offerta, quotazione, current_user, db: Session, dealer_context=False, dealer_id=None):
     """
     Calcola il canone mensile con provvigione admin e dealer applicate sul prezzo_listino.
     """
@@ -37,10 +37,12 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, dealer_co
 
     # Se dealer → applica anche provvigione dealer
     if dealer_context or is_dealer_user(current_user):
+        dealer_id_effettivo = dealer_id or current_user.id
         settings_dealer = db.query(SiteAdminSettings).filter(
             SiteAdminSettings.admin_id == offerta.id_admin,
-            SiteAdminSettings.dealer_id == current_user.id
+            SiteAdminSettings.dealer_id == dealer_id_effettivo
         ).first()
+
         prov_dealer = (settings_dealer.prov_vetrina or 0) if settings_dealer else 0
         prov_dealer_amount = prezzo_listino * prov_dealer / 100
         canone_finale = canone_admin + (prov_dealer_amount / durata)
