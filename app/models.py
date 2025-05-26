@@ -271,6 +271,9 @@ class SiteAdminSettings(Base):
         '{"NLT": false, "REWIND": false, "NOS": false, "NBT": false}'
     """))
 
+    prov_vetrina = Column(Integer, nullable=True)
+
+
 
 
 

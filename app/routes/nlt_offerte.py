@@ -84,7 +84,7 @@ async def get_offerte(
             selectinload(NltOfferte.quotazioni),
             selectinload(NltOfferte.immagini),
             selectinload(NltOfferte.player),
-            selectinload(NltOfferte.immagini_nlt)  # Aggiungi questo per immagini_nlt
+            selectinload(NltOfferte.immagini_nlt)
         )
 
         if attivo is None:
@@ -105,6 +105,9 @@ async def get_offerte(
 
         risultati = []
         for o in offerte:
+            quotazione = o.quotazioni[0] if o.quotazioni else None
+            durata_mesi, km_inclusi, canone = calcola_quotazione(o, quotazione, current_user, db)
+
             risultati.append({
                 "id_offerta": o.id_offerta,
                 "marca": o.marca,
@@ -130,6 +133,7 @@ async def get_offerte(
                 "default_img": o.default_img,
                 "solo_privati": o.solo_privati,
                 "attivo": o.attivo,
+                "canone_calcolato": float(canone) if canone else None,
                 "accessori": [
                     {
                         "codice": a.codice,
@@ -165,10 +169,7 @@ async def get_offerte(
                     "60_30": o.quotazioni[0].mesi_60_30 if o.quotazioni else None,
                     "60_40": o.quotazioni[0].mesi_60_40 if o.quotazioni else None,
                 },
-                # Immagine principale pre-esistente (se presente)
                 "immagine": next((img.url_imagin for img in o.immagini if img.principale), None),
-
-                # 🔥 Utilizza la relazione invece di nuova query
                 "immagine_front": o.immagini_nlt.url_immagine_front_alt if o.immagini_nlt else None,
                 "immagine_back": o.immagini_nlt.url_immagine_back_alt if o.immagini_nlt else None
             })
@@ -178,6 +179,7 @@ async def get_offerte(
     except Exception as e:
         print(f"❌ Errore interno nella GET offerte: {e}")
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -522,7 +524,7 @@ async def offerte_nlt_pubbliche(
 
     for offerta, quotazione in offerte:
         # Seleziona il canone iniziale in base a regole predefinite
-        durata_mesi, km_inclusi, canone = calcola_quotazione(offerta, quotazione)
+        durata_mesi, km_inclusi, canone = calcola_quotazione(offerta, quotazione, user, db)
         if canone is None:
             continue  # escludi offerte non quotabili
 
@@ -670,6 +672,11 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
     if not settings:
         raise HTTPException(status_code=404, detail=f"Dealer '{slug_dealer}' non trovato.")
 
+    user = db.query(User).filter(User.id == settings.admin_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente admin non trovato per questo dealer.")
+
+
     offerta = db.query(NltOfferte).join(User, NltOfferte.id_admin == User.id).filter(
         User.id == settings.admin_id,
         NltOfferte.slug == slug_offerta,
@@ -692,7 +699,7 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
     # Recupera quotazioni
     quotazione = db.query(NltQuotazioni).filter(NltQuotazioni.id_offerta == offerta.id_offerta).first()
 
-    durata_mesi, km_inclusi, canone = calcola_quotazione(offerta, quotazione)
+    durata_mesi, km_inclusi, canone = calcola_quotazione(offerta, quotazione, user, db)
 
 
     return {

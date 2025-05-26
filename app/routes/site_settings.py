@@ -103,6 +103,8 @@ class SiteSettingsPayload(BaseModel):
     contact_phone: str = None
     contact_address: str = None
     slug: str = None
+    prov_vetrina: int = None
+
     servizi_visibili: dict = {
         "NLT": False,
         "REWIND": False,
@@ -352,6 +354,8 @@ async def get_site_settings(
         "menu_style": settings.menu_style or "",
         "created_at": settings.created_at,
         "updated_at": settings.updated_at,
+        "prov_vetrina": settings.prov_vetrina,
+
         "servizi_visibili": settings.servizi_visibili or {
             "NLT": False, "REWIND": False, "NOS": False, "NBT": False
         }
