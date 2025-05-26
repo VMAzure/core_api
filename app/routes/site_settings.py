@@ -163,8 +163,14 @@ async def create_or_update_site_settings(
             raise HTTPException(status_code=409, detail="Slug già in uso")
 
     if settings:
-        for key, value in payload.dict(exclude_unset=True).items():
+        # Includi sempre prov_vetrina anche se è 0
+        data = payload.dict()
+        if "prov_vetrina" not in data or data["prov_vetrina"] is None:
+            data["prov_vetrina"] = 4  # default
+
+        for key, value in data.items():
             setattr(settings, key, value)
+
     else:
         if is_admin_user(current_user):
             settings = SiteAdminSettings(
