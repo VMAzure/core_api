@@ -986,15 +986,19 @@ def verifica_anagrafica_cliente_pubblico(
 
     # Dealer origine (registrato) vs dealer corrente
     dealer_corrente_id = dealer_settings.dealer_id or dealer_settings.admin_id
-    # Recupera il dealer registrato del cliente
+    # Recupera lo slug corretto del dealer originario assegnato al cliente
+    if cliente.dealer_id is not None:
+        dealer_slug_settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.dealer_id == cliente.dealer_id
+        ).first()
+    else:
+        dealer_slug_settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.dealer_id == None,
+            SiteAdminSettings.admin_id == cliente.admin_id
+        ).first()
+
+    dealer_origine_slug = dealer_slug_settings.slug if dealer_slug_settings else None
     dealer_registrato_id = cliente.dealer_id or cliente.admin_id
-
-    dealer_origine_settings = db.query(SiteAdminSettings).filter(
-        (SiteAdminSettings.dealer_id == cliente.dealer_id) |
-        (SiteAdminSettings.admin_id == cliente.admin_id)
-    ).first()
-
-    dealer_origine_slug = dealer_origine_settings.slug if dealer_origine_settings else None
 
     if dealer_corrente_id == dealer_registrato_id:
         return {
@@ -1011,6 +1015,7 @@ def verifica_anagrafica_cliente_pubblico(
             "id_cliente": cliente.id,
             "dealer_origine_slug": dealer_origine_slug
         }
+
 
 
 
