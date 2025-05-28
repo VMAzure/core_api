@@ -986,21 +986,32 @@ def verifica_anagrafica_cliente_pubblico(
 
     # Dealer origine (registrato) vs dealer corrente
     dealer_corrente_id = dealer_settings.dealer_id or dealer_settings.admin_id
+    # Recupera il dealer registrato del cliente
     dealer_registrato_id = cliente.dealer_id or cliente.admin_id
+
+    dealer_origine_settings = db.query(SiteAdminSettings).filter(
+        (SiteAdminSettings.dealer_id == cliente.dealer_id) |
+        (SiteAdminSettings.admin_id == cliente.admin_id)
+    ).first()
+
+    dealer_origine_slug = dealer_origine_settings.slug if dealer_origine_settings else None
 
     if dealer_corrente_id == dealer_registrato_id:
         return {
             "stato": "stesso_dealer_email_differente",
             "email_registrata": cliente.email,
-            "id_cliente": cliente.id
+            "id_cliente": cliente.id,
+            "dealer_origine_slug": dealer_origine_slug
         }
     else:
         return {
             "stato": "altro_dealer_email_differente",
             "email_registrata": cliente.email,
             "dealer_origine_id": dealer_registrato_id,
-            "id_cliente": cliente.id
+            "id_cliente": cliente.id,
+            "dealer_origine_slug": dealer_origine_slug
         }
+
 
 
 
