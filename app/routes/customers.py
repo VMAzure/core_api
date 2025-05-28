@@ -925,7 +925,10 @@ def forza_invio_preventivo_cliente_pubblico(
         raise HTTPException(status_code=404, detail="Dealer non trovato")
 
     # Recupera lo slug effettivo del dealer dai settings
-    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer.id).first()
+    settings = db.query(SiteAdminSettings).filter(
+        (SiteAdminSettings.dealer_id == cliente.dealer_id) |
+        ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == cliente.admin_id))
+    ).first()
     if not settings:
         raise HTTPException(status_code=404, detail="Impostazioni dealer non trovate")
 
