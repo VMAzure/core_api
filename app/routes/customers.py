@@ -441,25 +441,29 @@ def crea_cliente_pubblico(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
+    # Trova il dealer richiesto usando il dealer_slug fornito
     dealer = db.query(User).join(
         SiteAdminSettings,
         ((SiteAdminSettings.dealer_id == User.id) | ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == User.id)))
-    ).filter(
-        SiteAdminSettings.slug == payload.dealer_slug
-    ).first()
+    ).filter(SiteAdminSettings.slug == payload.dealer_slug).first()
 
     if not dealer:
         raise HTTPException(status_code=404, detail="Dealer non trovato.")
 
+    # Controlla se esiste già un cliente con questa email
     cliente_esistente = db.query(Cliente).filter(Cliente.email.ilike(payload.email)).first()
 
+    # Genera un nuovo token e le date associate
     token = str(uuid.uuid4())
     data_creazione = datetime.utcnow()
     data_scadenza = data_creazione + timedelta(days=7)
 
+    # Determina lo stato cliente in base al cliente esistente
     if cliente_esistente:
-        if (cliente_esistente.dealer_id is not None and cliente_esistente.dealer_id == dealer.id) \
-        or (cliente_esistente.dealer_id is None and cliente_esistente.admin_id == dealer.id):
+        if (
+            (cliente_esistente.dealer_id is not None and cliente_esistente.dealer_id == dealer.id) or
+            (cliente_esistente.dealer_id is None and cliente_esistente.admin_id == dealer.id)
+        ):
             stato_cliente = "cliente_stesso_dealer"
             confermato = True
         else:
@@ -469,13 +473,14 @@ def crea_cliente_pubblico(
         stato_cliente = "nuovo_cliente"
         confermato = False
 
-    # Se già esiste un record pubblico per questa email e dealer_slug, aggiorna
+    # Recupera il record esistente (se presente)
     cliente_pubblico = db.query(NltClientiPubblici).filter_by(
         email=payload.email,
         dealer_slug=payload.dealer_slug
     ).order_by(NltClientiPubblici.data_creazione.desc()).first()
 
     if cliente_pubblico:
+        # Aggiorna chiaramente TUTTI i campi rilevanti
         cliente_pubblico.token = token
         cliente_pubblico.data_creazione = data_creazione
         cliente_pubblico.data_scadenza = data_scadenza
@@ -486,6 +491,7 @@ def crea_cliente_pubblico(
         cliente_pubblico.km = payload.km
         cliente_pubblico.confermato = confermato
     else:
+        # Altrimenti crea un nuovo record
         cliente_pubblico = NltClientiPubblici(
             email=payload.email,
             dealer_slug=payload.dealer_slug,
@@ -501,19 +507,21 @@ def crea_cliente_pubblico(
         )
         db.add(cliente_pubblico)
 
+    # Commit e refresh OBBLIGATORIO per recuperare dati aggiornati dal DB
     db.commit()
     db.refresh(cliente_pubblico)
 
+    # Doppia verifica sicurezza (token aggiornato correttamente)
     if cliente_pubblico.token != token:
         cliente_pubblico.token = token
         db.commit()
         db.refresh(cliente_pubblico)
 
-    # ✅ Se è già cliente del dealer, attiva subito generazione + invio
+    # 🚩 Qui gestiamo subito l'invio del preventivo se il cliente è già confermato
     if stato_cliente == "cliente_stesso_dealer" and cliente_esistente:
         background_tasks.add_task(
             genera_e_invia_preventivo,
-            cliente_pubblico_token=token,
+            cliente_pubblico_token=cliente_pubblico.token,  # assicurato token corretto
             slug_offerta=payload.slug_offerta,
             dealer_slug=payload.dealer_slug,
             tipo_cliente=cliente_esistente.tipo_cliente,
@@ -522,11 +530,12 @@ def crea_cliente_pubblico(
             db=db
         )
 
+    # ✅ Risposta finale definitiva al frontend con i dati aggiornati
     return NltClientiPubbliciResponse(
         id=cliente_pubblico.id,
         email=cliente_pubblico.email,
         dealer_slug=cliente_pubblico.dealer_slug,
-        token=cliente_pubblico.token,  # 👈 questo ora è sicuro al 100%
+        token=cliente_pubblico.token,  # garantito aggiornato
         data_creazione=cliente_pubblico.data_creazione,
         data_scadenza=cliente_pubblico.data_scadenza,
         confermato=cliente_pubblico.confermato,
@@ -536,6 +545,7 @@ def crea_cliente_pubblico(
         id_cliente=cliente_esistente.id if cliente_esistente else None,
         assegnatario_nome=cliente_esistente.dealer.ragione_sociale if cliente_esistente and cliente_esistente.dealer else None
     )
+
 
 
 
