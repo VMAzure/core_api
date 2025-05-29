@@ -504,6 +504,11 @@ def crea_cliente_pubblico(
     db.commit()
     db.refresh(cliente_pubblico)
 
+    if cliente_pubblico.token != token:
+        cliente_pubblico.token = token
+        db.commit()
+        db.refresh(cliente_pubblico)
+
     # ✅ Se è già cliente del dealer, attiva subito generazione + invio
     if stato_cliente == "cliente_stesso_dealer" and cliente_esistente:
         background_tasks.add_task(
@@ -521,7 +526,7 @@ def crea_cliente_pubblico(
         id=cliente_pubblico.id,
         email=cliente_pubblico.email,
         dealer_slug=cliente_pubblico.dealer_slug,
-        token=token,
+        token=cliente_pubblico.token,  # 👈 questo ora è sicuro al 100%
         data_creazione=cliente_pubblico.data_creazione,
         data_scadenza=cliente_pubblico.data_scadenza,
         confermato=cliente_pubblico.confermato,
