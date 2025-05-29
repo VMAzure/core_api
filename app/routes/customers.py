@@ -480,7 +480,9 @@ def crea_cliente_pubblico(
     ).order_by(NltClientiPubblici.data_creazione.desc()).first()
 
     if cliente_pubblico:
-        # Aggiorna chiaramente TUTTI i campi rilevanti
+    # 🚨 Non generare nuovo token se già confermato!
+        token = cliente_pubblico.token if cliente_pubblico.confermato else str(uuid.uuid4())
+
         cliente_pubblico.token = token
         cliente_pubblico.data_creazione = data_creazione
         cliente_pubblico.data_scadenza = data_scadenza
@@ -491,7 +493,7 @@ def crea_cliente_pubblico(
         cliente_pubblico.km = payload.km
         cliente_pubblico.confermato = confermato
     else:
-        # Altrimenti crea un nuovo record
+        token = str(uuid.uuid4())  # genera token solo se record nuovo
         cliente_pubblico = NltClientiPubblici(
             email=payload.email,
             dealer_slug=payload.dealer_slug,
@@ -507,9 +509,9 @@ def crea_cliente_pubblico(
         )
         db.add(cliente_pubblico)
 
-    # Commit e refresh OBBLIGATORIO per recuperare dati aggiornati dal DB
     db.commit()
     db.refresh(cliente_pubblico)
+
 
     # Doppia verifica sicurezza (token aggiornato correttamente)
     if cliente_pubblico.token != token:
