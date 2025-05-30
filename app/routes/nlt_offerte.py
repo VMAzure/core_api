@@ -534,7 +534,7 @@ async def offerte_nlt_pubbliche(
         # Seleziona il canone iniziale in base a regole predefinite
         dealer_context = settings.dealer_id is not None
         dealer_id_for_context = settings.dealer_id if dealer_context else None
-        durata_mesi, km_inclusi, canone = calcola_quotazione(
+        durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
         offerta, quotazione, user, db, dealer_context=dealer_context, dealer_id=dealer_id_for_context
     )
 
@@ -562,6 +562,8 @@ async def offerte_nlt_pubbliche(
             "durata_mesi": durata_mesi,
             "km_inclusi": km_inclusi,
             "logo_web": settings.logo_web or "",
+            "dealer_slug": dealer_slug  # ✅ aggiunto correttamente
+
 
         })
 
@@ -717,7 +719,7 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
 
     dealer_context = settings.dealer_id is not None
     dealer_id_for_context = settings.dealer_id if dealer_context else None
-    durata_mesi, km_inclusi, canone = calcola_quotazione(
+    durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
         offerta, quotazione, user, db, dealer_context=dealer_context, dealer_id=dealer_id_for_context
     )
 
@@ -741,6 +743,7 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
         "canone_mensile": float(canone) if canone else None,
         "durata_mesi": durata_mesi,
         "km_inclusi": km_inclusi,
+        "dealer_slug": dealer_slug,  # ✅ aggiunto correttamente
 
         "dettagli_motornet": dettagli_motornet
     }
