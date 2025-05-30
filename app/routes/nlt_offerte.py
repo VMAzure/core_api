@@ -108,12 +108,14 @@ async def get_offerte(
             quotazione = o.quotazioni[0] if o.quotazioni else None
             dealer_context = is_dealer_user(current_user)
             dealer_id_for_context = current_user.id if dealer_context else None
-            durata_mesi, km_inclusi, canone = calcola_quotazione(
+            durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
                 o, quotazione, current_user, db, dealer_context=dealer_context, dealer_id=dealer_id_for_context
             )
 
             risultati.append({
                 "id_offerta": o.id_offerta,
+                "slug_offerta": o.slug,  # ✅ AGGIUNTO CON CERTEZZA ASSOLUTA!
+
                 "marca": o.marca,
                 "modello": o.modello,
                 "versione": o.versione,
@@ -138,6 +140,7 @@ async def get_offerte(
                 "solo_privati": o.solo_privati,
                 "attivo": o.attivo,
                 "canone_calcolato": float(canone) if canone else None,
+                "dealer_slug": dealer_slug,  # ✅ AGGIUNTO QUI
                 "accessori": [
                     {
                         "codice": a.codice,
