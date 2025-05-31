@@ -699,7 +699,7 @@ SUPABASE_URL = "https://vqfloobaovtdtcuflqeu.supabase.co"
 SUPABASE_BUCKET = "nlt-preventivi"
 SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxZmxvb2Jhb3Z0ZHRjdWZscWV1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczOTUzOTUzMCwiZXhwIjoyMDU1MTE1NTMwfQ.Lq-uIgXYZiBJK4ChfF_D7i5qYBDuxMfL2jY5GGKDuVk"
 
-async def genera_e_invia_preventivo(
+def genera_e_invia_preventivo(
     cliente_pubblico_token,
     slug_offerta,
     dealer_slug,
@@ -814,8 +814,8 @@ async def genera_e_invia_preventivo(
             "Player": player.nome if player else "Web"
         }
 
-        async with httpx.AsyncClient(timeout=120) as client:
-            pdf_res = await client.post(
+        with httpx.AsyncClient(timeout=120) as client:
+            pdf_res = client.post(
                 "https://corewebapp-azcore.up.railway.app/api/Pdf/GenerateOffer", 
                 json=payload_pdf
             )
@@ -825,8 +825,8 @@ async def genera_e_invia_preventivo(
         file_name = f"{uuid.uuid4()}.pdf"
         file_path = f"{SUPABASE_BUCKET}/{file_name}"
 
-        async with httpx.AsyncClient(timeout=120) as client:
-            upload_res = await client.put(
+        with httpx.AsyncClient(timeout=120) as client:
+            upload_res = client.put(
                 f"{SUPABASE_URL}/storage/v1/object/{file_path}",
                 headers={
                     "Authorization": f"Bearer {SUPABASE_API_KEY}",
@@ -869,21 +869,21 @@ async def genera_e_invia_preventivo(
         return  # importante: esci qui se errore
 
     # Questo codice DEVE essere fuori dal blocco try-except!
-    async with httpx.AsyncClient() as client:
-        response_link = await client.post(
+    with httpx.AsyncClient() as client:
+        response_link = client.post(
             f"https://coreapi-production-ca29.up.railway.app/nlt/preventivi/{preventivo_id}/genera-link"
         )
         response_link.raise_for_status()
         link_data = response_link.json()
         url_download = link_data["url_download"]
 
-        response_dettagli = await client.get(
+        response_dettagli = client.get(
             f"https://coreapi-production-ca29.up.railway.app/nlt/preventivo-completo/{preventivo_id}?dealerId={dealer.id}"
         )
         response_dettagli.raise_for_status()
         dettagli = response_dettagli.json()
 
-        template_html_res = await client.get(
+        template_html_res = client.get(
             'https://corewebapp-azcore.up.railway.app/templates/email_preventivo.html'
         )
         template_html_res.raise_for_status()
@@ -904,7 +904,7 @@ async def genera_e_invia_preventivo(
             email=dettagli["DealerInfo"]["Email"]
         )
 
-        await client.post(
+        client.post(
             f"https://coreapi-production-ca29.up.railway.app/nlt/preventivi/{preventivo_id}/invia-mail",
             json={
                 "url_download": url_download,
