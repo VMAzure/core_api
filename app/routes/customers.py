@@ -730,37 +730,37 @@ async def genera_e_invia_preventivo(
 
 
 
-    # 🔁 Ora puoi rileggere i dati
-    cliente_pubblico = db.query(NltClientiPubblici).filter(
-        NltClientiPubblici.token == cliente_pubblico_token
-    ).first()
+        # 🔁 Ora puoi rileggere i dati
+        cliente_pubblico = db.query(NltClientiPubblici).filter(
+            NltClientiPubblici.token == cliente_pubblico_token
+        ).first()
 
 
-    # ⛔ Blocca se preventivo già generato
-    if cliente_pubblico.preventivo_generato:
-        print("⛔ Preventivo già generato per questo cliente_pubblico.token — interrotto.")
-        return
+        # ⛔ Blocca se preventivo già generato
+        if cliente_pubblico.preventivo_generato:
+            print("⛔ Preventivo già generato per questo cliente_pubblico.token — interrotto.")
+            return
 
 
-    cliente = db.query(Cliente).get(cliente_id)
-    dealer = db.query(User).get(dealer_id)
-    offerta = db.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
+        cliente = db.query(Cliente).get(cliente_id)
+        dealer = db.query(User).get(dealer_id)
+        offerta = db.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
 
-    # 🔒 PREVENTIVO DUPLICATO CHECK
-    preventivo_duplicato = db.query(NltPreventivi).filter(
-        NltPreventivi.cliente_id == cliente_id,
-        NltPreventivi.marca == offerta.marca,
-        NltPreventivi.modello == offerta.modello,
-        NltPreventivi.versione == offerta.versione,
-        NltPreventivi.durata == cliente_pubblico.durata,
-        NltPreventivi.km_totali == cliente_pubblico.km,
-        NltPreventivi.anticipo == cliente_pubblico.anticipo,
-        NltPreventivi.canone == cliente_pubblico.canone
-    ).first()
+        # 🔒 PREVENTIVO DUPLICATO CHECK
+        preventivo_duplicato = db.query(NltPreventivi).filter(
+            NltPreventivi.cliente_id == cliente_id,
+            NltPreventivi.marca == offerta.marca,
+            NltPreventivi.modello == offerta.modello,
+            NltPreventivi.versione == offerta.versione,
+            NltPreventivi.durata == cliente_pubblico.durata,
+            NltPreventivi.km_totali == cliente_pubblico.km,
+            NltPreventivi.anticipo == cliente_pubblico.anticipo,
+            NltPreventivi.canone == cliente_pubblico.canone
+        ).first()
 
-    if preventivo_duplicato:
-        print(f"⛔ Preventivo già esistente: ID #{preventivo_duplicato.id} — skip generazione PDF.")
-        return
+        if preventivo_duplicato:
+            print(f"⛔ Preventivo già esistente: ID #{preventivo_duplicato.id} — skip generazione PDF.")
+            return
 
 
          # 🧠 Player
