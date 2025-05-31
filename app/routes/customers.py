@@ -694,32 +694,6 @@ import httpx
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-
-def run_preventivo_task(
-    cliente_pubblico_token: str,
-    slug_offerta: str,
-    dealer_slug: str,
-    tipo_cliente: str,
-    cliente_id: str,
-    dealer_id: str
-):
-    db = SessionLocal()
-    try:
-        asyncio.run(genera_e_invia_preventivo(
-            cliente_pubblico_token,
-            slug_offerta,
-            dealer_slug,
-            tipo_cliente,
-            cliente_id,
-            dealer_id,
-            db
-        ))
-    except Exception as e:
-        print(f"❌ ERRORE async preventivo: {str(e)}")
-    finally:
-        db.close()
-
-
 # Configurazione Supabase confermata
 SUPABASE_URL = "https://vqfloobaovtdtcuflqeu.supabase.co"
 SUPABASE_BUCKET = "nlt-preventivi"
