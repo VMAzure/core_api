@@ -736,15 +736,27 @@ async def genera_e_invia_preventivo(
             return
 
 
-        player = db.query(NltPlayers).get(offerta.id_player)
-
-        dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
-        admin = db.query(User).get(dealer_settings.admin_id)
-        provvigione_percentuale = dealer_settings.prov_vetrina if dealer_settings and dealer_settings.prov_vetrina else 0
+         # 🧠 Player
         player = db.query(NltPlayers).get(offerta.id_player)
         player_nome = player.nome if player else "Web"
+
+        # 🛡️ Dealer settings: se dealer ha le sue, usa quelle; altrimenti fallback su slug
+        dealer_settings = None
+        if dealer.role == "dealer":
+            dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer.id).first()
+
+        if not dealer_settings:
+            dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
+
+        # 🎯 Admin: da parent_id o self
+        admin_id = dealer.parent_id if dealer.parent_id else dealer.id
+        admin = db.query(User).get(admin_id)
+
+        # ✅ Provvigione
+        provvigione_percentuale = dealer_settings.prov_vetrina if dealer_settings and dealer_settings.prov_vetrina else 0
         note_text = f"Provvigione: {provvigione_percentuale}%"
 
+        # 🔁 Resto dati per PDF
         servizi = db.query(NltService).filter(NltService.is_active == True).all()
         documenti = db.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
 
