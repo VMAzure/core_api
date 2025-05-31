@@ -521,7 +521,7 @@ async def crea_cliente_pubblico(
 
     # 🚩 Qui gestiamo subito l'invio del preventivo se il cliente è già confermato
     if stato_cliente == "cliente_stesso_dealer" and cliente_esistente:
-        await genera_e_invia_preventivo(
+        genera_e_invia_preventivo(
             cliente_pubblico_token=cliente_pubblico.token,
             slug_offerta=payload.slug_offerta,
             dealer_slug=payload.dealer_slug,
