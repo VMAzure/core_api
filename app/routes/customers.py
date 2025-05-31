@@ -15,7 +15,7 @@ import uuid
 from app.utils.email import send_email
 from sqlalchemy import or_, func
 from app.models import NltOfferte, NltService, NltPlayers, NltDocumentiRichiesti
-
+import asyncio
 import os
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -522,15 +522,15 @@ def crea_cliente_pubblico(
     # 🚩 Qui gestiamo subito l'invio del preventivo se il cliente è già confermato
     if stato_cliente == "cliente_stesso_dealer" and cliente_esistente:
         background_tasks.add_task(
-            genera_e_invia_preventivo,
-            cliente_pubblico_token=cliente_pubblico.token,  # assicurato token corretto
+            run_preventivo_task,
+            cliente_pubblico_token=cliente_pubblico.token,
             slug_offerta=payload.slug_offerta,
             dealer_slug=payload.dealer_slug,
             tipo_cliente=cliente_esistente.tipo_cliente,
             cliente_id=cliente_esistente.id,
-            dealer_id=dealer.id,
-            db=db
+            dealer_id=dealer.id
         )
+
 
     # ✅ Risposta finale definitiva al frontend con i dati aggiornati
     return NltClientiPubbliciResponse(
@@ -695,6 +695,31 @@ import httpx
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+def run_preventivo_task(
+    cliente_pubblico_token: str,
+    slug_offerta: str,
+    dealer_slug: str,
+    tipo_cliente: str,
+    cliente_id: str,
+    dealer_id: str
+):
+    db = SessionLocal()
+    try:
+        asyncio.run(genera_e_invia_preventivo(
+            cliente_pubblico_token,
+            slug_offerta,
+            dealer_slug,
+            tipo_cliente,
+            cliente_id,
+            dealer_id,
+            db
+        ))
+    except Exception as e:
+        print(f"❌ ERRORE async preventivo: {str(e)}")
+    finally:
+        db.close()
+
+
 # Configurazione Supabase confermata
 SUPABASE_URL = "https://vqfloobaovtdtcuflqeu.supabase.co"
 SUPABASE_BUCKET = "nlt-preventivi"
@@ -709,202 +734,192 @@ async def genera_e_invia_preventivo(
     dealer_id,
     db: Session
 ):
-
-    # === TRANSAZIONE DI BLOCCO SICURA ===
+    # === BLOCCO CONCORRENZA: lock logico tramite flag ===
     try:
         updated = db.query(NltClientiPubblici).filter(
             NltClientiPubblici.token == cliente_pubblico_token,
             NltClientiPubblici.preventivo_generato == False
         ).update({ "preventivo_generato": True }, synchronize_session=False)
 
-        db.commit()  # 💾 conferma immediata il flag prima di procedere
+        db.commit()  # 🧠 commit subito il flag di blocco
 
         if updated == 0:
             print("⛔ Preventivo già generato (concurrency lock).")
             return
-
     except Exception as e:
         db.rollback()
         print(f"❌ Errore update flag preventivo_generato: {str(e)}")
         return
 
+    # 🔁 Ora puoi leggere i dati
+    cliente_pubblico = db.query(NltClientiPubblici).filter(
+        NltClientiPubblici.token == cliente_pubblico_token
+    ).first()
 
+    if cliente_pubblico.preventivo_generato:
+        print("⛔ Preventivo già generato per questo cliente_pubblico.token — interrotto.")
+        return
 
-        # 🔁 Ora puoi rileggere i dati
-        cliente_pubblico = db.query(NltClientiPubblici).filter(
-            NltClientiPubblici.token == cliente_pubblico_token
+    cliente = db.query(Cliente).get(cliente_id)
+    dealer = db.query(User).get(dealer_id)
+    offerta = db.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
+
+    # 🔒 Verifica duplicato
+    preventivo_duplicato = db.query(NltPreventivi).filter(
+        NltPreventivi.cliente_id == cliente_id,
+        NltPreventivi.marca == offerta.marca,
+        NltPreventivi.modello == offerta.modello,
+        NltPreventivi.versione == offerta.versione,
+        NltPreventivi.durata == cliente_pubblico.durata,
+        NltPreventivi.km_totali == cliente_pubblico.km,
+        NltPreventivi.anticipo == cliente_pubblico.anticipo,
+        NltPreventivi.canone == cliente_pubblico.canone
+    ).first()
+
+    if preventivo_duplicato:
+        print(f"⛔ Preventivo già esistente: ID #{preventivo_duplicato.id} — skip generazione PDF.")
+        return
+
+    # 🧠 Player info
+    player = db.query(NltPlayers).get(offerta.id_player)
+    player_nome = player.nome if player else "Web"
+
+    # ⚙️ Dealer Settings
+    dealer_settings = None
+    if dealer.role == "dealer":
+        dealer_settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.dealer_id == dealer.id
         ).first()
 
-
-        # ⛔ Blocca se preventivo già generato
-        if cliente_pubblico.preventivo_generato:
-            print("⛔ Preventivo già generato per questo cliente_pubblico.token — interrotto.")
-            return
-
-
-        cliente = db.query(Cliente).get(cliente_id)
-        dealer = db.query(User).get(dealer_id)
-        offerta = db.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
-
-        # 🔒 PREVENTIVO DUPLICATO CHECK
-        preventivo_duplicato = db.query(NltPreventivi).filter(
-            NltPreventivi.cliente_id == cliente_id,
-            NltPreventivi.marca == offerta.marca,
-            NltPreventivi.modello == offerta.modello,
-            NltPreventivi.versione == offerta.versione,
-            NltPreventivi.durata == cliente_pubblico.durata,
-            NltPreventivi.km_totali == cliente_pubblico.km,
-            NltPreventivi.anticipo == cliente_pubblico.anticipo,
-            NltPreventivi.canone == cliente_pubblico.canone
+    if not dealer_settings:
+        dealer_settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.slug == dealer_slug
         ).first()
 
-        if preventivo_duplicato:
-            print(f"⛔ Preventivo già esistente: ID #{preventivo_duplicato.id} — skip generazione PDF.")
-            return
+    # 🎯 Admin info (parent fallback)
+    admin_id = dealer.parent_id if dealer.parent_id else dealer.id
+    admin = db.query(User).get(admin_id)
 
+    # 💸 Provvigione
+    provvigione_percentuale = (
+        dealer_settings.prov_vetrina if dealer_settings and dealer_settings.prov_vetrina else 0
+    )
+    note_text = f"Provvigione: {provvigione_percentuale}%"
 
-         # 🧠 Player
-        player = db.query(NltPlayers).get(offerta.id_player)
-        player_nome = player.nome if player else "Web"
+    # 📦 Servizi + Documenti
+    servizi = db.query(NltService).filter(NltService.is_active == True).all()
+    documenti = db.query(NltDocumentiRichiesti).filter(
+        NltDocumentiRichiesti.tipo_cliente == tipo_cliente
+    ).all()
 
-        # 🛡️ Dealer settings: se dealer ha le sue, usa quelle; altrimenti fallback su slug
-        dealer_settings = None
-        if dealer.role == "dealer":
-            dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer.id).first()
+    payload_pdf = {
+        "CustomerFirstName": cliente.nome,
+        "CustomerLastName": cliente.cognome,
+        "CustomerCompanyName": cliente.ragione_sociale or "",
+        "TipoCliente": tipo_cliente,
+        "DocumentiNecessari": [doc.documento for doc in documenti],
+        "CarMainImageUrl": f"{offerta.default_img}&angle=203&width=800",
+        "CarImages": [
+            {"Url": f"{offerta.default_img}&angle={angle}&width=800", "Angle": angle, "Color": "N.D."}
+            for angle in [29, 17, 13, 9, 21]
+        ],
+        "Auto": {
+            "Marca": offerta.marca,
+            "Modello": offerta.modello,
+            "Versione": offerta.modello.upper(),
+            "DescrizioneVersione": offerta.versione.strip(),
+            "Note": "Richiesta preventivo web"
+        },
+        "Servizi": [{"Nome": s.name, "Opzione": s.conditions["options"][0]} for s in servizi],
+        "DatiEconomici": {
+            "Durata": cliente_pubblico.durata,
+            "KmTotali": cliente_pubblico.km,
+            "Anticipo": cliente_pubblico.anticipo,
+            "Canone": cliente_pubblico.canone
+        },
+        "AdminInfo": {
+            "Email": admin.email,
+            "FirstName": admin.nome,
+            "LastName": admin.cognome,
+            "CompanyName": admin.ragione_sociale,
+            "MobilePhone": admin.cellulare,
+            "Address": admin.indirizzo,
+            "PostalCode": admin.cap,
+            "City": admin.citta,
+            "LogoUrl": admin.logo_url
+        },
+        "DealerInfo": {
+            "Email": dealer.email,
+            "FirstName": dealer.nome,
+            "LastName": dealer.cognome,
+            "CompanyName": dealer.ragione_sociale,
+            "MobilePhone": dealer.cellulare,
+            "Address": dealer.indirizzo,
+            "PostalCode": dealer.cap,
+            "City": dealer.citta,
+            "LogoUrl": dealer.logo_url
+        },
+        "NoteAuto": f"Provvigione applicata: {provvigione_percentuale}%",
+        "Player": player_nome
+    }
 
-        if not dealer_settings:
-            dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
-
-        # 🎯 Admin: da parent_id o self
-        admin_id = dealer.parent_id if dealer.parent_id else dealer.id
-        admin = db.query(User).get(admin_id)
-
-        # ✅ Provvigione
-        provvigione_percentuale = dealer_settings.prov_vetrina if dealer_settings and dealer_settings.prov_vetrina else 0
-        note_text = f"Provvigione: {provvigione_percentuale}%"
-
-        # 🔁 Resto dati per PDF
-        servizi = db.query(NltService).filter(NltService.is_active == True).all()
-        documenti = db.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
-
-        payload_pdf = {
-            "CustomerFirstName": cliente.nome,
-            "CustomerLastName": cliente.cognome,
-            "CustomerCompanyName": cliente.ragione_sociale or "",
-            "TipoCliente": tipo_cliente,
-            "DocumentiNecessari": [doc.documento for doc in documenti],
-            "CarMainImageUrl": f"{offerta.default_img}&angle=203&width=800",
-            "CarImages": [
-                {"Url": f"{offerta.default_img}&angle={angle}&width=800", "Angle": angle, "Color": "N.D."}
-                for angle in [29, 17, 13, 9, 21]
-            ],
-            "Auto": {
-                "Marca": offerta.marca,
-                "Modello": offerta.modello,
-                "Versione": offerta.modello.upper(),  # ✅ Usato nel titolo del PDF
-                "DescrizioneVersione": offerta.versione.strip(),  # ← Mostra tutto, incluso modello
-                "Note": "Richiesta preventivo web"
-            },
-
-            "Servizi": [{"Nome": s.name, "Opzione": s.conditions["options"][0]} for s in servizi],
-            "DatiEconomici": {
-                "Durata": cliente_pubblico.durata,
-                "KmTotali": cliente_pubblico.km,
-                "Anticipo": cliente_pubblico.anticipo,
-                "Canone": cliente_pubblico.canone
-            },
-            "AdminInfo": {
-              "Email": admin.email,
-              "FirstName": admin.nome,
-              "LastName": admin.cognome,
-              "CompanyName": admin.ragione_sociale,
-              "MobilePhone": admin.cellulare,
-              "Address": admin.indirizzo,
-              "PostalCode": admin.cap,
-              "City": admin.citta,
-              "LogoUrl": admin.logo_url
-            },
-
-            "DealerInfo": {
-              "Email": dealer.email,
-              "FirstName": dealer.nome,
-              "LastName": dealer.cognome,
-              "CompanyName": dealer.ragione_sociale,
-              "MobilePhone": dealer.cellulare,
-              "Address": dealer.indirizzo,
-              "PostalCode": dealer.cap,
-              "City": dealer.citta,
-              "LogoUrl": dealer.logo_url,
-
-            } if dealer else None,
-
-            "NoteAuto": f"Provvigione applicata: {provvigione_percentuale}%",
-            "Player": player.nome if player else "Web"
-        }
-
-        async with httpx.AsyncClient(timeout=120) as client:
-            pdf_res = await client.post(
-                "https://corewebapp-azcore.up.railway.app/api/Pdf/GenerateOffer", 
-                json=payload_pdf
-            )
-            pdf_res.raise_for_status()
-            pdf_blob = pdf_res.content
-
-        file_name = f"{uuid.uuid4()}.pdf"
-        file_path = f"{SUPABASE_BUCKET}/{file_name}"
-
-        async with httpx.AsyncClient(timeout=120) as client:
-            upload_res = await client.put(
-                f"{SUPABASE_URL}/storage/v1/object/{file_path}",
-                headers={
-                    "Authorization": f"Bearer {SUPABASE_API_KEY}",
-                    "Content-Type": "application/pdf"
-                },
-                content=pdf_blob
-            )
-            upload_res.raise_for_status()
-
-        file_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_path}"
-
-        nuovo_preventivo = NltPreventivi(
-            cliente_id=cliente.id,
-            file_url=file_url,
-            creato_da=dealer.id,
-            marca=offerta.marca,
-            modello=offerta.modello,
-            versione=offerta.versione,
-            durata=cliente_pubblico.durata,
-            km_totali=cliente_pubblico.km,
-            anticipo=cliente_pubblico.anticipo,
-            canone=cliente_pubblico.canone,
-            visibile=1,
-            preventivo_assegnato_a=dealer.id,
-            note=note_text,
-            player=player_nome
-
+    # 📄 Generazione PDF
+    async with httpx.AsyncClient(timeout=120) as client:
+        pdf_res = await client.post(
+            "https://corewebapp-azcore.up.railway.app/api/Pdf/GenerateOffer",
+            json=payload_pdf
         )
+        pdf_res.raise_for_status()
+        pdf_blob = pdf_res.content
 
-        db.add(nuovo_preventivo)
-        
-        db.commit()
-        db.refresh(nuovo_preventivo)
+    # ☁️ Upload su Supabase
+    file_name = f"{uuid.uuid4()}.pdf"
+    file_path = f"{SUPABASE_BUCKET}/{file_name}"
 
-        preventivo_id = nuovo_preventivo.id
-        print(f"✅ Preventivo creato con ID: {preventivo_id}")
+    async with httpx.AsyncClient(timeout=120) as client:
+        upload_res = await client.put(
+            f"{SUPABASE_URL}/storage/v1/object/{file_path}",
+            headers={
+                "Authorization": f"Bearer {SUPABASE_API_KEY}",
+                "Content-Type": "application/pdf"
+            },
+            content=pdf_blob
+        )
+        upload_res.raise_for_status()
 
-    except Exception as e:
-        db.rollback()
-        print(f"❌ ERRORE inserimento preventivo: {str(e)}")
-        return  # importante: esci qui se errore
+    file_url = f"{SUPABASE_URL}/storage/v1/object/public/{file_path}"
 
-    # Questo codice DEVE essere fuori dal blocco try-except!
+    # 📝 Salvataggio Preventivo
+    nuovo_preventivo = NltPreventivi(
+        cliente_id=cliente.id,
+        file_url=file_url,
+        creato_da=dealer.id,
+        marca=offerta.marca,
+        modello=offerta.modello,
+        versione=offerta.versione,
+        durata=cliente_pubblico.durata,
+        km_totali=cliente_pubblico.km,
+        anticipo=cliente_pubblico.anticipo,
+        canone=cliente_pubblico.canone,
+        visibile=1,
+        preventivo_assegnato_a=dealer.id,
+        note=note_text,
+        player=player_nome
+    )
+
+    db.add(nuovo_preventivo)
+    db.commit()
+    db.refresh(nuovo_preventivo)
+    preventivo_id = nuovo_preventivo.id
+    print(f"✅ Preventivo creato con ID: {preventivo_id}")
+
+    # 📩 Email finale
     async with httpx.AsyncClient() as client:
         response_link = await client.post(
             f"https://coreapi-production-ca29.up.railway.app/nlt/preventivi/{preventivo_id}/genera-link"
         )
         response_link.raise_for_status()
-        link_data = response_link.json()
-        url_download = link_data["url_download"]
+        url_download = response_link.json()["url_download"]
 
         response_dettagli = await client.get(
             f"https://coreapi-production-ca29.up.railway.app/nlt/preventivo-completo/{preventivo_id}?dealerId={dealer.id}"
@@ -916,11 +931,9 @@ async def genera_e_invia_preventivo(
             'https://corewebapp-azcore.up.railway.app/templates/email_preventivo.html'
         )
         template_html_res.raise_for_status()
-        template_html = template_html_res.text
 
         from jinja2 import Template
-        template = Template(template_html)
-        html_body = template.render(
+        html_body = Template(template_html_res.text).render(
             logo_url=dettagli["DealerInfo"]["LogoUrl"],
             cliente_nome=f"{dettagli['CustomerFirstName']} {dettagli['CustomerLastName']}",
             marca=dettagli["Auto"]["Marca"],
@@ -942,6 +955,7 @@ async def genera_e_invia_preventivo(
                 "html_body": html_body
             }
         )
+
 
 @router.put("/public/clienti/switch-anagrafica")
 def switch_anagrafica_cliente_pubblico(
