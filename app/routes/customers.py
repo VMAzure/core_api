@@ -739,7 +739,7 @@ async def genera_e_invia_preventivo(
             "Auto": {
                 "Marca": offerta.marca,
                 "Modello": offerta.modello,
-                "Versione": "",  # ← Intenzionalmente vuoto
+                "Versione": offerta.modello.upper(),  # ✅ Usato nel titolo del PDF
                 "DescrizioneVersione": offerta.versione.strip(),  # ← Mostra tutto, incluso modello
                 "Note": "Richiesta preventivo web"
             },
