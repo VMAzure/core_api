@@ -711,9 +711,21 @@ async def genera_e_invia_preventivo(
 ):
 
     try:
+        # Tenta di aggiornare preventivo_generato a True solo se è ancora False
+        updated = db.query(NltClientiPubblici).filter(
+            NltClientiPubblici.token == cliente_pubblico_token,
+            NltClientiPubblici.preventivo_generato == False
+        ).update({ "preventivo_generato": True })
+
+        if updated == 0:
+            print("⛔ Preventivo già generato da altra richiesta in parallelo.")
+            return
+
+        # 🔁 Ora puoi rileggere i dati
         cliente_pubblico = db.query(NltClientiPubblici).filter(
             NltClientiPubblici.token == cliente_pubblico_token
-        ).with_for_update().first()
+        ).first()
+
 
         # ⛔ Blocca se preventivo già generato
         if cliente_pubblico.preventivo_generato:
