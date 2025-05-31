@@ -14,7 +14,7 @@ from pydantic import BaseModel, EmailStr
 import uuid
 from app.utils.email import send_email
 from sqlalchemy import or_, func
-from app.models import NltOfferte, NltService, NltDocumentiRichiesti
+from app.models import NltOfferte, NltService, NltPlayers, NltDocumentiRichiesti
 
 import os
 
@@ -718,9 +718,11 @@ async def genera_e_invia_preventivo(
         cliente = db.query(Cliente).get(cliente_id)
         dealer = db.query(User).get(dealer_id)
         offerta = db.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
+        player = db.query(NltPlayers).get(offerta.id_player)
 
         dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
         admin = db.query(User).get(dealer_settings.admin_id)
+        provvigione_percentuale = dealer_settings.prov_vetrina if dealer_settings and dealer_settings.prov_vetrina else 0
 
         servizi = db.query(NltService).filter(NltService.is_active == True).all()
         documenti = db.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
@@ -752,17 +754,32 @@ async def genera_e_invia_preventivo(
                 "Canone": cliente_pubblico.canone
             },
             "AdminInfo": {
-                "Email": admin.email,
-                "CompanyName": admin.ragione_sociale,
-                "LogoUrl": admin.logo_url
+              "Email": admin.email,
+              "FirstName": admin.nome,
+              "LastName": admin.cognome,
+              "CompanyName": admin.ragione_sociale,
+              "MobilePhone": admin.cellulare,
+              "Address": admin.indirizzo,
+              "PostalCode": admin.cap,
+              "City": admin.citta,
+              "LogoUrl": admin.logo_url
             },
+
             "DealerInfo": {
-                "Email": dealer.email,
-                "CompanyName": dealer.ragione_sociale,
-                "LogoUrl": dealer.logo_url
+              "Email": dealer.email,
+              "FirstName": dealer.nome,
+              "LastName": dealer.cognome,
+              "CompanyName": dealer.ragione_sociale,
+              "MobilePhone": dealer.cellulare,
+              "Address": dealer.indirizzo,
+              "PostalCode": dealer.cap,
+              "City": dealer.citta,
+              "LogoUrl": dealer.logo_url,
+
             } if dealer else None,
-            "NoteAuto": "Richiesta da sito web",
-            "Player": "Web"
+
+            "NoteAuto": f"Provvigione applicata: {provvigione_percentuale}%",
+            "Player": player.nome if player else "Web"
         }
 
         async with httpx.AsyncClient(timeout=120) as client:
