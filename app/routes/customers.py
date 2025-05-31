@@ -730,9 +730,9 @@ async def genera_e_invia_preventivo(
             NltPreventivi.canone == cliente_pubblico.canone
         ).first()
 
-        if preventivo_duplicato:
-            print(f"⛔ Preventivo già esistente: ID #{preventivo_duplicato.id} — skip generazione PDF.")
-            return
+        #if preventivo_duplicato:
+        #    print(f"⛔ Preventivo già esistente: ID #{preventivo_duplicato.id} — skip generazione PDF.")
+        #    return
 
 
          # 🧠 Player
