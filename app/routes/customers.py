@@ -723,6 +723,9 @@ async def genera_e_invia_preventivo(
         dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
         admin = db.query(User).get(dealer_settings.admin_id)
         provvigione_percentuale = dealer_settings.prov_vetrina if dealer_settings and dealer_settings.prov_vetrina else 0
+        player = db.query(NltPlayers).get(offerta.id_player)
+        player_nome = player.nome if player else "Web"
+        note_text = f"Provvigione: {provvigione_percentuale}%"
 
         servizi = db.query(NltService).filter(NltService.is_active == True).all()
         documenti = db.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
@@ -819,8 +822,9 @@ async def genera_e_invia_preventivo(
             canone=cliente_pubblico.canone,
             visibile=1,
             preventivo_assegnato_a=dealer.id,
-            note="Richiesta web",
-            player="Web"
+            note=note_text,
+            player=player_nome
+
         )
 
         db.add(nuovo_preventivo)
