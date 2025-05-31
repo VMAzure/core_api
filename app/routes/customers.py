@@ -717,12 +717,13 @@ async def genera_e_invia_preventivo(
             NltClientiPubblici.preventivo_generato == False
         ).update({ "preventivo_generato": True })
 
+        db.commit()
+        db.expire_all()  # <--- evita blocchi transazione pendente
+
         if updated == 0:
-            print("⛔ Preventivo già generato da altra richiesta in parallelo.")
+            print("⛔ Preventivo già generato in parallelo.")
             return
 
-        # 💾 COMMIT IMMEDIATO PER BLOCCARE DOPPI INSERIMENTI
-        db.commit()
 
 
         # 🔁 Ora puoi rileggere i dati
