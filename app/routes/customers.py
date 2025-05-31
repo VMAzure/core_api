@@ -734,6 +734,7 @@ async def genera_e_invia_preventivo(
     dealer_id,
     db: Session
 ):
+
     try:
         cliente_pubblico = db.query(NltClientiPubblici).filter(
             NltClientiPubblici.token == cliente_pubblico_token
@@ -743,7 +744,7 @@ async def genera_e_invia_preventivo(
         dealer = db.query(User).get(dealer_id)
         offerta = db.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
 
-        # 🧠 Doppione preventivo? Esci subito
+        # 🔒 PREVENTIVO DUPLICATO CHECK
         preventivo_duplicato = db.query(NltPreventivi).filter(
             NltPreventivi.cliente_id == cliente_id,
             NltPreventivi.marca == offerta.marca,
@@ -756,24 +757,31 @@ async def genera_e_invia_preventivo(
         ).first()
 
         if preventivo_duplicato:
-            print(f"⛔ Preventivo già presente: ID #{preventivo_duplicato.id} — skip.")
+            print(f"⛔ Preventivo già esistente: ID #{preventivo_duplicato.id} — skip generazione PDF.")
             return
 
+
+         # 🧠 Player
         player = db.query(NltPlayers).get(offerta.id_player)
         player_nome = player.nome if player else "Web"
 
+        # 🛡️ Dealer settings: se dealer ha le sue, usa quelle; altrimenti fallback su slug
         dealer_settings = None
         if dealer.role == "dealer":
             dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer.id).first()
+
         if not dealer_settings:
             dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
 
+        # 🎯 Admin: da parent_id o self
         admin_id = dealer.parent_id if dealer.parent_id else dealer.id
         admin = db.query(User).get(admin_id)
 
+        # ✅ Provvigione
         provvigione_percentuale = dealer_settings.prov_vetrina if dealer_settings and dealer_settings.prov_vetrina else 0
         note_text = f"Provvigione: {provvigione_percentuale}%"
 
+        # 🔁 Resto dati per PDF
         servizi = db.query(NltService).filter(NltService.is_active == True).all()
         documenti = db.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
 
@@ -791,10 +799,11 @@ async def genera_e_invia_preventivo(
             "Auto": {
                 "Marca": offerta.marca,
                 "Modello": offerta.modello,
-                "Versione": offerta.modello.upper(),
-                "DescrizioneVersione": offerta.versione.strip(),
+                "Versione": offerta.modello.upper(),  # ✅ Usato nel titolo del PDF
+                "DescrizioneVersione": offerta.versione.strip(),  # ← Mostra tutto, incluso modello
                 "Note": "Richiesta preventivo web"
             },
+
             "Servizi": [{"Nome": s.name, "Opzione": s.conditions["options"][0]} for s in servizi],
             "DatiEconomici": {
                 "Durata": cliente_pubblico.durata,
@@ -803,27 +812,30 @@ async def genera_e_invia_preventivo(
                 "Canone": cliente_pubblico.canone
             },
             "AdminInfo": {
-                "Email": admin.email,
-                "FirstName": admin.nome,
-                "LastName": admin.cognome,
-                "CompanyName": admin.ragione_sociale,
-                "MobilePhone": admin.cellulare,
-                "Address": admin.indirizzo,
-                "PostalCode": admin.cap,
-                "City": admin.citta,
-                "LogoUrl": admin.logo_url
+              "Email": admin.email,
+              "FirstName": admin.nome,
+              "LastName": admin.cognome,
+              "CompanyName": admin.ragione_sociale,
+              "MobilePhone": admin.cellulare,
+              "Address": admin.indirizzo,
+              "PostalCode": admin.cap,
+              "City": admin.citta,
+              "LogoUrl": admin.logo_url
             },
+
             "DealerInfo": {
-                "Email": dealer.email,
-                "FirstName": dealer.nome,
-                "LastName": dealer.cognome,
-                "CompanyName": dealer.ragione_sociale,
-                "MobilePhone": dealer.cellulare,
-                "Address": dealer.indirizzo,
-                "PostalCode": dealer.cap,
-                "City": dealer.citta,
-                "LogoUrl": dealer.logo_url
+              "Email": dealer.email,
+              "FirstName": dealer.nome,
+              "LastName": dealer.cognome,
+              "CompanyName": dealer.ragione_sociale,
+              "MobilePhone": dealer.cellulare,
+              "Address": dealer.indirizzo,
+              "PostalCode": dealer.cap,
+              "City": dealer.citta,
+              "LogoUrl": dealer.logo_url,
+
             } if dealer else None,
+
             "NoteAuto": f"Provvigione applicata: {provvigione_percentuale}%",
             "Player": player.nome if player else "Web"
         }
@@ -867,6 +879,7 @@ async def genera_e_invia_preventivo(
             preventivo_assegnato_a=dealer.id,
             note=note_text,
             player=player_nome
+
         )
 
         db.add(nuovo_preventivo)
@@ -878,10 +891,10 @@ async def genera_e_invia_preventivo(
 
     except Exception as e:
         db.rollback()
-        print(f"❌ ERRORE preventivo: {str(e)}")
-        return
+        print(f"❌ ERRORE inserimento preventivo: {str(e)}")
+        return  # importante: esci qui se errore
 
-    # === Post-generazione: invia email ===
+    # Questo codice DEVE essere fuori dal blocco try-except!
     async with httpx.AsyncClient() as client:
         response_link = await client.post(
             f"https://coreapi-production-ca29.up.railway.app/nlt/preventivi/{preventivo_id}/genera-link"
