@@ -718,6 +718,24 @@ async def genera_e_invia_preventivo(
         cliente = db.query(Cliente).get(cliente_id)
         dealer = db.query(User).get(dealer_id)
         offerta = db.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
+
+        # 🔒 PREVENTIVO DUPLICATO CHECK
+        preventivo_duplicato = db.query(NltPreventivi).filter(
+            NltPreventivi.cliente_id == cliente_id,
+            NltPreventivi.marca == offerta.marca,
+            NltPreventivi.modello == offerta.modello,
+            NltPreventivi.versione == offerta.versione,
+            NltPreventivi.durata == cliente_pubblico.durata,
+            NltPreventivi.km_totali == cliente_pubblico.km,
+            NltPreventivi.anticipo == cliente_pubblico.anticipo,
+            NltPreventivi.canone == cliente_pubblico.canone
+        ).first()
+
+        if preventivo_duplicato:
+            print(f"⛔ Preventivo già esistente: ID #{preventivo_duplicato.id} — skip generazione PDF.")
+            return
+
+
         player = db.query(NltPlayers).get(offerta.id_player)
 
         dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
