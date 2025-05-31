@@ -721,6 +721,10 @@ async def genera_e_invia_preventivo(
             print("⛔ Preventivo già generato da altra richiesta in parallelo.")
             return
 
+        # 💾 COMMIT IMMEDIATO PER BLOCCARE DOPPI INSERIMENTI
+        db.commit()
+
+
         # 🔁 Ora puoi rileggere i dati
         cliente_pubblico = db.query(NltClientiPubblici).filter(
             NltClientiPubblici.token == cliente_pubblico_token
@@ -876,10 +880,7 @@ async def genera_e_invia_preventivo(
         )
 
         db.add(nuovo_preventivo)
-        # ✅ Flagga come generato
-        cliente_pubblico.preventivo_generato = True
-        db.add(cliente_pubblico)  # necessario perché cliente_pubblico non è stato modificato finora
-
+        
         db.commit()
         db.refresh(nuovo_preventivo)
 
