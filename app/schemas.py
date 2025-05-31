@@ -190,6 +190,8 @@ class NltClientiPubbliciResponse(NltClientiPubbliciBase):
     durata: Optional[int] = None
     km: Optional[int] = None
     stato: Optional[str]
+    codice_fiscale: Optional[str] = None
+    partita_iva: Optional[str] = None
 
     # ✅ aggiungi questi
     email_esistente: Optional[str] = None

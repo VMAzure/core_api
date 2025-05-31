@@ -536,6 +536,9 @@ def crea_cliente_pubblico(
     return NltClientiPubbliciResponse(
         id=cliente_pubblico.id,
         email=cliente_pubblico.email,
+        codice_fiscale=cliente_esistente.codice_fiscale if cliente_esistente else None,
+        partita_iva=cliente_esistente.partita_iva if cliente_esistente else None,
+
         dealer_slug=cliente_pubblico.dealer_slug,
         token=cliente_pubblico.token,  # garantito aggiornato
         data_creazione=cliente_pubblico.data_creazione,
@@ -577,6 +580,9 @@ def conferma_cliente_pubblico(token: str, db: Session = Depends(get_db)):
 
     return NltClientiPubbliciResponse(
         id=cliente_pubblico.id,
+        codice_fiscale=cliente_esistente.codice_fiscale if cliente_esistente else None,
+        partita_iva=cliente_esistente.partita_iva if cliente_esistente else None,
+
         email=cliente_pubblico.email,
         dealer_slug=cliente_pubblico.dealer_slug,
         cliente_id=cliente_pubblico.cliente_id,
