@@ -739,8 +739,8 @@ async def genera_e_invia_preventivo(
             "Auto": {
                 "Marca": offerta.marca,
                 "Modello": offerta.modello,
-                "Versione": offerta.versione,
-                "DescrizioneVersione": offerta.versione,
+                "Versione": "",  # ❌ Non deve stampare nulla accanto a Marca + Modello
+                "DescrizioneVersione": offerta.versione or "",  # ✅ Usata solo nella riga sotto
                 "Note": "Richiesta preventivo web"
             },
             "Servizi": [{"Nome": s.name, "Opzione": s.conditions["options"][0]} for s in servizi],
