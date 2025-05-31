@@ -714,6 +714,11 @@ async def genera_e_invia_preventivo(
         cliente_pubblico = db.query(NltClientiPubblici).filter(
             NltClientiPubblici.token == cliente_pubblico_token
         ).first()
+        # ⛔ Blocca se preventivo già generato
+        if cliente_pubblico.preventivo_generato:
+            print("⛔ Preventivo già generato per questo cliente_pubblico.token — interrotto.")
+            return
+
 
         cliente = db.query(Cliente).get(cliente_id)
         dealer = db.query(User).get(dealer_id)
@@ -858,6 +863,10 @@ async def genera_e_invia_preventivo(
         )
 
         db.add(nuovo_preventivo)
+        # ✅ Flagga come generato
+        cliente_pubblico.preventivo_generato = True
+        db.add(cliente_pubblico)  # necessario perché cliente_pubblico non è stato modificato finora
+
         db.commit()
         db.refresh(nuovo_preventivo)
 
