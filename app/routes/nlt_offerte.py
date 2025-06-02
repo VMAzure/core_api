@@ -21,7 +21,7 @@ import requests
 import httpx
 from app.routes.image import get_vehicle_image
 from sqlalchemy import or_
-from app.utils.quotazioni import calcola_quotazione
+from app.utils.quotazioni import calcola_quotazione, calcola_quotazione_custom
 
 
 
@@ -116,19 +116,52 @@ async def get_offerte(
 
         risultati = []
         for o in offerte:
-            quotazione = o.quotazioni[0] if o.quotazioni else None
             dealer_context = is_dealer_user(current_user)
             dealer_id_for_context = current_user.id if dealer_context else None
 
-            durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
-                o, quotazione, current_user, db, dealer_context=dealer_context, dealer_id=dealer_id_for_context
-            )
+            quotazioni_calcolate = {}
+    
+            for quotazione in o.quotazioni:
+                for durata_km, canone_base in {
+                    "36_10": quotazione.mesi_36_10,
+                    "36_15": quotazione.mesi_36_15,
+                    "36_20": quotazione.mesi_36_20,
+                    "36_25": quotazione.mesi_36_25,
+                    "36_30": quotazione.mesi_36_30,
+                    "36_40": quotazione.mesi_36_40,
+                    "48_10": quotazione.mesi_48_10,
+                    "48_15": quotazione.mesi_48_15,
+                    "48_20": quotazione.mesi_48_20,
+                    "48_25": quotazione.mesi_48_25,
+                    "48_30": quotazione.mesi_48_30,
+                    "48_40": quotazione.mesi_48_40,
+                    "60_10": quotazione.mesi_60_10,
+                    "60_15": quotazione.mesi_60_15,
+                    "60_20": quotazione.mesi_60_20,
+                    "60_25": quotazione.mesi_60_25,
+                    "60_30": quotazione.mesi_60_30,
+                    "60_40": quotazione.mesi_60_40,
+                }.items():
+                    if canone_base:
+                        mesi, kmila = map(int, durata_km.split("_"))
+                
+                        # Calcola quotazione con provvigioni per ogni combinazione
+                        durata, km_inclusi, canone_finale, dealer_slug = calcola_quotazione_custom(
+                            offerta=o,
+                            durata=mesi,
+                            km=kmila * 1000,
+                            canone_base=canone_base,
+                            current_user=current_user,
+                            db=db,
+                            dealer_context=dealer_context,
+                            dealer_id=dealer_id_for_context
+                        )
 
+                        quotazioni_calcolate[durata_km] = round(canone_finale, 2)
 
             risultati.append({
                 "id_offerta": o.id_offerta,
-                "slug_offerta": o.slug,  # ✅ AGGIUNTO CON CERTEZZA ASSOLUTA!
-
+                "slug_offerta": o.slug,
                 "marca": o.marca,
                 "modello": o.modello,
                 "versione": o.versione,
@@ -152,8 +185,8 @@ async def get_offerte(
                 "default_img": o.default_img,
                 "solo_privati": o.solo_privati,
                 "attivo": o.attivo,
-                "canone_calcolato": float(canone) if canone else None,
-                "dealer_slug": dealer_slug,  # ✅ AGGIUNTO QUI
+                "dealer_slug": dealer_slug,
+                "quotazioni": quotazioni_calcolate,  # Tutte quotazioni elaborate
                 "accessori": [
                     {
                         "codice": a.codice,
@@ -169,30 +202,11 @@ async def get_offerte(
                         "colore": t.colore
                     } for t in o.tags
                 ],
-                "quotazioni": {
-                    "36_10": o.quotazioni[0].mesi_36_10 if o.quotazioni else None,
-                    "36_15": o.quotazioni[0].mesi_36_15 if o.quotazioni else None,
-                    "36_20": o.quotazioni[0].mesi_36_20 if o.quotazioni else None,
-                    "36_25": o.quotazioni[0].mesi_36_25 if o.quotazioni else None,
-                    "36_30": o.quotazioni[0].mesi_36_30 if o.quotazioni else None,
-                    "36_40": o.quotazioni[0].mesi_36_40 if o.quotazioni else None,
-                    "48_10": o.quotazioni[0].mesi_48_10 if o.quotazioni else None,
-                    "48_15": o.quotazioni[0].mesi_48_15 if o.quotazioni else None,
-                    "48_20": o.quotazioni[0].mesi_48_20 if o.quotazioni else None,
-                    "48_25": o.quotazioni[0].mesi_48_25 if o.quotazioni else None,
-                    "48_30": o.quotazioni[0].mesi_48_30 if o.quotazioni else None,
-                    "48_40": o.quotazioni[0].mesi_48_40 if o.quotazioni else None,
-                    "60_10": o.quotazioni[0].mesi_60_10 if o.quotazioni else None,
-                    "60_15": o.quotazioni[0].mesi_60_15 if o.quotazioni else None,
-                    "60_20": o.quotazioni[0].mesi_60_20 if o.quotazioni else None,
-                    "60_25": o.quotazioni[0].mesi_60_25 if o.quotazioni else None,
-                    "60_30": o.quotazioni[0].mesi_60_30 if o.quotazioni else None,
-                    "60_40": o.quotazioni[0].mesi_60_40 if o.quotazioni else None,
-                },
                 "immagine": next((img.url_imagin for img in o.immagini if img.principale), None),
                 "immagine_front": o.immagini_nlt.url_immagine_front_alt if o.immagini_nlt else None,
                 "immagine_back": o.immagini_nlt.url_immagine_back_alt if o.immagini_nlt else None
             })
+
 
         return {"success": True, "offerte": risultati}
 

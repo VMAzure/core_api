@@ -53,3 +53,34 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, dealer_co
     canone_finale = canone_base + (incremento_totale / durata)
 
     return durata, km, round(canone_finale, 2), slug_finale
+
+def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db: Session, dealer_context=False, dealer_id=None):
+
+    prezzo_listino = float(offerta.prezzo_listino)
+
+    settings_admin = db.query(SiteAdminSettings).filter(
+        SiteAdminSettings.admin_id == offerta.id_admin,
+        SiteAdminSettings.dealer_id.is_(None)
+    ).first()
+
+    prov_admin = settings_admin.prov_vetrina or 0
+    slug_finale = settings_admin.slug if settings_admin else None
+
+    prov_dealer = 0
+    if dealer_context or is_dealer_user(current_user):
+        dealer_id_effettivo = dealer_id or current_user.id
+
+        settings_dealer = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.admin_id == offerta.id_admin,
+            SiteAdminSettings.dealer_id == dealer_id_effettivo
+        ).first()
+
+        if settings_dealer:
+            prov_dealer = settings_dealer.prov_vetrina or 0
+            if settings_dealer.slug:
+                slug_finale = settings_dealer.slug
+
+    incremento_totale = prezzo_listino * (prov_admin + prov_dealer) / 100
+    canone_finale = canone_base + (incremento_totale / durata)
+
+    return durata, km, round(canone_finale, 2), slug_finale
