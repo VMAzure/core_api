@@ -578,6 +578,9 @@ async def invia_mail_preventivo(
     msg["Subject"] = f"Preventivo {preventivo.marca} {preventivo.modello}"
     msg["From"] = formataddr((smtp_settings.smtp_alias or "Preventivo Noleggio Lungo Termine", smtp_settings.smtp_user))
     msg["To"] = email_destinatario
+    dealer = db.query(User).filter(User.id == preventivo.preventivo_assegnato_a).first()
+    if dealer and dealer.email:
+        msg["Bcc"] = dealer.email
 
     # Invia mail
     try:
