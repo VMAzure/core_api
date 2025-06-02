@@ -63,10 +63,10 @@ def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db
         SiteAdminSettings.dealer_id.is_(None)
     ).first()
 
-    prov_admin = settings_admin.prov_vetrina or 0
+    prov_admin = float(settings_admin.prov_vetrina or 0)  # <- conversione qui!
     slug_finale = settings_admin.slug if settings_admin else None
 
-    prov_dealer = 0
+    prov_dealer = 0.0
     if dealer_context or is_dealer_user(current_user):
         dealer_id_effettivo = dealer_id or current_user.id
 
@@ -76,11 +76,11 @@ def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db
         ).first()
 
         if settings_dealer:
-            prov_dealer = settings_dealer.prov_vetrina or 0
+            prov_dealer = float(settings_dealer.prov_vetrina or 0)  # <- conversione anche qui!
             if settings_dealer.slug:
                 slug_finale = settings_dealer.slug
 
-    incremento_totale = prezzo_listino * (prov_admin + prov_dealer) / 100
-    canone_finale = canone_base + (incremento_totale / durata)
+    incremento_totale = prezzo_listino * (prov_admin + prov_dealer) / 100.0
+    canone_finale = float(canone_base) + (incremento_totale / durata)
 
     return durata, km, round(canone_finale, 2), slug_finale
