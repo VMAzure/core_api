@@ -94,35 +94,37 @@ async def get_offerte(
 
         if current_user.role == "superadmin":
             pass
-        elif is_admin_user(current_user):
-            admin_id = get_admin_id(current_user)
-            query = query.filter(NltOfferte.id_admin == admin_id)
-        elif is_dealer_user(current_user):
+        else:
             admin_id = get_admin_id(current_user)
             query = query.filter(NltOfferte.id_admin == admin_id)
 
-        offerte = query.join(
-            NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
-        ).filter(
-            NltOfferte.id_admin == admin_id,
-            NltOfferte.attivo.is_(True),
-            NltOfferte.prezzo_listino.isnot(None),
-            or_(
-                NltQuotazioni.mesi_36_10.isnot(None),
-                NltQuotazioni.mesi_48_10.isnot(None),
-                NltQuotazioni.mesi_48_30.isnot(None)
-            )
-        ).order_by(NltOfferte.prezzo_listino.asc()).all()
+        offerte = query.order_by(NltOfferte.prezzo_listino.asc()).all()
+
+        settings_admin = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.admin_id == admin_id,
+            SiteAdminSettings.dealer_id.is_(None)
+        ).first()
+
+        prov_admin = float(settings_admin.prov_vetrina or 0)
+        slug_admin = settings_admin.slug
+        prov_dealer = 0.0
+        slug_dealer = slug_admin
+
+        if is_dealer_user(current_user):
+            settings_dealer = db.query(SiteAdminSettings).filter(
+                SiteAdminSettings.admin_id == admin_id,
+                SiteAdminSettings.dealer_id == current_user.id
+            ).first()
+            if settings_dealer:
+                prov_dealer = float(settings_dealer.prov_vetrina or 0)
+                slug_dealer = settings_dealer.slug or slug_admin
 
         risultati = []
         for o in offerte:
-            dealer_context = is_dealer_user(current_user)
-            dealer_id_for_context = current_user.id if dealer_context else None
-
             quotazioni_calcolate = {}
-    
+
             for quotazione in o.quotazioni:
-                for durata_km, canone_base in {
+                combinazioni = {
                     "36_10": quotazione.mesi_36_10,
                     "36_15": quotazione.mesi_36_15,
                     "36_20": quotazione.mesi_36_20,
@@ -141,23 +143,17 @@ async def get_offerte(
                     "60_25": quotazione.mesi_60_25,
                     "60_30": quotazione.mesi_60_30,
                     "60_40": quotazione.mesi_60_40,
-                }.items():
-                    if canone_base:
-                        mesi, kmila = map(int, durata_km.split("_"))
-                
-                        # Calcola quotazione con provvigioni per ogni combinazione
-                        durata, km_inclusi, canone_finale, dealer_slug = calcola_quotazione_custom(
-                            offerta=o,
-                            durata=mesi,
-                            km=kmila * 1000,
-                            canone_base=canone_base,
-                            current_user=current_user,
-                            db=db,
-                            dealer_context=dealer_context,
-                            dealer_id=dealer_id_for_context
-                        )
+                }
 
-                        quotazioni_calcolate[durata_km] = round(canone_finale, 2)
+                prezzo_listino = float(o.prezzo_listino)
+
+                for durata_km, canone_base in combinazioni.items():
+                    if canone_base:
+                        durata = int(durata_km.split("_")[0])
+                        incremento_totale = prezzo_listino * (prov_admin + prov_dealer) / 100.0
+                        canone_finale = round(float(canone_base) + incremento_totale / durata, 2)
+
+                        quotazioni_calcolate[durata_km] = canone_finale
 
             risultati.append({
                 "id_offerta": o.id_offerta,
@@ -185,34 +181,25 @@ async def get_offerte(
                 "default_img": o.default_img,
                 "solo_privati": o.solo_privati,
                 "attivo": o.attivo,
-                "dealer_slug": dealer_slug,
-                "quotazioni": quotazioni_calcolate,  # Tutte quotazioni elaborate
+                "dealer_slug": slug_dealer,
+                "quotazioni": quotazioni_calcolate,
                 "accessori": [
-                    {
-                        "codice": a.codice,
-                        "descrizione": a.descrizione,
-                        "prezzo": float(a.prezzo)
-                    } for a in o.accessori
+                    {"codice": a.codice, "descrizione": a.descrizione, "prezzo": float(a.prezzo)} for a in o.accessori
                 ],
                 "tags": [
-                    {
-                        "id_tag": t.id_tag,
-                        "nome": t.nome,
-                        "fa_icon": t.fa_icon,
-                        "colore": t.colore
-                    } for t in o.tags
+                    {"id_tag": t.id_tag, "nome": t.nome, "fa_icon": t.fa_icon, "colore": t.colore} for t in o.tags
                 ],
                 "immagine": next((img.url_imagin for img in o.immagini if img.principale), None),
                 "immagine_front": o.immagini_nlt.url_immagine_front_alt if o.immagini_nlt else None,
                 "immagine_back": o.immagini_nlt.url_immagine_back_alt if o.immagini_nlt else None
             })
 
-
         return {"success": True, "offerte": risultati}
 
     except Exception as e:
         print(f"❌ Errore interno nella GET offerte: {e}")
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+
 
 
 
