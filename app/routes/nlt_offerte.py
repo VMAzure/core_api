@@ -101,7 +101,18 @@ async def get_offerte(
             admin_id = get_admin_id(current_user)
             query = query.filter(NltOfferte.id_admin == admin_id)
 
-        offerte = query.order_by(NltOfferte.prezzo_listino.asc()).all()
+        offerte = query.join(
+            NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
+        ).filter(
+            NltOfferte.id_admin == admin_id,
+            NltOfferte.attivo.is_(True),
+            NltOfferte.prezzo_listino.isnot(None),
+            or_(
+                NltQuotazioni.mesi_36_10.isnot(None),
+                NltQuotazioni.mesi_48_10.isnot(None),
+                NltQuotazioni.mesi_48_30.isnot(None)
+            )
+        ).order_by(NltOfferte.prezzo_listino.asc()).all()
 
         risultati = []
         for o in offerte:
