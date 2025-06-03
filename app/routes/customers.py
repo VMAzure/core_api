@@ -994,18 +994,23 @@ def forza_invio_preventivo_cliente_pubblico(
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
 
-    # Recupera il dealer corretto dal cliente
+    # 🔥 FIX: controlla se dealer o admin
     dealer = db.query(User).filter(User.id == cliente.dealer_id).first()
-    if not dealer:
-        raise HTTPException(status_code=404, detail="Dealer non trovato")
+    admin = db.query(User).filter(User.id == cliente.admin_id).first()
 
-    # Recupera lo slug effettivo del dealer dai settings
+    # 🚩 Scegli correttamente utente valido
+    user_responsabile = dealer or admin
+    if not user_responsabile:
+        raise HTTPException(status_code=404, detail="Utente responsabile non trovato")
+
+    # Recupera lo slug corretto dai settings
     settings = db.query(SiteAdminSettings).filter(
-        (SiteAdminSettings.dealer_id == cliente.dealer_id) |
-        ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == cliente.admin_id))
+        (SiteAdminSettings.dealer_id == user_responsabile.id) |
+        ((SiteAdminSettings.dealer_id == None) & (SiteAdminSettings.admin_id == user_responsabile.id))
     ).first()
+
     if not settings:
-        raise HTTPException(status_code=404, detail="Impostazioni dealer non trovate")
+        raise HTTPException(status_code=404, detail="Impostazioni dealer/admin non trovate")
 
     # Avvia l'invio preventivo
     background_tasks.add_task(
@@ -1015,7 +1020,7 @@ def forza_invio_preventivo_cliente_pubblico(
         dealer_slug=settings.slug,
         tipo_cliente=cliente.tipo_cliente,
         cliente_id=cliente.id,
-        dealer_id=dealer.id,
+        dealer_id=user_responsabile.id,
         db=db
     )
 
@@ -1023,6 +1028,7 @@ def forza_invio_preventivo_cliente_pubblico(
         "success": True,
         "message": "Preventivo inviato correttamente"
     }
+
 
 
 
