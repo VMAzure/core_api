@@ -641,25 +641,33 @@ def recupera_preventivo_da_token_cliente(token: str, db: Session = Depends(get_d
     return {"preventivo_id": str(preventivo.id)}
 
 @router.get("/pneumatici/{codice_motornet}", tags=["Servizi Extra"])
-async def get_costo_pneumatici_pubblico(
+async def get_costo_pneumatici_da_motornet(
     codice_motornet: str,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     import re
-    token = get_motornet_token()
-    headers = {"Authorization": f"Bearer {token}"}
-    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/dettaglio?codice_motornet_uni={codice_motornet}"
+    import httpx
+
+    # ⏬ Prendi il token già presente (utente loggato)
+    jwt_token = request.headers.get("Authorization")
+    if not jwt_token:
+        raise HTTPException(status_code=401, detail="Token mancante")
+
+    headers = {"Authorization": jwt_token}
+
+    url = f"https://coreapi-production-ca29.up.railway.app/api/nuovo/motornet/dettagli/A103803{codice_motornet}"
 
     async with httpx.AsyncClient() as client:
-        res = await client.get(motornet_url, headers=headers)
+        res = await client.get(url, headers=headers)
 
     if res.status_code != 200:
-        raise HTTPException(status_code=res.status_code, detail="Errore nel recupero dettagli")
+        raise HTTPException(status_code=res.status_code, detail="Errore nel recupero dati motornet")
 
-    dati = res.json()
-    modello = dati.get("modello", {})
+    data = res.json()
+    modello = data.get("modello", {})
 
-    anteriori = modello.get("pneumatici_anteriori", "")  # es. "225/45 R17"
+    anteriori = modello.get("pneumatici_anteriori", "")
     posteriori = modello.get("pneumatici_posteriori", "")
 
     diametri = []
@@ -669,7 +677,7 @@ async def get_costo_pneumatici_pubblico(
             diametri.append(int(match.group(1)))
 
     if not diametri:
-        raise HTTPException(status_code=422, detail="Nessun diametro valido trovato")
+        raise HTTPException(status_code=422, detail="Diametro non trovato nei dati ricevuti")
 
     diametro_maggiore = max(diametri)
 
@@ -680,6 +688,7 @@ async def get_costo_pneumatici_pubblico(
     return {
         "costo_treno": float(record.costo_treno)
     }
+
 
 @router.get("/autosostitutiva/{segmento}")
 def get_costo_autosostitutiva(segmento: str, db: Session = Depends(get_db)):
