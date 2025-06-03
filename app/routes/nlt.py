@@ -648,7 +648,7 @@ async def get_costo_pneumatici_pubblico(
     import re
     token = get_motornet_token()
     headers = {"Authorization": f"Bearer {token}"}
-    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/dettaglio?codice_motornet_uni={codice_motornet}"
+    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/nuovo/auto/dettaglio?codice_motornet_uni={codice_motornet}"
 
     async with httpx.AsyncClient() as client:
         res = await client.get(motornet_url, headers=headers)
@@ -680,7 +680,6 @@ async def get_costo_pneumatici_pubblico(
     return {
         "costo_treno": float(record.costo_treno)
     }
-
 
 @router.get("/autosostitutiva/{segmento}")
 def get_costo_autosostitutiva(segmento: str, db: Session = Depends(get_db)):
