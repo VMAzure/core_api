@@ -1,4 +1,5 @@
-﻿from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Security, Query
+﻿from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Security, Query, Request
+
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
@@ -648,6 +649,7 @@ async def get_costo_pneumatici_da_motornet(
 ):
     import re
     import httpx
+
 
     # ⏬ Prendi il token già presente (utente loggato)
     jwt_token = request.headers.get("Authorization")
