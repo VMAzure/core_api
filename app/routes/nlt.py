@@ -16,7 +16,7 @@ from app.utils.email import get_smtp_settings  # se vuoi usare direttamente la f
 import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
-
+from app.routes.motornet import get_motornet_token  # Assicurati che questa funzione sia definita correttamente
 from app.auth_helpers import (
     get_admin_id,
     get_dealer_id,
@@ -640,12 +640,47 @@ def recupera_preventivo_da_token_cliente(token: str, db: Session = Depends(get_d
 
     return {"preventivo_id": str(preventivo.id)}
 
-@router.get("/pneumatici/{diametro}")
-def get_costo_pneumatici(diametro: int, db: Session = Depends(get_db)):
-    record = db.query(NltPneumatici).filter(NltPneumatici.diametro == diametro).first()
+@router.get("/pneumatici/{codice_motornet}", tags=["Servizi Extra"])
+async def get_costo_pneumatici_pubblico(
+    codice_motornet: str,
+    db: Session = Depends(get_db)
+):
+    import re
+    token = get_motornet_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/dettaglio?codice_motornet_uni={codice_motornet}"
+
+    async with httpx.AsyncClient() as client:
+        res = await client.get(motornet_url, headers=headers)
+
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail="Errore nel recupero dettagli")
+
+    dati = res.json()
+    modello = dati.get("modello", {})
+
+    anteriori = modello.get("pneumatici_anteriori", "")  # es. "225/45 R17"
+    posteriori = modello.get("pneumatici_posteriori", "")
+
+    diametri = []
+    for misura in [anteriori, posteriori]:
+        match = re.search(r"R(\d{2})", misura)
+        if match:
+            diametri.append(int(match.group(1)))
+
+    if not diametri:
+        raise HTTPException(status_code=422, detail="Nessun diametro valido trovato")
+
+    diametro_maggiore = max(diametri)
+
+    record = db.query(NltPneumatici).filter(NltPneumatici.diametro == diametro_maggiore).first()
     if not record:
-        raise HTTPException(status_code=404, detail="Diametro non trovato")
-    return {"diametro": record.diametro, "costo_treno": float(record.costo_treno)}
+        raise HTTPException(status_code=404, detail=f"Nessun costo trovato per cerchi R{diametro_maggiore}")
+
+    return {
+        "costo_treno": float(record.costo_treno)
+    }
+
 
 @router.get("/autosostitutiva/{segmento}")
 def get_costo_autosostitutiva(segmento: str, db: Session = Depends(get_db)):
