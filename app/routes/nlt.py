@@ -2,7 +2,7 @@
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.models import NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User, NltPreventivi, NltPreventiviLinks, NltPreventiviTimeline, NltClientiPubblici
+from app.models import NltPneumatici, NltAutoSostitutiva, NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User, NltPreventivi, NltPreventiviLinks, NltPreventiviTimeline, NltClientiPubblici
 from pydantic import BaseModel, BaseSettings
 from jose import jwt, JWTError  # ✅ Aggiunto import corretto per decodificare il token JWT
 from fastapi_jwt_auth import AuthJWT
@@ -639,3 +639,17 @@ def recupera_preventivo_da_token_cliente(token: str, db: Session = Depends(get_d
         return {"preventivo_id": None}
 
     return {"preventivo_id": str(preventivo.id)}
+
+@router.get("/pneumatici/{diametro}")
+def get_costo_pneumatici(diametro: int, db: Session = Depends(get_db)):
+    record = db.query(NltPneumatici).filter(NltPneumatici.diametro == diametro).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Diametro non trovato")
+    return {"diametro": record.diametro, "costo_treno": float(record.costo_treno)}
+
+@router.get("/autosostitutiva/{segmento}")
+def get_costo_autosostitutiva(segmento: str, db: Session = Depends(get_db)):
+    record = db.query(NltAutoSostitutiva).filter(NltAutoSostitutiva.segmento == segmento.upper()).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Segmento non trovato")
+    return {"segmento": record.segmento, "costo_mensile": float(record.costo_mensile)}

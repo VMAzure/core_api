@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func, Boolean, Numeric, Date, TIMESTAMP, text
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func, SmallInteger, Boolean, Numeric, Date, TIMESTAMP, text
 from sqlalchemy.orm import relationship
 from datetime import datetime, date, timedelta
 from passlib.context import CryptContext
@@ -759,3 +759,16 @@ class ImmaginiNlt(Base):
     url_immagine_back_alt = Column(String(1000), nullable=True)
 
     offerta = relationship("NltOfferte", back_populates="immagini_nlt")
+
+class NltPneumatici(Base):
+    __tablename__ = "nlt_pneumatici"
+
+    diametro = Column(SmallInteger, primary_key=True, index=True)
+    costo_treno = Column(Numeric(10, 2), nullable=False)
+
+
+class NltAutoSostitutiva(Base):
+    __tablename__ = "nlt_autosostitutiva"
+
+    segmento = Column(String, primary_key=True, index=True)
+    costo_mensile = Column(Numeric(10, 2), nullable=False)
