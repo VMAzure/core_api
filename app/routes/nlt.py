@@ -658,7 +658,7 @@ async def get_costo_pneumatici_da_motornet(
 
     headers = {"Authorization": jwt_token}
 
-    url = f"https://coreapi-production-ca29.up.railway.app/api/nuovo/motornet/dettagli/A103803{codice_motornet}"
+    url = f"https://coreapi-production-ca29.up.railway.app/api/nuovo/motornet/dettagli/{codice_motornet}"
 
     async with httpx.AsyncClient() as client:
         res = await client.get(url, headers=headers)
