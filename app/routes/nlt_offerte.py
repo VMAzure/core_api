@@ -825,6 +825,7 @@ async def recupera_diametro_pneumatici(codice_motornet: str, jwt_token: str) -> 
     return max(diametri)
 
 
+from fastapi import Request
 
 @router.post("/nlt/calcola-canone")
 async def calcola_canone(
