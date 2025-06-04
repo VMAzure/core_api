@@ -825,8 +825,14 @@ async def recupera_diametro_pneumatici(codice_motornet: str, jwt_token: str) -> 
     return max(diametri)
 
 
+
 @router.post("/nlt/calcola-canone")
-async def calcola_canone(payload: CanoneRequest, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+async def calcola_canone(
+    payload: CanoneRequest, 
+    db: Session = Depends(get_db), 
+    current_user=Depends(get_current_user),
+    request: Request = None
+):
     offerta = db.query(NltOfferte).filter(NltOfferte.id_offerta == payload.id_offerta).first()
     if not offerta:
         raise HTTPException(status_code=404, detail="Offerta non trovata")
@@ -840,7 +846,6 @@ async def calcola_canone(payload: CanoneRequest, db: Session = Depends(get_db), 
     if not canone_base:
         raise HTTPException(status_code=400, detail=f"Nessuna quotazione trovata per {campo}")
 
-    # Provvigioni
     prov_admin = db.query(SiteAdminSettings.prov_vetrina).filter(
         SiteAdminSettings.admin_id == offerta.id_admin,
         SiteAdminSettings.dealer_id.is_(None)
@@ -850,14 +855,12 @@ async def calcola_canone(payload: CanoneRequest, db: Session = Depends(get_db), 
     incremento = float(offerta.prezzo_totale) * float(prov_totale) / 100.0
     canone_finale = float(canone_base) + (incremento / payload.durata)
 
-    # Anticipo
     if payload.anticipo > 0:
         canone_finale -= (payload.anticipo / payload.durata)
 
-    # Pneumatici
-    # Pneumatici
     if payload.pneumatici:
-        diametro = await recupera_diametro_pneumatici(offerta.codice_motornet, current_user.jwt_token)
+        jwt_token = request.headers.get("Authorization").split(" ")[1]
+        diametro = await recupera_diametro_pneumatici(offerta.codice_motornet, jwt_token)
         record_pneumatico = db.query(NltPneumatici).filter(
             NltPneumatici.diametro == diametro
         ).first()
@@ -868,7 +871,6 @@ async def calcola_canone(payload: CanoneRequest, db: Session = Depends(get_db), 
         else:
             raise HTTPException(status_code=404, detail=f"Costo pneumatici R{diametro} non trovato")
 
-    # Auto sostitutiva
     if payload.auto_sostitutiva and payload.categoria_sostitutiva:
         record_sost = db.query(NltAutoSostitutiva).filter(
             NltAutoSostitutiva.segmento == payload.categoria_sostitutiva.upper()
@@ -880,9 +882,9 @@ async def calcola_canone(payload: CanoneRequest, db: Session = Depends(get_db), 
         else:
             raise HTTPException(status_code=404, detail=f"Segmento auto sostitutiva {payload.categoria_sostitutiva} non trovato")
 
-    # IVA se privato
     if offerta.solo_privati:
         canone_finale *= 1.22
 
     return {"canone": round(canone_finale, 2)}
+
 
