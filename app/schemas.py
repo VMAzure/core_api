@@ -202,4 +202,14 @@ class NltClientiPubbliciResponse(NltClientiPubbliciBase):
     class Config:
         orm_mode = True
 
+class CanoneRequest(BaseModel):
+    id_offerta: int
+    durata: int = Field(..., gt=0)
+    km_annui: int = Field(..., gt=0)
+    anticipo: float = Field(..., ge=0)
+    provvigione_extra: float = Field(..., ge=0)
+    pneumatici: Optional[bool] = False
+    n_treni: Optional[int] = 1
+    auto_sostitutiva: Optional[bool] = False
+    categoria_sostitutiva: Optional[str] = None
 

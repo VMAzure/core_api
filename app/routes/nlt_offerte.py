@@ -22,6 +22,7 @@ import httpx
 from app.routes.image import get_vehicle_image
 from sqlalchemy import or_
 from app.utils.quotazioni import calcola_quotazione, calcola_quotazione_custom
+from app.schemas import CanoneRequest
 
 
 
@@ -793,3 +794,53 @@ def aggiorna_quotazioni(
     db.refresh(quotazione)
 
     return {"success": True, "quotazioni": quotazioni}
+
+
+
+@router.post("/nlt/calcola-canone")
+def calcola_canone(payload: CanoneRequest, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    offerta = db.query(NltOfferte).filter(NltOfferte.id_offerta == payload.id_offerta).first()
+    if not offerta:
+        raise HTTPException(status_code=404, detail="Offerta non trovata")
+
+    quotazione = db.query(NltQuotazioni).filter(NltQuotazioni.id_offerta == offerta.id_offerta).first()
+    if not quotazione:
+        raise HTTPException(status_code=404, detail="Quotazione non trovata")
+
+    campo = f"mesi_{payload.durata}_{payload.km_annui}"
+    canone_base = getattr(quotazione, campo, None)
+    if not canone_base:
+        raise HTTPException(status_code=400, detail=f"Nessuna quotazione trovata per {campo}")
+
+    # Provvigioni
+    prov_admin = db.query(SiteAdminSettings.prov_vetrina).filter(
+        SiteAdminSettings.admin_id == offerta.id_admin,
+        SiteAdminSettings.dealer_id.is_(None)
+    ).scalar() or 0.0
+
+    prov_totale = prov_admin + payload.provvigione_extra
+    incremento = offerta.prezzo_totale * prov_totale / 100.0
+    canone_finale = float(canone_base) + (incremento / payload.durata)
+
+    # Anticipo
+    if payload.anticipo > 0:
+        canone_finale -= (payload.anticipo / payload.durata)
+
+    # Pneumatici
+    if payload.pneumatici:
+        costo_treno = db.query(...).filter(...).first()  # inserisci qui la query
+        if costo_treno:
+            canone_finale += (costo_treno * payload.n_treni) / payload.durata
+
+    # Auto sostitutiva
+    if payload.auto_sostitutiva and payload.categoria_sostitutiva:
+        costo_sost = db.query(...).filter(...).first()  # inserisci qui la query
+        if costo_sost:
+            canone_finale += costo_sost
+
+    # IVA se privato
+    if offerta.solo_privati:
+        canone_finale *= 1.22
+
+    return {"canone": round(canone_finale, 2)}
+
