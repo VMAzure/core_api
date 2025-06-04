@@ -819,7 +819,7 @@ def calcola_canone(payload: CanoneRequest, db: Session = Depends(get_db), curren
     ).scalar() or 0.0
 
     prov_totale = prov_admin + payload.provvigione_extra
-    incremento = offerta.prezzo_totale * prov_totale / 100.0
+    incremento = float(offerta.prezzo_totale) * float(prov_totale) / 100.0
     canone_finale = float(canone_base) + (incremento / payload.durata)
 
     # Anticipo
