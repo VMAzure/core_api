@@ -145,15 +145,10 @@ async def get_offerte(
                     "60_40": quotazione.mesi_60_40,
                 }
 
-                prezzo_listino = float(o.prezzo_listino)
-
                 for durata_km, canone_base in combinazioni.items():
                     if canone_base:
-                        durata = int(durata_km.split("_")[0])
-                        incremento_totale = prezzo_listino * (prov_admin + prov_dealer) / 100.0
-                        canone_finale = round(float(canone_base) + incremento_totale / durata, 2)
+                        quotazioni_calcolate[durata_km] = round(float(canone_base), 2)
 
-                        quotazioni_calcolate[durata_km] = canone_finale
 
             risultati.append({
                 "id_offerta": o.id_offerta,
