@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session, selectinload
 from typing import Optional, List
 from app.database import get_db
-from app.models import NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt  
+from app.models import NltPneumatici, NltAutoSostitutiva, NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt  
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
@@ -797,8 +797,36 @@ def aggiorna_quotazioni(
 
 
 
+async def recupera_diametro_pneumatici(codice_motornet: str, jwt_token: str) -> int:
+    url = f"https://coreapi-production-ca29.up.railway.app/api/nuovo/motornet/dettagli/{codice_motornet}"
+    headers = {"Authorization": f"Bearer {jwt_token}"}
+
+    async with httpx.AsyncClient() as client:
+        res = await client.get(url, headers=headers)
+
+    if res.status_code != 200:
+        raise HTTPException(status_code=res.status_code, detail="Errore dati motornet")
+
+    data = res.json()
+    modello = data.get("modello", {})
+
+    anteriori = modello.get("pneumatici_anteriori", "")
+    posteriori = modello.get("pneumatici_posteriori", "")
+
+    diametri = []
+    for misura in [anteriori, posteriori]:
+        match = re.search(r"R(\d{2})", misura)
+        if match:
+            diametri.append(int(match.group(1)))
+
+    if not diametri:
+        raise HTTPException(status_code=422, detail="Diametro non trovato")
+
+    return max(diametri)
+
+
 @router.post("/nlt/calcola-canone")
-def calcola_canone(payload: CanoneRequest, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+async def calcola_canone(payload: CanoneRequest, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     offerta = db.query(NltOfferte).filter(NltOfferte.id_offerta == payload.id_offerta).first()
     if not offerta:
         raise HTTPException(status_code=404, detail="Offerta non trovata")
@@ -827,16 +855,30 @@ def calcola_canone(payload: CanoneRequest, db: Session = Depends(get_db), curren
         canone_finale -= (payload.anticipo / payload.durata)
 
     # Pneumatici
+    # Pneumatici
     if payload.pneumatici:
-        costo_treno = db.query(...).filter(...).first()  # inserisci qui la query
-        if costo_treno:
+        diametro = await recupera_diametro_pneumatici(offerta.codice_motornet, current_user.jwt_token)
+        record_pneumatico = db.query(NltPneumatici).filter(
+            NltPneumatici.diametro == diametro
+        ).first()
+
+        if record_pneumatico:
+            costo_treno = float(record_pneumatico.costo_treno)
             canone_finale += (costo_treno * payload.n_treni) / payload.durata
+        else:
+            raise HTTPException(status_code=404, detail=f"Costo pneumatici R{diametro} non trovato")
 
     # Auto sostitutiva
     if payload.auto_sostitutiva and payload.categoria_sostitutiva:
-        costo_sost = db.query(...).filter(...).first()  # inserisci qui la query
-        if costo_sost:
+        record_sost = db.query(NltAutoSostitutiva).filter(
+            NltAutoSostitutiva.segmento == payload.categoria_sostitutiva.upper()
+        ).first()
+
+        if record_sost:
+            costo_sost = float(record_sost.costo_mensile)
             canone_finale += costo_sost
+        else:
+            raise HTTPException(status_code=404, detail=f"Segmento auto sostitutiva {payload.categoria_sostitutiva} non trovato")
 
     # IVA se privato
     if offerta.solo_privati:
