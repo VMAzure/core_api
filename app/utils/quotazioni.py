@@ -49,7 +49,7 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, dealer_co
             if settings_dealer.slug:
                 slug_finale = settings_dealer.slug  # 👈 slug specifico Dealer (se presente)
 
-    incremento_totale = prezzo_listino * (prov_admin + prov_dealer) / 100
+    incremento_totale = (prezzo_listino / 1.22) * (prov_admin + prov_dealer) / 100
     canone_finale = canone_base + (incremento_totale / durata)
 
     return durata, km, round(canone_finale, 2), slug_finale
