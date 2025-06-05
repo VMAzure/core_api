@@ -22,7 +22,7 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, dealer_co
     if not durata or durata <= 0:
         return None, None, None, None
 
-    prezzo_listino = float(offerta.prezzo_listino)
+    prezzo_listino = float(offerta.prezzo_totale)
     canone_base = float(canone_base)
 
     # Recupero impostazioni Admin (provvigione + slug)
