@@ -528,6 +528,8 @@ async def crea_cliente_pubblico(
             tipo_cliente=cliente_esistente.tipo_cliente,
             cliente_id=cliente_esistente.id,
             dealer_id=dealer.id,
+            agency_type=payload.agency_type,  # 👈 aggiunto qui
+
             db=db
         )
 

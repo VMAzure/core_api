@@ -729,6 +729,7 @@ class NltClientiPubbliciCreate(BaseModel):
     slug_offerta: Optional[str] = None
     anticipo: Optional[float] = None
     canone: Optional[float] = None
+    agency_type: int  # 👈 da aggiungere obbligatoriamente
     durata: Optional[int] = None
     km: Optional[int] = None
 
