@@ -675,6 +675,7 @@ def completa_registrazione_cliente_pubblico(
         tipo_cliente=cliente.tipo_cliente,
         cliente_id=nuovo_cliente.id,
         dealer_id=dealer.id,
+        agency_type=cliente.agency_type,  # AGGIUNTO
         db=db  # 👈 aggiungi questa riga
 
     )
@@ -705,6 +706,7 @@ async def genera_e_invia_preventivo(
     dealer_slug,
     tipo_cliente,
     cliente_id,
+    agency_type,  # NUOVO PARAMETRO
     dealer_id,
     db: Session
 ):
@@ -752,8 +754,7 @@ async def genera_e_invia_preventivo(
         admin = db.query(User).get(admin_id)
 
         # ✅ Provvigione
-        provvigione_percentuale = dealer_settings.prov_vetrina if dealer_settings and dealer_settings.prov_vetrina else 0
-        note_text = f"Provvigione: {provvigione_percentuale}%"
+        note_text = f"Provvigione: {agency_type}%"
 
         # 🔁 Resto dati per PDF
         servizi = db.query(NltService).filter(NltService.is_active == True).all()
@@ -810,7 +811,7 @@ async def genera_e_invia_preventivo(
 
             } if dealer else None,
 
-            "NoteAuto": f"Provvigione applicata: {provvigione_percentuale}%",
+            "NoteAuto": f"Provvigione applicata: {agency_type}%",
             "Player": player.nome if player else "Web"
         }
 
@@ -914,16 +915,22 @@ async def genera_e_invia_preventivo(
             }
         )
 
+class SwitchAnagraficaRequest(BaseModel):
+    email_cliente: EmailStr
+    nuovo_dealer_slug: str
+    nuova_email: EmailStr
+    agency_type: float  # Campo chiaramente dichiarato
+
 
 @router.put("/public/clienti/switch-anagrafica")
 def switch_anagrafica_cliente_pubblico(
-    payload: dict = Body(...),
+    payload: SwitchAnagraficaRequest = Body(...),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db)
 ):
-    email_cliente = payload.get("email_cliente")
-    nuovo_dealer_slug = payload.get("nuovo_dealer_slug")
-    nuova_email = payload.get("nuova_email")
+    email_cliente = payload.email_cliente
+    nuovo_dealer_slug = payload.nuovo_dealer_slug
+    nuova_email = payload.nuova_email
 
     if not email_cliente or not nuovo_dealer_slug or not nuova_email:
         raise HTTPException(status_code=400, detail="Parametri mancanti")
@@ -932,26 +939,20 @@ def switch_anagrafica_cliente_pubblico(
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
 
-    # Cerca lo slug tra i dealer
     dealer_settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == nuovo_dealer_slug).first()
     if not dealer_settings:
         raise HTTPException(status_code=404, detail="Slug dealer non trovato")
 
-    # Prova a trovare il dealer reale
-    if dealer_settings.dealer_id:
-        nuovo_dealer = db.query(User).filter(User.id == dealer_settings.dealer_id).first()
-    else:
-        # Fallback su admin
-        nuovo_dealer = db.query(User).filter(User.id == dealer_settings.admin_id).first()
+    nuovo_dealer = db.query(User).filter(
+        User.id == (dealer_settings.dealer_id or dealer_settings.admin_id)
+    ).first()
 
     if not nuovo_dealer:
         raise HTTPException(status_code=404, detail="Dealer o Admin non trovato")
 
-    # aggiorna assegnazione del cliente
     cliente.dealer_id = nuovo_dealer.id
     db.commit()
 
-    # aggiorna anche la tabella dei pubblici
     cliente_pubblico = db.query(NltClientiPubblici).filter_by(email=email_cliente).order_by(
         NltClientiPubblici.data_creazione.desc()
     ).first()
@@ -962,7 +963,6 @@ def switch_anagrafica_cliente_pubblico(
     cliente_pubblico.dealer_slug = nuovo_dealer_slug
     db.commit()
 
-    # Attiva la generazione e invio preventivo
     background_tasks.add_task(
         genera_e_invia_preventivo,
         cliente_pubblico_token=cliente_pubblico.token,
@@ -971,6 +971,7 @@ def switch_anagrafica_cliente_pubblico(
         tipo_cliente=cliente.tipo_cliente,
         cliente_id=cliente.id,
         dealer_id=nuovo_dealer.id,
+        agency_type=payload.agency_type,  # ✅ corretto
         db=db
     )
 
@@ -983,6 +984,7 @@ def switch_anagrafica_cliente_pubblico(
 @router.post("/public/clienti/forza-invio")
 def forza_invio_preventivo_cliente_pubblico(
     token: str = Query(...),
+    agency_type: float = Query(...),  # Aggiunto parametro obbligatorio
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db)
 ):
@@ -1021,6 +1023,8 @@ def forza_invio_preventivo_cliente_pubblico(
         tipo_cliente=cliente.tipo_cliente,
         cliente_id=cliente.id,
         dealer_id=user_responsabile.id,
+        agency_type=agency_type,  # AGGIUNTO
+
         db=db
     )
 
@@ -1106,6 +1110,8 @@ def verifica_anagrafica_cliente_pubblico(
 
 class AggiornaEmailRequest(BaseModel):
     nuova_email: EmailStr
+    agency_type: float  # Campo aggiunto obbligatorio!
+
 @router.put("/public/clienti/{cliente_id}/aggiorna-email")
 def aggiorna_email_cliente_pubblico(
     cliente_id: int,
@@ -1150,6 +1156,7 @@ def aggiorna_email_cliente_pubblico(
         tipo_cliente=cliente.tipo_cliente,
         cliente_id=cliente.id,
         dealer_id=dealer_id,
+        agency_type=payload.agency_type,  # AGGIUNTO
         db=db
     )
 

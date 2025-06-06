@@ -746,6 +746,8 @@ class ClienteCreateRequest(BaseModel):
     newsletter: bool
     marketing: bool
     dealer_slug: str
+    agency_type: float  # 
+
 
 class ImmaginiNlt(Base):
     __tablename__ = "immagini_nlt"

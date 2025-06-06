@@ -404,5 +404,7 @@ async def get_site_settings_public(
         "contact_address": contact_address,
         "servizi_visibili": settings.servizi_visibili or {
             "NLT": False, "REWIND": False, "NOS": False, "NBT": False
-        }
+        },
+    "agency_type": settings.prov_vetrina or 0  # ✅ aggiunto qui
+
     }
