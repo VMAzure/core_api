@@ -3,10 +3,10 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from app.database import get_db, engine  # sostituisci con import corretto
 
-from app.models import User, Cliente, ClienteModifica, NltPreventivi, NltPreventiviLinks, NltClientiPubblici, SiteAdminSettings
+from app.models import User, Cliente, ClienteModifica, NltClientiPubbliciCreate, NltPreventivi, NltPreventiviLinks, NltClientiPubblici, SiteAdminSettings
 from fastapi_jwt_auth import AuthJWT
 from typing import List, Optional
-from app.schemas import ClienteResponse, ClienteCreateRequest, NltClientiPubbliciCreate, NltClientiPubbliciResponse
+from app.schemas import ClienteResponse, ClienteCreateRequest,  NltClientiPubbliciResponse
 from fastapi import Query, Body, BackgroundTasks
 
 from pydantic import BaseModel, EmailStr
