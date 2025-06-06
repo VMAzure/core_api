@@ -52,6 +52,8 @@ class ClienteCreateRequest(BaseModel):
     email: EmailStr
     iban: Optional[str] = None
     dealer_id: Optional[int] = None
+    agency_type: int  # 👈 aggiungi questa riga
+
 
 
 
