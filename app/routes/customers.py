@@ -712,6 +712,7 @@ async def genera_e_invia_preventivo(
     dealer_id,
     db: Session
 ):
+    print(f"▶️ START genera_e_invia_preventivo per {cliente_id}")
 
     try:
         cliente_pubblico = db.query(NltClientiPubblici).filter(
