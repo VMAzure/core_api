@@ -529,7 +529,7 @@ async def crea_cliente_pubblico(
             cliente_id=cliente_esistente.id,
             dealer_id=dealer.id,
             agency_type=payload.agency_type,  # 👈 aggiunto qui
-
+            assegnato_a = cliente_esistente.assegnato_a if hasattr(cliente_esistente, "assegnato_a") else None,
             db=db
         )
 
@@ -711,7 +711,8 @@ async def genera_e_invia_preventivo(
     agency_type,  # NUOVO PARAMETRO
     dealer_id,
     db: Session,
-    assegnato_a: Optional[int] = None  # 👈 aggiungi questo
+    assegnato_a: Optional[int] = None  # 👈 AGGIUNTO QUI
+
 
 ):
 
@@ -866,7 +867,7 @@ async def genera_e_invia_preventivo(
             anticipo=cliente_pubblico.anticipo,
             canone=cliente_pubblico.canone,
             visibile=1,
-            preventivo_assegnato_a=dealer.id,
+            preventivo_assegnato_a = assegnato_a or dealer.id,
             note=note_text,
             player=player_nome
 
@@ -987,9 +988,8 @@ def switch_anagrafica_cliente_pubblico(
         cliente_id=cliente.id,
         dealer_id=nuovo_dealer.id,
         agency_type=payload.agency_type,  # ✅ corretto
-        db=db,
-        assegnato_a=cliente.assegnato_a  # 👈 aggiungilo
-
+        assegnato_a=getattr(cliente, "assegnato_a", None),  # ✅ aggiunto
+        db=db
     )
 
     return {
@@ -1031,8 +1031,6 @@ def forza_invio_preventivo_cliente_pubblico(
     if not settings:
         raise HTTPException(status_code=404, detail="Impostazioni dealer/admin non trovate")
 
-    assegnato_a = cliente_pubblico.assegnato_a if cliente_pubblico.assegnato_a else None
-
     # Avvia l'invio preventivo
     background_tasks.add_task(
         genera_e_invia_preventivo,
@@ -1043,8 +1041,7 @@ def forza_invio_preventivo_cliente_pubblico(
         cliente_id=cliente.id,
         dealer_id=user_responsabile.id,
         agency_type=agency_type,  # AGGIUNTO
-        assegnato_a=assegnato_a,
-
+        assegnato_a=getattr(cliente, "assegnato_a", None),
         db=db
     )
 
@@ -1177,6 +1174,7 @@ def aggiorna_email_cliente_pubblico(
         cliente_id=cliente.id,
         dealer_id=dealer_id,
         agency_type=payload.agency_type,  # AGGIUNTO
+        assegnato_a=getattr(cliente, "assegnato_a", None),
         db=db
     )
 
