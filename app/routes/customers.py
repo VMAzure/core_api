@@ -722,6 +722,17 @@ async def genera_e_invia_preventivo(
         dealer = db.query(User).get(dealer_id)
         offerta = db.query(NltOfferte).filter(NltOfferte.slug == slug_offerta).first()
 
+        # ✅ Calcolo dei km totali corretti
+# ✅ Calcolo dei km totali corretti
+        try:
+            km_annui = int(cliente_pubblico.km or 0)
+            durata_mesi = int(cliente_pubblico.durata or 0)
+            km_totali = int(km_annui * durata_mesi / 12)
+        except Exception as e:
+            raise ValueError(f"Errore nel calcolo km_totali: {e}")
+
+
+
         # 🔒 PREVENTIVO DUPLICATO CHECK
         preventivo_duplicato = db.query(NltPreventivi).filter(
             NltPreventivi.cliente_id == cliente_id,
@@ -729,7 +740,7 @@ async def genera_e_invia_preventivo(
             NltPreventivi.modello == offerta.modello,
             NltPreventivi.versione == offerta.versione,
             NltPreventivi.durata == cliente_pubblico.durata,
-            NltPreventivi.km_totali == cliente_pubblico.km,
+            NltPreventivi.km_totali == km_totali,
             NltPreventivi.anticipo == cliente_pubblico.anticipo,
             NltPreventivi.canone == cliente_pubblico.canone
         ).first()
@@ -784,7 +795,7 @@ async def genera_e_invia_preventivo(
             "Servizi": [{"Nome": s.name, "Opzione": s.conditions["options"][0]} for s in servizi],
             "DatiEconomici": {
                 "Durata": cliente_pubblico.durata,
-                "KmTotali": cliente_pubblico.km,
+                "KmTotali": km_totali,
                 "Anticipo": cliente_pubblico.anticipo,
                 "Canone": cliente_pubblico.canone
             },
@@ -849,7 +860,7 @@ async def genera_e_invia_preventivo(
             modello=offerta.modello,
             versione=offerta.versione,
             durata=cliente_pubblico.durata,
-            km_totali=cliente_pubblico.km,
+            km_totali=km_totali,
             anticipo=cliente_pubblico.anticipo,
             canone=cliente_pubblico.canone,
             visibile=1,
