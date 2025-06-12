@@ -710,7 +710,9 @@ async def genera_e_invia_preventivo(
     cliente_id,
     agency_type,  # NUOVO PARAMETRO
     dealer_id,
-    db: Session
+    db: Session,
+    assegnato_a: Optional[int] = None  # 👈 aggiungi questo
+
 ):
 
     try:
@@ -985,7 +987,9 @@ def switch_anagrafica_cliente_pubblico(
         cliente_id=cliente.id,
         dealer_id=nuovo_dealer.id,
         agency_type=payload.agency_type,  # ✅ corretto
-        db=db
+        db=db,
+        assegnato_a=cliente.assegnato_a  # 👈 aggiungilo
+
     )
 
     return {
@@ -1027,6 +1031,8 @@ def forza_invio_preventivo_cliente_pubblico(
     if not settings:
         raise HTTPException(status_code=404, detail="Impostazioni dealer/admin non trovate")
 
+    assegnato_a = cliente_pubblico.assegnato_a if cliente_pubblico.assegnato_a else None
+
     # Avvia l'invio preventivo
     background_tasks.add_task(
         genera_e_invia_preventivo,
@@ -1037,6 +1043,7 @@ def forza_invio_preventivo_cliente_pubblico(
         cliente_id=cliente.id,
         dealer_id=user_responsabile.id,
         agency_type=agency_type,  # AGGIUNTO
+        assegnato_a=assegnato_a,
 
         db=db
     )
