@@ -214,7 +214,7 @@ class CanoneRequest(BaseModel):
     auto_sostitutiva: Optional[bool] = False
     categoria_sostitutiva: Optional[str] = None
 
-    @field_validator("anticipo", mode="before")
+    @validator("anticipo", mode="before")
     @classmethod
     def set_default_if_null(cls, v):
         return 0.0 if v is None else v
