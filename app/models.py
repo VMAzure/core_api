@@ -732,7 +732,7 @@ class NltClientiPubbliciCreate(BaseModel):
     agency_type: int  # 👈 da aggiungere obbligatoriamente
     durata: Optional[int] = None
     km: Optional[int] = None
-    assegnato_a: Optional[int] = None  # 👈 aggiunto!
+    assegnato_a: Optional[int] = None  
 
 
 class ClienteCreateRequest(BaseModel):
