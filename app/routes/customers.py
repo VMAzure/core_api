@@ -529,7 +529,7 @@ async def crea_cliente_pubblico(
             cliente_id=cliente_esistente.id,
             dealer_id=dealer.id,
             agency_type=payload.agency_type,  # 👈 aggiunto qui
-            assegnato_a=payload.assegnato_a,
+
             db=db
         )
 
@@ -678,8 +678,6 @@ def completa_registrazione_cliente_pubblico(
         cliente_id=nuovo_cliente.id,
         dealer_id=dealer.id,
         agency_type=cliente.agency_type,  # AGGIUNTO
-        assegnato_a=None,  # ✅ fallback esplicito
-
         db=db  # 👈 aggiungi questa riga
 
     )
@@ -712,10 +710,7 @@ async def genera_e_invia_preventivo(
     cliente_id,
     agency_type,  # NUOVO PARAMETRO
     dealer_id,
-    db: Session,
-    assegnato_a: Optional[int] = None  # 👈 AGGIUNTO QUI
-
-
+    db: Session
 ):
 
     try:
@@ -869,7 +864,7 @@ async def genera_e_invia_preventivo(
             anticipo=cliente_pubblico.anticipo,
             canone=cliente_pubblico.canone,
             visibile=1,
-            preventivo_assegnato_a = assegnato_a or dealer.id,
+            preventivo_assegnato_a=dealer.id,
             note=note_text,
             player=player_nome
 
@@ -990,7 +985,6 @@ def switch_anagrafica_cliente_pubblico(
         cliente_id=cliente.id,
         dealer_id=nuovo_dealer.id,
         agency_type=payload.agency_type,  # ✅ corretto
-        assegnato_a=getattr(cliente, "assegnato_a", None),  # ✅ aggiunto
         db=db
     )
 
@@ -1043,7 +1037,7 @@ def forza_invio_preventivo_cliente_pubblico(
         cliente_id=cliente.id,
         dealer_id=user_responsabile.id,
         agency_type=agency_type,  # AGGIUNTO
-        assegnato_a=getattr(cliente, "assegnato_a", None),
+
         db=db
     )
 
@@ -1176,7 +1170,6 @@ def aggiorna_email_cliente_pubblico(
         cliente_id=cliente.id,
         dealer_id=dealer_id,
         agency_type=payload.agency_type,  # AGGIUNTO
-        assegnato_a=getattr(cliente, "assegnato_a", None),
         db=db
     )
 
@@ -1184,3 +1177,5 @@ def aggiorna_email_cliente_pubblico(
         "success": True,
         "message": "Email aggiornata. Preventivo in invio."
     }
+
+
