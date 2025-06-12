@@ -1,8 +1,7 @@
 ﻿# schemas.py
-from pydantic import BaseModel, EmailStr, root_validator 
+from pydantic import BaseModel, EmailStr, root_validator, field_validator, Field
 from typing import Optional
 from datetime import datetime, date
-from pydantic import BaseModel, EmailStr, Field
 import uuid
 from uuid import UUID
 
@@ -214,4 +213,9 @@ class CanoneRequest(BaseModel):
     n_treni: Optional[int] = 1
     auto_sostitutiva: Optional[bool] = False
     categoria_sostitutiva: Optional[str] = None
+
+    @field_validator("anticipo", mode="before")
+    @classmethod
+    def set_default_if_null(cls, v):
+        return 0.0 if v is None else v
 
