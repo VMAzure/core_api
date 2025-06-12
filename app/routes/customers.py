@@ -678,6 +678,8 @@ def completa_registrazione_cliente_pubblico(
         cliente_id=nuovo_cliente.id,
         dealer_id=dealer.id,
         agency_type=cliente.agency_type,  # AGGIUNTO
+        assegnato_a=None,  # ✅ fallback esplicito
+
         db=db  # 👈 aggiungi questa riga
 
     )
