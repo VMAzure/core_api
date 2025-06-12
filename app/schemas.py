@@ -1,5 +1,5 @@
 ﻿# schemas.py
-from pydantic import BaseModel, EmailStr, root_validator, field_validator, Field
+from pydantic import BaseModel, EmailStr, root_validator, validator, Field
 from typing import Optional
 from datetime import datetime, date
 import uuid
