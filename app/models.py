@@ -720,6 +720,8 @@ class NltClientiPubblici(Base):
     canone = Column(Float, nullable=True)
     durata = Column(Integer, nullable=True)
     km = Column(Integer, nullable=True)
+    assegnato_a = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
+
     
 
 
