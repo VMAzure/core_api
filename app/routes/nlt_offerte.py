@@ -853,7 +853,12 @@ async def calcola_canone(
         SiteAdminSettings.dealer_id.is_(None)
     ).scalar() or 0.0
 
-    prov_totale = prov_admin + payload.provvigione_extra
+    # 🔒 Eccezione per Unipolrental (id_player = 5)
+    if offerta.id_player == 5:
+        prov_totale = prov_admin  # agency_type ignorata
+    else:
+        prov_totale = prov_admin + payload.provvigione_extra
+
     incremento = float(offerta.prezzo_totale) * float(prov_totale) / 100.0
     canone_finale = float(canone_base) + (incremento / payload.durata)
 
