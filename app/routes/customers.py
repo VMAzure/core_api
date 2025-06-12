@@ -529,7 +529,7 @@ async def crea_cliente_pubblico(
             cliente_id=cliente_esistente.id,
             dealer_id=dealer.id,
             agency_type=payload.agency_type,  # 👈 aggiunto qui
-            assegnato_a = cliente_esistente.assegnato_a if hasattr(cliente_esistente, "assegnato_a") else None,
+            assegnato_a=payload.assegnato_a,
             db=db
         )
 
