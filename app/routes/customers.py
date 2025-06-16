@@ -1130,10 +1130,6 @@ def verifica_anagrafica_cliente_pubblico(
             "dealer_origine_slug": dealer_origine_slug
         }
 
-
-
-
-
 class AggiornaEmailRequest(BaseModel):
     nuova_email: EmailStr
     agency_type: float
@@ -1194,5 +1190,3 @@ def aggiorna_email_cliente_pubblico(
         "success": True,
         "message": "Email aggiornata. Preventivo in invio."
     }
-
-
