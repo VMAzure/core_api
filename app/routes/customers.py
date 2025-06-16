@@ -760,7 +760,7 @@ async def genera_e_invia_preventivo(
         player = db.query(NltPlayers).get(offerta.id_player)
         player_nome = player.nome if player else "Web"
 
-        if player_nome.lower() == "unipolrental":
+        if player_nome.lower() == "Unipolrental":
             note_text = f"Provvigione fissa: € {agency_type} x100"
         else:
             note_text = f"Provvigione selezionata: {agency_type}%"
