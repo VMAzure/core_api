@@ -760,6 +760,12 @@ async def genera_e_invia_preventivo(
         player = db.query(NltPlayers).get(offerta.id_player)
         player_nome = player.nome if player else "Web"
 
+        if player_nome.lower() == "unipolrental":
+            note_text = f"Provvigione fissa: € {agency_type} x100"
+        else:
+            note_text = f"Provvigione selezionata: {agency_type}%"
+
+
         # 🛡️ Dealer settings: se dealer ha le sue, usa quelle; altrimenti fallback su slug
         dealer_settings = None
         if dealer.role == "dealer":
