@@ -756,9 +756,13 @@ async def genera_e_invia_preventivo(
         #    return
 
 
-         # 🧠 Player
-        if offerta.id_player == 5:
-            note_text = f"Provvigione fissa: € {agency_type}"
+        # 🧠 Player (usato per colonna DB e condizione provvigione)
+        player = db.query(NltPlayers).get(offerta.id_player)
+        player_nome = (player.nome or "Web").strip() if player else "Web"
+
+        # ✅ Campo NOTE (solo per DB/backoffice)
+        if player_nome.lower() == "unipolrental":
+            note_text = f"Provvigione fissa: {agency_type}€"
         else:
             note_text = f"Provvigione: {agency_type}%"
 
