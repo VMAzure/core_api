@@ -750,6 +750,8 @@ class ClienteCreateRequest(BaseModel):
     marketing: bool
     dealer_slug: str
     agency_type: float  # 
+    preventivo_assegnato_a: Optional[int] = None
+
 
 
 class ImmaginiNlt(Base):

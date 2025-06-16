@@ -529,6 +529,7 @@ async def crea_cliente_pubblico(
             cliente_id=cliente_esistente.id,
             dealer_id=dealer.id,
             agency_type=payload.agency_type,  # 👈 aggiunto qui
+            preventivo_assegnato_a=payload.preventivo_assegnato_a,  # <-- AGGIUNGI QUESTO
 
             db=db
         )
@@ -678,6 +679,8 @@ def completa_registrazione_cliente_pubblico(
         cliente_id=nuovo_cliente.id,
         dealer_id=dealer.id,
         agency_type=cliente.agency_type,  # AGGIUNTO
+        preventivo_assegnato_a=cliente.preventivo_assegnato_a,  # ✅ nuovo parametro
+
         db=db  # 👈 aggiungi questa riga
 
     )
@@ -710,7 +713,9 @@ async def genera_e_invia_preventivo(
     cliente_id,
     agency_type,  # NUOVO PARAMETRO
     dealer_id,
-    db: Session
+    db: Session,
+    preventivo_assegnato_a: int = None  # ⬅️ nuovo parametro opzionale
+
 ):
     print(f"▶️ START genera_e_invia_preventivo per {cliente_id}")
 
@@ -865,7 +870,7 @@ async def genera_e_invia_preventivo(
             anticipo=cliente_pubblico.anticipo,
             canone=cliente_pubblico.canone,
             visibile=1,
-            preventivo_assegnato_a=dealer.id,
+            preventivo_assegnato_a=preventivo_assegnato_a or dealer.id,
             note=note_text,
             player=player_nome
 
@@ -934,6 +939,8 @@ class SwitchAnagraficaRequest(BaseModel):
     nuovo_dealer_slug: str
     nuova_email: EmailStr
     agency_type: float  # Campo chiaramente dichiarato
+    preventivo_assegnato_a: Optional[int] = None  # ✅ aggiunto
+
 
 
 @router.put("/public/clienti/switch-anagrafica")
@@ -986,6 +993,8 @@ def switch_anagrafica_cliente_pubblico(
         cliente_id=cliente.id,
         dealer_id=nuovo_dealer.id,
         agency_type=payload.agency_type,  # ✅ corretto
+        preventivo_assegnato_a=payload.preventivo_assegnato_a,  # ✅ nuovo parametro
+
         db=db
     )
 
@@ -1000,7 +1009,9 @@ def forza_invio_preventivo_cliente_pubblico(
     token: str = Query(...),
     agency_type: float = Query(...),  # Aggiunto parametro obbligatorio
     background_tasks: BackgroundTasks = BackgroundTasks(),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    preventivo_assegnato_a: Optional[int] = Query(None)  # ✅ aggiunto
+
 ):
     cliente_pubblico = db.query(NltClientiPubblici).filter_by(token=token).first()
     if not cliente_pubblico:
@@ -1038,6 +1049,7 @@ def forza_invio_preventivo_cliente_pubblico(
         cliente_id=cliente.id,
         dealer_id=user_responsabile.id,
         agency_type=agency_type,  # AGGIUNTO
+        preventivo_assegnato_a=preventivo_assegnato_a,  # ✅ aggiunto
 
         db=db
     )
@@ -1124,7 +1136,9 @@ def verifica_anagrafica_cliente_pubblico(
 
 class AggiornaEmailRequest(BaseModel):
     nuova_email: EmailStr
-    agency_type: float  # Campo aggiunto obbligatorio!
+    agency_type: float
+    preventivo_assegnato_a: Optional[int] = None  # ✅ aggiunto
+
 
 @router.put("/public/clienti/{cliente_id}/aggiorna-email")
 def aggiorna_email_cliente_pubblico(
@@ -1171,6 +1185,8 @@ def aggiorna_email_cliente_pubblico(
         cliente_id=cliente.id,
         dealer_id=dealer_id,
         agency_type=payload.agency_type,  # AGGIUNTO
+        preventivo_assegnato_a=payload.preventivo_assegnato_a,  # ✅ aggiunto
+
         db=db
     )
 
