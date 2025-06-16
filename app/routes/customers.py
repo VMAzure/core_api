@@ -529,7 +529,7 @@ async def crea_cliente_pubblico(
             cliente_id=cliente_esistente.id,
             dealer_id=dealer.id,
             agency_type=payload.agency_type,  # 👈 aggiunto qui
-            preventivo_assegnato_a=payload.preventivo_assegnato_a,  # <-- AGGIUNGI QUESTO
+            preventivo_assegnato_a=payload.assegnato_a,
 
             db=db
         )
@@ -993,7 +993,7 @@ def switch_anagrafica_cliente_pubblico(
         cliente_id=cliente.id,
         dealer_id=nuovo_dealer.id,
         agency_type=payload.agency_type,  # ✅ corretto
-        preventivo_assegnato_a=payload.preventivo_assegnato_a,  # ✅ nuovo parametro
+        preventivo_assegnato_a=payload.assegnato_a,
 
         db=db
     )
@@ -1185,7 +1185,7 @@ def aggiorna_email_cliente_pubblico(
         cliente_id=cliente.id,
         dealer_id=dealer_id,
         agency_type=payload.agency_type,  # AGGIUNTO
-        preventivo_assegnato_a=payload.preventivo_assegnato_a,  # ✅ aggiunto
+        preventivo_assegnato_a=payload.assegnato_a,
 
         db=db
     )

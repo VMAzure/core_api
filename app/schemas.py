@@ -52,6 +52,8 @@ class ClienteCreateRequest(BaseModel):
     iban: Optional[str] = None
     dealer_id: Optional[int] = None
     agency_type: int  # 👈 aggiungi questa riga
+    preventivo_assegnato_a: Optional[int] = None
+
 
 
 
@@ -177,6 +179,8 @@ class NltClientiPubbliciCreate(NltClientiPubbliciBase):
     canone: Optional[float] = None
     durata: Optional[int] = None
     km: Optional[int] = None
+    assegnato_a: Optional[int] = None
+
 
 class NltClientiPubbliciResponse(NltClientiPubbliciBase):
     id: UUID
