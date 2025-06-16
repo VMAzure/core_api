@@ -780,8 +780,7 @@ async def genera_e_invia_preventivo(
         admin_id = dealer.parent_id if dealer.parent_id else dealer.id
         admin = db.query(User).get(admin_id)
 
-        # ✅ Provvigione
-        note_text = f"Provvigione: {agency_type}%"
+    
 
         # 🔁 Resto dati per PDF
         servizi = db.query(NltService).filter(NltService.is_active == True).all()
