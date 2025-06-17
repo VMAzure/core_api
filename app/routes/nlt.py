@@ -303,6 +303,8 @@ async def get_miei_preventivi(
         dealer_assegnato = db.query(User).filter(User.id == p.preventivo_assegnato_a).first()
         nome_assegnato = f"{dealer_assegnato.nome} {dealer_assegnato.cognome}".strip() if dealer_assegnato else "Non assegnato"
 
+        pipeline_attiva = db.query(NltPipeline).filter(NltPipeline.preventivo_id == p.id).first() is not None
+
         risultati.append({
             "id": p.id,
             "file_url": p.file_url,
@@ -321,7 +323,9 @@ async def get_miei_preventivi(
             "note": p.note,
             "player": p.player,
             "email_inviata": email_inviata,
-            "data_email": data_email
+            "data_email": data_email,
+            "pipeline_attiva": pipeline_attiva  # 👈 aggiunto!
+
 
         })
 
