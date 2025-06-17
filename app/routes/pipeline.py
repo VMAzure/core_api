@@ -5,7 +5,7 @@ from fastapi_jwt_auth import AuthJWT
 from fastapi import Body
 
 from app.database import get_db
-from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User, NltPipeline
+from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime

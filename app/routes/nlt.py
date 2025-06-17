@@ -3,7 +3,7 @@
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.models import NltPneumatici, NltAutoSostitutiva, NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User, NltPreventivi, NltPreventiviLinks, NltPreventiviTimeline, NltClientiPubblici
+from app.models import NltPneumatici, NltPipeline, NltAutoSostitutiva, NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User, NltPreventivi, NltPreventiviLinks, NltPreventiviTimeline, NltClientiPubblici
 from pydantic import BaseModel, BaseSettings
 from jose import jwt, JWTError  # ✅ Aggiunto import corretto per decodificare il token JWT
 from fastapi_jwt_auth import AuthJWT
