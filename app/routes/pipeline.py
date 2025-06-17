@@ -14,7 +14,6 @@ from datetime import datetime
 
 router = APIRouter(prefix="/api/pipeline", tags=["Pipeline"])
 
-
 # === SCHEMI ===
 
 class PipelineItemUpdate(BaseModel):
