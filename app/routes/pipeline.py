@@ -58,7 +58,7 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     user_id = user.id
 
     query = db.query(NltPipeline).options(raiseload("*")).filter(NltPipeline.assegnato_a == user_id).all()
-    return [PipelineItemOut.from_orm(p) for p in query]
+    return [PipelineItemOut.from_orm(p).dict() for p in query]
 
 
 
