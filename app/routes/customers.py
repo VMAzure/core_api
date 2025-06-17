@@ -761,7 +761,7 @@ async def genera_e_invia_preventivo(
         player_nome = (player.nome or "Web").strip() if player else "Web"
 
         # ✅ Campo NOTE (solo per DB/backoffice)
-        if player_nome.lower() == "unipolrental":
+        if player_nome.lower() == "Unipolrental":
             note_text = f"Provvigione fissa: {agency_type}€"
         else:
             note_text = f"Provvigione: {agency_type}%"

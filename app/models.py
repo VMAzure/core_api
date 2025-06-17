@@ -779,3 +779,35 @@ class NltAutoSostitutiva(Base):
 
     segmento = Column(String, primary_key=True, index=True)
     costo_mensile = Column(Numeric(10, 2), nullable=False)
+
+
+
+class NltPipeline(Base):
+    __tablename__ = "nlt_pipeline"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    preventivo_id = Column(UUID(as_uuid=True), ForeignKey("nlt_preventivi.id", ondelete="CASCADE"), nullable=False)
+    assegnato_a = Column(Integer, ForeignKey("utenti.id", ondelete="SET NULL"), nullable=False)
+
+    stato_pipeline = Column(String, nullable=False)
+    data_ultimo_contatto = Column(DateTime, default=datetime.utcnow)
+    prossima_azione = Column(Text, nullable=True)
+    scadenza_azione = Column(DateTime, nullable=True)
+    note_commerciali = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    # opzionali per navigazione ORM:
+    preventivo = relationship("NltPreventivi", back_populates="pipeline", lazy="joined")
+    assegnato = relationship("Utente", lazy="joined")
+
+
+class NltPipelineStati(Base):
+    __tablename__ = "nlt_pipeline_stati"
+
+    codice = Column(String, primary_key=True)        # es: 'nuovo', 'contattato'
+    descrizione = Column(String, nullable=False)     # es: 'Nuovo', 'Contattato'
+    ordine = Column(Integer, nullable=False)
+
