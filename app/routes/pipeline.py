@@ -23,8 +23,8 @@ class PipelineItemUpdate(BaseModel):
 
 
 class PipelineItemOut(BaseModel):
-    id: str
-    preventivo_id: str
+    id: UUID
+    preventivo_id: UUID
     assegnato_a: int
     stato_pipeline: str
     data_ultimo_contatto: Optional[datetime]
