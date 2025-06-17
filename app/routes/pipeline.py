@@ -66,7 +66,7 @@ def update_pipeline(id: str, payload: PipelineItemUpdate, Authorize: AuthJWT = D
 
     if pipeline_item.assegnato_a != user_id:
         utente = db.query(User).filter(User.id == user_id).first()
-        if not utente or not utente.is_admin:
+    if not utente or utente.role != "admin":
             raise HTTPException(status_code=403, detail="Non autorizzato a modificare questa pipeline")
 
     for field, value in payload.dict(exclude_unset=True).items():
