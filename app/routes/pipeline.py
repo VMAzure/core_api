@@ -1,6 +1,8 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from fastapi_jwt_auth import AuthJWT
+from fastapi_jwt_auth import AuthJWT, Body
+from uuid import UUID
+
 from app.database import get_db
 from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User
 from typing import List, Optional
@@ -63,7 +65,7 @@ def update_pipeline(id: str, payload: PipelineItemUpdate, Authorize: AuthJWT = D
         raise HTTPException(status_code=404, detail="Preventivo non trovato")
 
     if pipeline_item.assegnato_a != user_id:
-        utente = db.query(Utente).filter(Utente.id == user_id).first()
+        utente = db.query(User).filter(User.id == user_id).first()
         if not utente or not utente.is_admin:
             raise HTTPException(status_code=403, detail="Non autorizzato a modificare questa pipeline")
 
@@ -79,3 +81,46 @@ def update_pipeline(id: str, payload: PipelineItemUpdate, Authorize: AuthJWT = D
 @router.get("/stati", response_model=List[PipelineStatoOut])
 def get_pipeline_stati(db: Session = Depends(get_db)):
     return db.query(NltPipelineStati).order_by(NltPipelineStati.ordine).all()
+
+
+class PipelineCreateRequest(BaseModel):
+    preventivo_id: UUID
+
+
+@router.post("/attiva", response_model=PipelineItemOut)
+def attiva_pipeline(
+    payload: PipelineCreateRequest,
+    db: Session = Depends(get_db),
+    Authorize: AuthJWT = Depends()
+):
+    Authorize.jwt_required()
+    user_id = int(Authorize.get_jwt_subject())
+
+    esistente = db.query(NltPipeline).filter(NltPipeline.preventivo_id == payload.preventivo_id).first()
+    if esistente:
+        raise HTTPException(status_code=400, detail="Pipeline già attiva per questo preventivo")
+
+    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == payload.preventivo_id).first()
+    if not preventivo:
+        raise HTTPException(status_code=404, detail="Preventivo non trovato")
+
+    assegnato_a = preventivo.preventivo_assegnato_a
+    creato_da = preventivo.creato_da
+
+    if assegnato_a is None:
+        raise HTTPException(status_code=400, detail="Il preventivo non ha un assegnatario")
+
+    if user_id != assegnato_a and user_id != creato_da:
+        raise HTTPException(status_code=403, detail="Non autorizzato ad attivare la pipeline per questo preventivo")
+
+    nuova_pipeline = NltPipeline(
+        preventivo_id=payload.preventivo_id,
+        assegnato_a=assegnato_a,
+        stato_pipeline="nuovo",
+        data_ultimo_contatto=datetime.utcnow()
+    )
+
+    db.add(nuova_pipeline)
+    db.commit()
+    db.refresh(nuova_pipeline)
+    return nuova_pipeline
