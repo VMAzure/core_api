@@ -33,6 +33,9 @@ class PipelineItemOut(BaseModel):
     note_commerciali: Optional[str]
     created_at: datetime
     updated_at: datetime
+    
+    class Config:
+        orm_mode = True  # ✅ aggiungi questo
 
 
 class PipelineStatoOut(BaseModel):
