@@ -44,6 +44,9 @@ class PipelineStatoOut(BaseModel):
     descrizione: str
     ordine: int
 
+    class Config:
+        orm_mode = True
+
 
 # === ENDPOINTS ===
 
