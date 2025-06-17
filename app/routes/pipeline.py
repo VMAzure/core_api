@@ -1,7 +1,8 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from fastapi_jwt_auth import AuthJWT, Body
 from uuid import UUID
+from fastapi_jwt_auth import AuthJWT  
+from fastapi import Body
 
 from app.database import get_db
 from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User
