@@ -46,15 +46,24 @@ class PipelineStatoOut(BaseModel):
 @router.get("/", response_model=List[PipelineItemOut])
 def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
-    user_id = Authorize.get_jwt_subject()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+    user_id = user.id
 
     return db.query(NltPipeline).filter(NltPipeline.assegnato_a == user_id).all()
+
 
 
 @router.patch("/{id}", response_model=PipelineItemOut)
 def update_pipeline(id: str, payload: PipelineItemUpdate, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
-    user_id = int(Authorize.get_jwt_subject())
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+    user_id = user.id
 
     pipeline_item = db.query(NltPipeline).filter(NltPipeline.id == id).first()
     if not pipeline_item:
@@ -65,10 +74,8 @@ def update_pipeline(id: str, payload: PipelineItemUpdate, Authorize: AuthJWT = D
     if not preventivo:
         raise HTTPException(status_code=404, detail="Preventivo non trovato")
 
-    if pipeline_item.assegnato_a != user_id:
-        utente = db.query(User).filter(User.id == user_id).first()
-    if not utente or utente.role != "admin":
-            raise HTTPException(status_code=403, detail="Non autorizzato a modificare questa pipeline")
+    if pipeline_item.assegnato_a != user_id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Non autorizzato a modificare questa pipeline")
 
     for field, value in payload.dict(exclude_unset=True).items():
         setattr(pipeline_item, field, value)
@@ -95,7 +102,12 @@ def attiva_pipeline(
     Authorize: AuthJWT = Depends()
 ):
     Authorize.jwt_required()
-    user_id = int(Authorize.get_jwt_subject())
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+    user_id = user.id
+
 
     esistente = db.query(NltPipeline).filter(NltPipeline.preventivo_id == payload.preventivo_id).first()
     if esistente:
