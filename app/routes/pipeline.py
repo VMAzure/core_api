@@ -55,7 +55,7 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Utente non trovato")
     user_id = user.id
 
-    return db.query(NltPipeline).filter(NltPipeline.assegnato_a == user_id).all()
+    return [PipelineItemOut.from_orm(p) for p in db.query(NltPipeline).filter(NltPipeline.assegnato_a == user_id).all()]
 
 
 

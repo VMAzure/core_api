@@ -24,8 +24,6 @@ from app.auth_helpers import (
     is_admin_user,
     is_dealer_user
 )
-
-
 import httpx
 import os
 
