@@ -94,7 +94,9 @@ def update_pipeline(id: str, payload: PipelineItemUpdate, Authorize: AuthJWT = D
 
 @router.get("/stati", response_model=List[PipelineStatoOut])
 def get_pipeline_stati(db: Session = Depends(get_db)):
-    return db.query(NltPipelineStati).order_by(NltPipelineStati.ordine).all()
+    stati = db.query(NltPipelineStati).order_by(NltPipelineStati.ordine).all()
+    return [PipelineStatoOut.from_orm(s).dict() for s in stati]
+
 
 
 class PipelineCreateRequest(BaseModel):
