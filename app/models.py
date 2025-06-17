@@ -784,6 +784,8 @@ class NltAutoSostitutiva(Base):
 
 class NltPipeline(Base):
     __tablename__ = "nlt_pipeline"
+    __table_args__ = {"schema": "public"}  # ✅ AGGIUNGI QUESTA RIGA
+
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
@@ -806,6 +808,8 @@ class NltPipeline(Base):
 
 class NltPipelineStati(Base):
     __tablename__ = "nlt_pipeline_stati"
+    __table_args__ = {"schema": "public"}  # ✅ AGGIUNGI QUESTA RIGA
+
 
     codice = Column(String, primary_key=True)        # es: 'nuovo', 'contattato'
     descrizione = Column(String, nullable=False)     # es: 'Nuovo', 'Contattato'
