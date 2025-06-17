@@ -215,6 +215,8 @@ class NltPreventivi(Base):
     player = Column(String, nullable=True)
     cliente = relationship("Cliente")
     creatore = relationship("User", foreign_keys=[creato_da])
+    pipeline = relationship("NltPipeline", uselist=False, back_populates="preventivo")
+
 
 class SmtpSettings(Base):
     __tablename__ = "smtp_settings"
@@ -784,13 +786,12 @@ class NltAutoSostitutiva(Base):
 
 class NltPipeline(Base):
     __tablename__ = "nlt_pipeline"
-    __table_args__ = {"schema": "public"}  # ✅ AGGIUNGI QUESTA RIGA
-
+    __table_args__ = {"schema": "public"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
-    preventivo_id = Column(UUID(as_uuid=True), ForeignKey("nlt_preventivi.id", ondelete="CASCADE"), nullable=False)
-    assegnato_a = Column(Integer, ForeignKey("utenti.id", ondelete="SET NULL"), nullable=False)
+    preventivo_id = Column(UUID(as_uuid=True), ForeignKey("public.nlt_preventivi.id", ondelete="CASCADE"), nullable=False)
+    assegnato_a = Column(Integer, ForeignKey("public.utenti.id", ondelete="SET NULL"), nullable=False)
 
     stato_pipeline = Column(String, nullable=False)
     data_ultimo_contatto = Column(DateTime, default=datetime.utcnow)
@@ -799,19 +800,17 @@ class NltPipeline(Base):
     note_commerciali = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # opzionali per navigazione ORM:
     preventivo = relationship("NltPreventivi", back_populates="pipeline", lazy="joined")
     assegnato = relationship("User", lazy="joined")
 
 
 class NltPipelineStati(Base):
     __tablename__ = "nlt_pipeline_stati"
-    __table_args__ = {"schema": "public"}  # ✅ AGGIUNGI QUESTA RIGA
+    __table_args__ = {"schema": "public"}
 
-
-    codice = Column(String, primary_key=True)        # es: 'nuovo', 'contattato'
-    descrizione = Column(String, nullable=False)     # es: 'Nuovo', 'Contattato'
+    codice = Column(String, primary_key=True)
+    descrizione = Column(String, nullable=False)
     ordine = Column(Integer, nullable=False)
 
