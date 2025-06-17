@@ -4,6 +4,8 @@ from uuid import UUID
 from fastapi_jwt_auth import AuthJWT  
 from fastapi import Body
 
+from sqlalchemy.orm import raiseload
+
 from app.database import get_db
 from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User
 from typing import List, Optional
@@ -46,6 +48,7 @@ class PipelineStatoOut(BaseModel):
 
 # === ENDPOINTS ===
 
+
 @router.get("/", response_model=List[PipelineItemOut])
 def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
@@ -55,7 +58,8 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Utente non trovato")
     user_id = user.id
 
-    return [PipelineItemOut.from_orm(p) for p in db.query(NltPipeline).filter(NltPipeline.assegnato_a == user_id).all()]
+    query = db.query(NltPipeline).options(raiseload("*")).filter(NltPipeline.assegnato_a == user_id).all()
+    return [PipelineItemOut.from_orm(p) for p in query]
 
 
 
