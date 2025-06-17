@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db
-from app.models import NltPipeline, NltPipelineStati, NltPreventivi, Utente
+from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime

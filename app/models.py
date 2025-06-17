@@ -801,7 +801,7 @@ class NltPipeline(Base):
 
     # opzionali per navigazione ORM:
     preventivo = relationship("NltPreventivi", back_populates="pipeline", lazy="joined")
-    assegnato = relationship("Utente", lazy="joined")
+    assegnato = relationship("User", lazy="joined")
 
 
 class NltPipelineStati(Base):
