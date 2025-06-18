@@ -35,8 +35,11 @@ class PipelineItemOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    # ➕ Campi del preventivo:
-    cliente: Optional[str]
+    cliente_nome: Optional[str]
+    cliente_cognome: Optional[str]
+    ragione_sociale: Optional[str]
+    tipo_cliente: Optional[str]
+
     marca: Optional[str]
     modello: Optional[str]
     durata: Optional[int]
@@ -44,9 +47,10 @@ class PipelineItemOut(BaseModel):
     canone: Optional[float]
     player: Optional[str]
     note: Optional[str]
-    
+
     class Config:
-        orm_mode = True  # ✅ aggiungi questo
+        orm_mode = True
+
 
 
 class PipelineStatoOut(BaseModel):
@@ -61,6 +65,8 @@ class PipelineStatoOut(BaseModel):
 # === ENDPOINTS ===
 
 
+from sqlalchemy.orm import joinedload
+
 @router.get("/", response_model=List[PipelineItemOut])
 def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
@@ -73,12 +79,15 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     pipeline_items = (
         db.query(NltPipeline, NltPreventivi)
         .join(NltPreventivi, NltPipeline.preventivo_id == NltPreventivi.id)
+        .options(joinedload(NltPipeline.preventivo).joinedload(NltPreventivi.cliente))
         .filter(NltPipeline.assegnato_a == user_id)
         .all()
     )
 
     output = []
     for pipeline, preventivo in pipeline_items:
+        cliente = preventivo.cliente
+
         item = PipelineItemOut(
             id=pipeline.id,
             preventivo_id=pipeline.preventivo_id,
@@ -91,19 +100,24 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
             created_at=pipeline.created_at,
             updated_at=pipeline.updated_at,
 
-            cliente=str(preventivo.cliente) if preventivo.cliente else None,
-            marca=str(preventivo.marca) if preventivo.marca else None,
-            modello=str(preventivo.modello) if preventivo.modello else None,
+            cliente_nome=cliente.nome if cliente and cliente.nome else None,
+            cliente_cognome=cliente.cognome if cliente and cliente.cognome else None,
+            ragione_sociale=cliente.ragione_sociale if cliente and cliente.ragione_sociale else None,
+            tipo_cliente=cliente.tipo_cliente if cliente and cliente.tipo_cliente else None,
+
+            marca=preventivo.marca,
+            modello=preventivo.modello,
             durata=preventivo.durata,
             anticipo=preventivo.anticipo,
             canone=preventivo.canone,
-            player=str(preventivo.player) if preventivo.player else None,
-            note=str(preventivo.note) if preventivo.note else None
+            player=preventivo.player,
+            note=preventivo.note
         )
 
         output.append(item)
 
     return output
+
 
 
 
