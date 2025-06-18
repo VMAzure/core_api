@@ -91,16 +91,16 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
             created_at=pipeline.created_at,
             updated_at=pipeline.updated_at,
 
-            # ➕ Campi del preventivo:
-            cliente=preventivo.cliente,
-            marca=preventivo.marca,
-            modello=preventivo.modello,
+            cliente=str(preventivo.cliente) if preventivo.cliente else None,
+            marca=str(preventivo.marca) if preventivo.marca else None,
+            modello=str(preventivo.modello) if preventivo.modello else None,
             durata=preventivo.durata,
             anticipo=preventivo.anticipo,
             canone=preventivo.canone,
-            player=preventivo.player,
-            note=preventivo.note
+            player=str(preventivo.player) if preventivo.player else None,
+            note=str(preventivo.note) if preventivo.note else None
         )
+
         output.append(item)
 
     return output
