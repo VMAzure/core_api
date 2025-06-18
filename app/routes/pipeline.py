@@ -1,11 +1,9 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, raiseload, joinedload
 from uuid import UUID
 from fastapi_jwt_auth import AuthJWT  
 from fastapi import Body
-
-from sqlalchemy.orm import raiseload
-
+from app.auth_helpers import is_admin_user, is_dealer_user, is_team_user, get_admin_id, get_dealer_id
 from app.database import get_db
 from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User, CrmAzione
 from typing import List, Optional
@@ -66,7 +64,6 @@ class PipelineStatoOut(BaseModel):
 # === ENDPOINTS ===
 
 
-from sqlalchemy.orm import joinedload
 
 @router.get("/", response_model=List[PipelineItemOut])
 def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
@@ -75,13 +72,32 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
+
     user_id = user.id
+    utenti_visibili = []
+
+    if is_admin_user(user):
+        admin_id = get_admin_id(user)
+        utenti_visibili = [admin_id]
+        # Prende tutti gli user creati da quell'admin (admin_team)
+        team_ids = db.query(User.id).filter(User.parent_id == admin_id).all()
+        utenti_visibili += [u.id for u in team_ids]
+
+    elif is_dealer_user(user):
+        dealer_id = get_dealer_id(user)
+        utenti_visibili = [dealer_id]
+        team_ids = db.query(User.id).filter(User.parent_id == dealer_id).all()
+        utenti_visibili += [u.id for u in team_ids]
+
+    else:
+        # Fallback: solo se stesso
+        utenti_visibili = [user_id]
 
     pipeline_items = (
         db.query(NltPipeline, NltPreventivi)
         .join(NltPreventivi, NltPipeline.preventivo_id == NltPreventivi.id)
         .options(joinedload(NltPipeline.preventivo).joinedload(NltPreventivi.cliente))
-        .filter(NltPipeline.assegnato_a == user_id)
+        .filter(NltPipeline.assegnato_a.in_(utenti_visibili))
         .all()
     )
 
@@ -101,10 +117,10 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
             created_at=pipeline.created_at,
             updated_at=pipeline.updated_at,
 
-            cliente_nome=cliente.nome if cliente and cliente.nome else None,
-            cliente_cognome=cliente.cognome if cliente and cliente.cognome else None,
-            ragione_sociale=cliente.ragione_sociale if cliente and cliente.ragione_sociale else None,
-            tipo_cliente=cliente.tipo_cliente if cliente and cliente.tipo_cliente else None,
+            cliente_nome=cliente.nome if cliente else None,
+            cliente_cognome=cliente.cognome if cliente else None,
+            ragione_sociale=cliente.ragione_sociale if cliente else None,
+            tipo_cliente=cliente.tipo_cliente if cliente else None,
 
             marca=preventivo.marca,
             modello=preventivo.modello,
@@ -119,9 +135,6 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
         output.append(item)
 
     return output
-
-
-
 
 
 @router.patch("/{id}", response_model=PipelineItemOut)
