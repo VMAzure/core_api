@@ -841,5 +841,6 @@ class NltPipelineLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Facoltativi per joinedload in GET log
-    pipeline = relationship("NltPipeline", backref="log")
-    utente = relationship("User", backref="log_azioni")
+    pipeline_id = Column(UUID(as_uuid=True), ForeignKey("public.nlt_pipeline.id", ondelete="CASCADE"), nullable=False)
+    utente_id = Column(ForeignKey("public.utenti.id"), nullable=False)
+
