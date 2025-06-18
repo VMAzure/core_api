@@ -67,32 +67,44 @@ class PipelineStatoOut(BaseModel):
 
 @router.get("/", response_model=List[PipelineItemOut])
 def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    from app.auth_helpers import (
+        is_admin_user, is_dealer_user,
+        get_admin_id, get_dealer_id
+    )
+
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
+
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
     user_id = user.id
+    ruolo = user.role
     utenti_visibili = []
 
-    if is_admin_user(user):
+    if ruolo in ["admin", "admin_team"]:
         admin_id = get_admin_id(user)
-        utenti_visibili = [admin_id]
-        # Prende tutti gli user creati da quell'admin (admin_team)
-        team_ids = db.query(User.id).filter(User.parent_id == admin_id).all()
-        utenti_visibili += [u.id for u in team_ids]
+        utenti_visibili.append(user_id)  # sempre se stesso
+        if ruolo == "admin":
+            team_ids = db.query(User.id).filter(User.parent_id == admin_id, User.role == "admin_team").all()
+            utenti_visibili += [u.id for u in team_ids]
 
-    elif is_dealer_user(user):
+    elif ruolo in ["dealer", "dealer_team"]:
         dealer_id = get_dealer_id(user)
-        utenti_visibili = [dealer_id]
-        team_ids = db.query(User.id).filter(User.parent_id == dealer_id).all()
-        utenti_visibili += [u.id for u in team_ids]
+        utenti_visibili.append(user_id)
+        if ruolo == "dealer":
+            team_ids = db.query(User.id).filter(User.parent_id == dealer_id, User.role == "dealer_team").all()
+            utenti_visibili += [u.id for u in team_ids]
+
+    elif ruolo == "superadmin":
+        utenti_visibili = db.query(User.id).all()
+        utenti_visibili = [u.id for u in utenti_visibili]
 
     else:
-        # Fallback: solo se stesso
-        utenti_visibili = [user_id]
+        utenti_visibili = [user_id]  # fallback di sicurezza
 
+    # Query pipeline
     pipeline_items = (
         db.query(NltPipeline, NltPreventivi)
         .join(NltPreventivi, NltPipeline.preventivo_id == NltPreventivi.id)
@@ -105,7 +117,7 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     for pipeline, preventivo in pipeline_items:
         cliente = preventivo.cliente
 
-        item = PipelineItemOut(
+        output.append(PipelineItemOut(
             id=pipeline.id,
             preventivo_id=pipeline.preventivo_id,
             assegnato_a=pipeline.assegnato_a,
@@ -130,12 +142,9 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
             canone=preventivo.canone,
             player=preventivo.player,
             note=preventivo.note
-        )
-
-        output.append(item)
+        ))
 
     return output
-
 
 @router.patch("/{id}", response_model=PipelineItemOut)
 def update_pipeline(id: str, payload: PipelineItemUpdate, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
