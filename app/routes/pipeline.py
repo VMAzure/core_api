@@ -52,8 +52,7 @@ class PipelineItemOut(BaseModel):
     email: Optional[str]
     telefono: Optional[str]
     indirizzo: Optional[str]
-    cap: Optional[str]
-    citta: Optional[str]
+
 
 
     class Config:
@@ -156,9 +155,7 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
             email=cliente.email if cliente else None,
             telefono=cliente.telefono if cliente else None,
             indirizzo=cliente.indirizzo if cliente else None,
-            cap=cliente.cap if cliente else None,
-            citta=cliente.citta if cliente else None,
-    
+
         ))
 
     return output
