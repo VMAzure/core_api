@@ -187,6 +187,7 @@ class PipelineCreateRequest(BaseModel):
     preventivo_id: UUID
 
 
+
 @router.post("/attiva", response_model=PipelineItemOut)
 def attiva_pipeline(
     payload: PipelineCreateRequest,
@@ -198,26 +199,59 @@ def attiva_pipeline(
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
+
     user_id = user.id
 
-
+    # 🔍 Verifica se già attiva
     esistente = db.query(NltPipeline).filter(NltPipeline.preventivo_id == payload.preventivo_id).first()
     if esistente:
         raise HTTPException(status_code=400, detail="Pipeline già attiva per questo preventivo")
 
+    # 🔍 Recupera il preventivo
     preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == payload.preventivo_id).first()
     if not preventivo:
         raise HTTPException(status_code=404, detail="Preventivo non trovato")
 
     assegnato_a = preventivo.preventivo_assegnato_a
-    creato_da = preventivo.creato_da
-
     if assegnato_a is None:
         raise HTTPException(status_code=400, detail="Il preventivo non ha un assegnatario")
 
-    if user_id != assegnato_a and user_id != creato_da:
+    # ✅ Logica autorizzazione
+    autorizzato = False
+
+    if is_admin_user(user):
+        admin_id = get_admin_id(user)
+        if user.id == assegnato_a:
+            autorizzato = True
+        else:
+            team_ids = db.query(User.id).filter(
+                User.parent_id == admin_id,
+                User.role == "admin_team"
+            ).all()
+            if assegnato_a in [u.id for u in team_ids]:
+                autorizzato = True
+
+    elif is_dealer_user(user):
+        dealer_id = get_dealer_id(user)
+        if user.id == assegnato_a:
+            autorizzato = True
+        else:
+            team_ids = db.query(User.id).filter(
+                User.parent_id == dealer_id,
+                User.role == "dealer_team"
+            ).all()
+            if assegnato_a in [u.id for u in team_ids]:
+                autorizzato = True
+
+    else:
+        # Fallback: solo se stesso
+        if user.id == assegnato_a:
+            autorizzato = True
+
+    if not autorizzato:
         raise HTTPException(status_code=403, detail="Non autorizzato ad attivare la pipeline per questo preventivo")
 
+    # ✅ Crea nuova pipeline
     nuova_pipeline = NltPipeline(
         preventivo_id=payload.preventivo_id,
         assegnato_a=assegnato_a,
@@ -229,6 +263,7 @@ def attiva_pipeline(
     db.commit()
     db.refresh(nuova_pipeline)
     return nuova_pipeline
+
 
 class CrmAzioneOut(BaseModel):
     id: int
