@@ -7,7 +7,7 @@ from fastapi import Body
 from sqlalchemy.orm import raiseload
 
 from app.database import get_db
-from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User
+from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User, CrmAzione
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -207,3 +207,22 @@ def attiva_pipeline(
     db.commit()
     db.refresh(nuova_pipeline)
     return nuova_pipeline
+
+class CrmAzioneOut(BaseModel):
+    id: int
+    stato_codice: str
+    descrizione: str
+    ordine: int
+
+    class Config:
+        orm_mode = True
+
+@router.get("/azioni/{stato_codice}", response_model=List[CrmAzioneOut])
+def get_azioni_per_stato(stato_codice: str, db: Session = Depends(get_db)):
+    azioni = (
+        db.query(CrmAzione)
+        .filter(CrmAzione.stato_codice == stato_codice)
+        .order_by(CrmAzione.ordine)
+        .all()
+    )
+    return azioni

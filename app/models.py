@@ -814,3 +814,13 @@ class NltPipelineStati(Base):
     descrizione = Column(String, nullable=False)
     ordine = Column(Integer, nullable=False)
 
+class CrmAzione(Base):
+    __tablename__ = "crm_azioni"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Integer, primary_key=True)
+    stato_codice = Column(String, ForeignKey("public.nlt_pipeline_stati.codice", ondelete="CASCADE"))
+    descrizione = Column(String, nullable=False)
+    ordine = Column(Integer, default=0)
+
+    stato = relationship("NltPipelineStati", backref="azioni")
