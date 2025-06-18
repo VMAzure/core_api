@@ -289,8 +289,6 @@ class PipelineLogCreate(BaseModel):
     tipo_azione: str
     note: Optional[str] = None
 
-router = APIRouter()
-
 @router.post("/log")
 def crea_log_pipeline(payload: PipelineLogCreate, db: Session = Depends(get_db), Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
