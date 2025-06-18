@@ -43,6 +43,7 @@ class PipelineItemOut(BaseModel):
     marca: Optional[str]
     modello: Optional[str]
     durata: Optional[int]
+    km_totali: Optional[int]
     anticipo: Optional[float]
     canone: Optional[float]
     player: Optional[str]
@@ -108,6 +109,7 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
             marca=preventivo.marca,
             modello=preventivo.modello,
             durata=preventivo.durata,
+            km_totali=preventivo.km_totali,
             anticipo=preventivo.anticipo,
             canone=preventivo.canone,
             player=preventivo.player,
