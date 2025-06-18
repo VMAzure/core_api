@@ -47,6 +47,15 @@ class PipelineItemOut(BaseModel):
     player: Optional[str]
     note: Optional[str]
 
+    file_url: Optional[str]
+
+    email: Optional[str]
+    telefono: Optional[str]
+    indirizzo: Optional[str]
+    cap: Optional[str]
+    citta: Optional[str]
+
+
     class Config:
         orm_mode = True
 
@@ -141,7 +150,15 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
             anticipo=preventivo.anticipo,
             canone=preventivo.canone,
             player=preventivo.player,
-            note=preventivo.note
+            note=preventivo.note,
+            file_url=preventivo.file_url,
+
+            email=cliente.email if cliente else None,
+            telefono=cliente.telefono if cliente else None,
+            indirizzo=cliente.indirizzo if cliente else None,
+            cap=cliente.cap if cliente else None,
+            citta=cliente.citta if cliente else None,
+    
         ))
 
     return output
