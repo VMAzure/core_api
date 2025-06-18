@@ -199,7 +199,7 @@ def attiva_pipeline(
     nuova_pipeline = NltPipeline(
         preventivo_id=payload.preventivo_id,
         assegnato_a=assegnato_a,
-        stato_pipeline="nuovo",
+        stato_pipeline="preventivo",
         data_ultimo_contatto=datetime.utcnow()
     )
 
