@@ -5,7 +5,7 @@ from fastapi_jwt_auth import AuthJWT
 from fastapi import Body
 from app.auth_helpers import is_admin_user, is_dealer_user, is_team_user, get_admin_id, get_dealer_id
 from app.database import get_db
-from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User, CrmAzione
+from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User, CrmAzione, NltPipelineLog
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -283,3 +283,55 @@ def get_azioni_per_stato(stato_codice: str, db: Session = Depends(get_db)):
         .all()
     )
     return azioni
+
+class PipelineLogCreate(BaseModel):
+    pipeline_id: UUID
+    tipo_azione: str
+    note: Optional[str] = None
+
+router = APIRouter()
+
+@router.post("/log")
+def crea_log_pipeline(payload: PipelineLogCreate, db: Session = Depends(get_db), Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    nuovo_log = NltPipelineLog(
+        pipeline_id=payload.pipeline_id,
+        tipo_azione=payload.tipo_azione,
+        note=payload.note,
+        data_evento=datetime.utcnow(),
+        utente_id=user.id
+    )
+
+    db.add(nuovo_log)
+    db.commit()
+    db.refresh(nuovo_log)
+
+    return {"message": "Log registrato", "log_id": nuovo_log.id}
+
+class PipelineLogOut(BaseModel):
+    id: UUID
+    pipeline_id: UUID
+    tipo_azione: str
+    note: Optional[str]
+    data_evento: datetime
+    utente_id: int
+
+    class Config:
+        orm_mode = True
+
+@router.get("/log/{pipeline_id}", response_model=List[PipelineLogOut])
+def get_log_per_pipeline(pipeline_id: UUID, db: Session = Depends(get_db)):
+    logs = (
+        db.query(NltPipelineLog)
+        .filter(NltPipelineLog.pipeline_id == pipeline_id)
+        .order_by(NltPipelineLog.data_evento.desc())
+        .all()
+    )
+
+    return logs
