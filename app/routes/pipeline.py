@@ -34,6 +34,16 @@ class PipelineItemOut(BaseModel):
     note_commerciali: Optional[str]
     created_at: datetime
     updated_at: datetime
+
+    # ➕ Campi del preventivo:
+    cliente: Optional[str]
+    marca: Optional[str]
+    modello: Optional[str]
+    durata: Optional[int]
+    anticipo: Optional[float]
+    canone: Optional[float]
+    player: Optional[str]
+    note: Optional[str]
     
     class Config:
         orm_mode = True  # ✅ aggiungi questo
@@ -60,8 +70,41 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Utente non trovato")
     user_id = user.id
 
-    query = db.query(NltPipeline).options(raiseload("*")).filter(NltPipeline.assegnato_a == user_id).all()
-    return [PipelineItemOut.from_orm(p).dict() for p in query]
+    pipeline_items = (
+        db.query(NltPipeline, NltPreventivi)
+        .join(NltPreventivi, NltPipeline.preventivo_id == NltPreventivi.id)
+        .filter(NltPipeline.assegnato_a == user_id)
+        .all()
+    )
+
+    output = []
+    for pipeline, preventivo in pipeline_items:
+        item = PipelineItemOut(
+            id=pipeline.id,
+            preventivo_id=pipeline.preventivo_id,
+            assegnato_a=pipeline.assegnato_a,
+            stato_pipeline=pipeline.stato_pipeline,
+            data_ultimo_contatto=pipeline.data_ultimo_contatto,
+            prossima_azione=pipeline.prossima_azione,
+            scadenza_azione=pipeline.scadenza_azione,
+            note_commerciali=pipeline.note_commerciali,
+            created_at=pipeline.created_at,
+            updated_at=pipeline.updated_at,
+
+            # ➕ Campi del preventivo:
+            cliente=preventivo.cliente,
+            marca=preventivo.marca,
+            modello=preventivo.modello,
+            durata=preventivo.durata,
+            anticipo=preventivo.anticipo,
+            canone=preventivo.canone,
+            player=preventivo.player,
+            note=preventivo.note
+        )
+        output.append(item)
+
+    return output
+
 
 
 
