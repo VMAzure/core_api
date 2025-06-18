@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional, List
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
-from sqlalchemy.dialects.postgresql import UUID, PG_UUID
+from sqlalchemy.dialects.postgresql import UUID
 
 
 
@@ -826,12 +826,14 @@ class CrmAzione(Base):
 
     stato = relationship("NltPipelineStati", backref="azioni")
 
+from sqlalchemy.dialects.postgresql import UUID
+
 class NltPipelineLog(Base):
     __tablename__ = "nlt_pipeline_log"
     __table_args__ = {"schema": "public"}
 
-    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    pipeline_id = Column(PG_UUID(as_uuid=True), ForeignKey("nlt_pipeline.id", ondelete="CASCADE"), nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pipeline_id = Column(UUID(as_uuid=True), ForeignKey("nlt_pipeline.id", ondelete="CASCADE"), nullable=False)
     tipo_azione = Column(String, nullable=False)  # es: 'Email', 'Telefono', 'WhatsApp'
     note = Column(Text)
     data_evento = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -840,4 +842,4 @@ class NltPipelineLog(Base):
 
     # Facoltativi per joinedload in GET log
     pipeline = relationship("NltPipeline", backref="log")
-    utente = relationship("User", backref="log_azioni")  # solo se vuoi info utente nel log
+    utente = relationship("User", backref="log_azioni")
