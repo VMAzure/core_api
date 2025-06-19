@@ -861,7 +861,14 @@ async def genera_e_invia_preventivo(
 
         async with httpx.AsyncClient(timeout=120) as client:
             import json
-            print("📦 Payload inviato al PDF Generator:\n", json.dumps(payload_pdf, indent=2, ensure_ascii=False))
+
+            print("📦 Payload inviato al PDF Generator:")
+            try:
+                print(json.dumps(payload_pdf, indent=2, ensure_ascii=False))
+            except Exception as e:
+                print(f"❌ Errore nella serializzazione del payload: {e}")
+                for k, v in payload_pdf.items():
+                    print(f"- {k}: {type(v)} → {v}")
 
             pdf_res = await client.post(
                 "https://corewebapp-azcore.up.railway.app/api/Pdf/GenerateOffer", 
