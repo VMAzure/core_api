@@ -697,6 +697,20 @@ def completa_registrazione_cliente_pubblico(
 from sqlalchemy.orm import sessionmaker
 import httpx
 
+import re
+
+def extract_cap(address: str | None) -> str:
+    if not address:
+        return ""
+    match = re.search(r"(\d{5})", address)
+    return match.group(1) if match else ""
+
+def extract_city(address: str | None) -> str:
+    if not address:
+        return ""
+    match = re.search(r"\d{5}\s+(.+)", address)
+    return match.group(1).strip() if match else ""
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -786,6 +800,21 @@ async def genera_e_invia_preventivo(
         servizi = db.query(NltService).filter(NltService.is_active == True).all()
         documenti = db.query(NltDocumentiRichiesti).filter(NltDocumentiRichiesti.tipo_cliente == tipo_cliente).all()
 
+        # Costruzione DealerInfo (solo se lo slug è collegato a un dealer vero)
+        dealer_info_block = None
+        if dealer_settings and dealer_settings.dealer_id:
+            dealer_info_block = {
+                "Email": dealer_settings.contact_email,
+                "MobilePhone": dealer_settings.contact_phone,
+                "Address": dealer_settings.contact_address,
+                "PostalCode": extract_cap(dealer_settings.contact_address),
+                "City": extract_city(dealer_settings.contact_address),
+                "LogoUrl": dealer_settings.logo_web,
+                "CompanyName": dealer_settings.meta_title or "",
+                "FirstName": "",
+                "LastName": ""
+            }
+
         payload_pdf = {
             "CustomerFirstName": cliente.nome,
             "CustomerLastName": cliente.cognome,
@@ -800,12 +829,13 @@ async def genera_e_invia_preventivo(
             "Auto": {
                 "Marca": offerta.marca,
                 "Modello": offerta.modello,
-                "Versione": offerta.modello.upper(),  # ✅ Usato nel titolo del PDF
-                "DescrizioneVersione": offerta.versione.strip(),  # ← Mostra tutto, incluso modello
+                "Versione": offerta.modello.upper(),
+                "DescrizioneVersione": offerta.versione.strip(),
                 "Note": "Richiesta preventivo web"
             },
-
-            "Servizi": [{"Nome": s.name, "Opzione": s.conditions["options"][0]} for s in servizi],
+            "Servizi": [
+                {"Nome": s.name, "Opzione": s.conditions["options"][0]} for s in servizi
+            ],
             "DatiEconomici": {
                 "Durata": cliente_pubblico.durata,
                 "KmTotali": km_totali,
@@ -813,33 +843,21 @@ async def genera_e_invia_preventivo(
                 "Canone": cliente_pubblico.canone
             },
             "AdminInfo": {
-              "Email": admin.email,
-              "FirstName": admin.nome,
-              "LastName": admin.cognome,
-              "CompanyName": admin.ragione_sociale,
-              "MobilePhone": admin.cellulare,
-              "Address": admin.indirizzo,
-              "PostalCode": admin.cap,
-              "City": admin.citta,
-              "LogoUrl": admin.logo_url
+                "Email": admin.email,
+                "FirstName": admin.nome,
+                "LastName": admin.cognome,
+                "CompanyName": admin.ragione_sociale,
+                "MobilePhone": admin.cellulare,
+                "Address": admin.indirizzo,
+                "PostalCode": admin.cap,
+                "City": admin.citta,
+                "LogoUrl": admin.logo_url
             },
-
-            "DealerInfo": {
-              "Email": dealer.email,
-              "FirstName": dealer.nome,
-              "LastName": dealer.cognome,
-              "CompanyName": dealer.ragione_sociale,
-              "MobilePhone": dealer.cellulare,
-              "Address": dealer.indirizzo,
-              "PostalCode": dealer.cap,
-              "City": dealer.citta,
-              "LogoUrl": dealer.logo_url,
-
-            } if dealer else None,
-
+            "DealerInfo": dealer_info_block,  # ✅ solo se esiste un dealer assegnato
             "NoteAuto": f"Provvigione applicata: {agency_type}%",
             "Player": player.nome if player else "Web"
         }
+
 
         async with httpx.AsyncClient(timeout=120) as client:
             pdf_res = await client.post(
