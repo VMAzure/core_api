@@ -3,7 +3,7 @@
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.models import NltPneumatici, NltPipeline, NltAutoSostitutiva, NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User, NltPreventivi, NltPreventiviLinks, NltPreventiviTimeline, NltClientiPubblici
+from app.models import NltPneumatici, NltPipeline,NltPipelineLog, NltAutoSostitutiva, NltService, NltDocumentiRichiesti, NltPreventivi, Cliente, User, NltPreventivi, NltPreventiviLinks, NltPreventiviTimeline, NltClientiPubblici
 from pydantic import BaseModel, BaseSettings
 from jose import jwt, JWTError  # ✅ Aggiunto import corretto per decodificare il token JWT
 from fastapi_jwt_auth import AuthJWT
@@ -617,6 +617,20 @@ async def invia_mail_preventivo(
 
         db.add(evento)
         db.commit()
+
+        # 🔁 Se esiste una pipeline collegata, logga anche lì
+        pipeline = db.query(NltPipeline).filter(NltPipeline.preventivo_id == preventivo.id).first()
+
+        if pipeline:
+            log_pipeline = NltPipelineLog(
+                pipeline_id=pipeline.id,
+                tipo_azione="email_inviata",
+                note="Welcome email inviata",
+                data_evento=datetime.utcnow(),
+                utente_id=responsabile_id
+            )
+            db.add(log_pipeline)
+            db.commit()
 
     except smtplib.SMTPException as smtp_err:
         print("❌ Errore SMTP:", smtp_err)
