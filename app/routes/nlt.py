@@ -506,26 +506,21 @@ async def genera_link_preventivo(
     }
 
 
+
 @router.get("/preventivi/download/{token}")
 async def download_preventivo(token: str, db: Session = Depends(get_db)):
-    # Recupera il link
     link = db.query(NltPreventiviLinks).filter_by(token=token).first()
-    
-    if not link or link.data_scadenza < datetime.utcnow():
+
+    if not link or not link.data_scadenza or link.data_scadenza < datetime.utcnow():
         raise HTTPException(status_code=404, detail="Link scaduto o invalido")
 
-    # Recupera il preventivo associato
-    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == link.preventivo_id).first()
+    preventivo = db.query(NltPreventivi).filter_by(id=link.preventivo_id).first()
     if not preventivo:
         raise HTTPException(status_code=404, detail="Preventivo non trovato")
 
-    # Determina l'utente responsabile (assegnato o creatore)
     responsabile_id = preventivo.preventivo_assegnato_a or preventivo.creato_da
-
-    # Aggiorna link come usato
     link.usato = True
 
-    # Registra evento nella timeline
     evento = NltPreventiviTimeline(
         preventivo_id=link.preventivo_id,
         evento="scaricato",
@@ -535,10 +530,21 @@ async def download_preventivo(token: str, db: Session = Depends(get_db)):
     )
 
     db.add(evento)
+
+    pipeline_esistente = db.query(NltPipeline).filter_by(preventivo_id=link.preventivo_id).first()
+    if not pipeline_esistente:
+        nuova_pipeline = NltPipeline(
+            preventivo_id=link.preventivo_id,
+            stato_pipeline='preventivo',
+            pipeline_attiva=True,
+            data_creazione=datetime.utcnow()
+        )
+        db.add(nuova_pipeline)
+
     db.commit()
 
-    # Redirect al file
     return RedirectResponse(preventivo.file_url)
+
 
 
 
