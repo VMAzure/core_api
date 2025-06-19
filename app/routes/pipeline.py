@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User, CrmAzione, NltPipelineLog
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/api/pipeline", tags=["Pipeline"])
 
@@ -29,6 +29,8 @@ class PipelineItemOut(BaseModel):
     data_ultimo_contatto: Optional[datetime]
     prossima_azione: Optional[str]
     scadenza_azione: Optional[datetime]
+    email_reminder_inviata: Optional[bool]         # ✅ NUOVO
+    email_reminder_scheduled: Optional[datetime]   # ✅ NUOVO
     note_commerciali: Optional[str]
     created_at: datetime
     updated_at: datetime
@@ -133,6 +135,9 @@ def get_pipeline(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
             data_ultimo_contatto=pipeline.data_ultimo_contatto,
             prossima_azione=pipeline.prossima_azione,
             scadenza_azione=pipeline.scadenza_azione,
+            email_reminder_inviata=pipeline.email_reminder_inviata,
+            email_reminder_scheduled=pipeline.email_reminder_scheduled,
+
             note_commerciali=pipeline.note_commerciali,
             created_at=pipeline.created_at,
             updated_at=pipeline.updated_at,
@@ -270,7 +275,10 @@ def attiva_pipeline(
         preventivo_id=payload.preventivo_id,
         assegnato_a=assegnato_a,
         stato_pipeline="preventivo",
-        data_ultimo_contatto=datetime.utcnow()
+        data_ultimo_contatto=datetime.utcnow(),
+        scadenza_azione=datetime.utcnow() + timedelta(hours=24),
+        email_reminder_inviata=False,
+        email_reminder_scheduled=None
     )
 
     db.add(nuova_pipeline)

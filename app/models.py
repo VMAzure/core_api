@@ -806,6 +806,9 @@ class NltPipeline(Base):
     preventivo = relationship("NltPreventivi", back_populates="pipeline", lazy="joined")
     assegnato = relationship("User", lazy="joined")
 
+    email_reminder_inviata = Column(Boolean, default=False)
+    email_reminder_scheduled = Column(DateTime, nullable=True)
+
 
 class NltPipelineStati(Base):
     __tablename__ = "nlt_pipeline_stati"

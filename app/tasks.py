@@ -9,6 +9,8 @@ from app.routes.sync_dettagli_nuovo import sync_dettagli_auto
 from app.routes.sync_marche_completo import sync_marche
 from app.routes.sync_modelli_nuovo import sync_modelli
 from app.routes.sync_allestimenti_nuovo import sync_allestimenti
+from app.routes.invia_reminder_pipeline import invia_reminder_pipeline
+
 
 # Configurazione dei log
 logging.basicConfig(filename="cron_job.log", level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -128,9 +130,6 @@ def sync_modelli_settimanale():
         logging.error(f"❌ Errore nella sync modelli: {e}")
 
 
-
-
-
 scheduler = BackgroundScheduler(job_defaults={'coalesce': True, 'max_instances': 1})
 
 scheduler.add_job(check_and_charge_services, 'interval', minutes=100)
@@ -146,7 +145,8 @@ scheduler.add_job(sync_marche_settimanale, 'cron', day_of_week='mon', hour=1, mi
 # Ogni lunedì alle 02:00
 scheduler.add_job(sync_modelli_settimanale, 'cron', day_of_week='mon', hour=2, minute=0)
 
-
+# Invia reminder pipeline ogni giorno lavorativo dalle 9:00 alle 17:30 ogni 30 minuti
+scheduler.add_job(invia_reminder_pipeline, 'cron', day_of_week='mon-fri', hour='9-17', minute='*/30')
 
 
 
