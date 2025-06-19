@@ -735,8 +735,17 @@ async def genera_e_invia_preventivo(
 
     try:
         cliente_pubblico = db.query(NltClientiPubblici).filter(
-            NltClientiPubblici.token == cliente_pubblico_token
+            NltClientiPubblici.token == cliente_pubblico_token,
+            NltClientiPubblici.confermato == True,
+            NltClientiPubblici.anticipo.isnot(None),
+            NltClientiPubblici.canone.isnot(None),
+            NltClientiPubblici.durata.isnot(None),
+            NltClientiPubblici.km.isnot(None)
         ).first()
+
+        if not cliente_pubblico:
+            raise ValueError("Dati economici del preventivo non disponibili o non confermati.")
+
 
         cliente = db.query(Cliente).get(cliente_id)
         dealer = db.query(User).get(dealer_id)
