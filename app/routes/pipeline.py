@@ -358,3 +358,63 @@ def get_log_per_pipeline(pipeline_id: UUID, db: Session = Depends(get_db)):
     )
 
     return logs
+
+@router.get("/collegate/{pipeline_id}", response_model=List[PipelineItemOut])
+def get_pipeline_collegate(pipeline_id: UUID, db: Session = Depends(get_db)):
+    # Recupera pipeline attuale
+    pipeline = db.query(NltPipeline).filter(NltPipeline.id == pipeline_id).first()
+    if not pipeline:
+        raise HTTPException(status_code=404, detail="Pipeline non trovata")
+
+    # Recupera preventivo
+    preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == pipeline.preventivo_id).first()
+    if not preventivo:
+        raise HTTPException(status_code=404, detail="Preventivo non trovato")
+
+    # Recupera tutte le pipeline del cliente (escluse questa)
+    pipeline_collegate = (
+        db.query(NltPipeline, NltPreventivi)
+        .join(NltPreventivi, NltPipeline.preventivo_id == NltPreventivi.id)
+        .filter(
+            NltPreventivi.cliente_id == preventivo.cliente_id,
+            NltPipeline.id != pipeline.id
+        )
+        .order_by(NltPipeline.created_at.desc())
+        .all()
+    )
+
+    risultati = []
+    for p, prev in pipeline_collegate:
+        cliente = prev.cliente
+        risultati.append(PipelineItemOut(
+            id=p.id,
+            preventivo_id=p.preventivo_id,
+            assegnato_a=p.assegnato_a,
+            stato_pipeline=p.stato_pipeline,
+            data_ultimo_contatto=p.data_ultimo_contatto,
+            prossima_azione=p.prossima_azione,
+            scadenza_azione=p.scadenza_azione,
+            email_reminder_inviata=p.email_reminder_inviata,
+            email_reminder_scheduled=p.email_reminder_scheduled,
+            note_commerciali=p.note_commerciali,
+            created_at=p.created_at,
+            updated_at=p.updated_at,
+            cliente_nome=cliente.nome if cliente else None,
+            cliente_cognome=cliente.cognome if cliente else None,
+            ragione_sociale=cliente.ragione_sociale if cliente else None,
+            tipo_cliente=cliente.tipo_cliente if cliente else None,
+            marca=prev.marca,
+            modello=prev.modello,
+            durata=prev.durata,
+            km_totali=prev.km_totali,
+            anticipo=prev.anticipo,
+            canone=prev.canone,
+            player=prev.player,
+            note=prev.note,
+            file_url=prev.file_url,
+            email=cliente.email if cliente else None,
+            telefono=cliente.telefono if cliente else None,
+            indirizzo=cliente.indirizzo if cliente else None,
+        ))
+
+    return risultati
