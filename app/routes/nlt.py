@@ -11,6 +11,8 @@ from fastapi.responses import RedirectResponse
 from typing import List, Optional
 from datetime import datetime, timedelta  # aggiunto timedelta
 from app.utils.email import send_email
+from app.utils.calcola_scadenza_azione import calcola_scadenza_azione_intelligente
+
 import uuid
 from uuid import UUID
 from app.utils.email import get_smtp_settings  # se vuoi usare direttamente la funzione già definita in email.py
@@ -528,22 +530,28 @@ async def download_preventivo(token: str, db: Session = Depends(get_db)):
         utente_id=responsabile_id,
         data_evento=datetime.utcnow()
     )
-
     db.add(evento)
 
     pipeline_esistente = db.query(NltPipeline).filter_by(preventivo_id=link.preventivo_id).first()
     if not pipeline_esistente:
+        ora_attuale = datetime.utcnow()
+
         nuova_pipeline = NltPipeline(
             preventivo_id=link.preventivo_id,
+            assegnato_a=responsabile_id,
             stato_pipeline='preventivo',
-            pipeline_attiva=True,
-            data_creazione=datetime.utcnow()
+            scadenza_azione=calcola_scadenza_azione_intelligente(ora_attuale),
+            email_reminder_inviata=False,
+            email_reminder_scheduled=None,
+            created_at=ora_attuale,
+            updated_at=ora_attuale
         )
         db.add(nuova_pipeline)
 
     db.commit()
 
     return RedirectResponse(preventivo.file_url)
+
 
 
 

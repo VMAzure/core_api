@@ -9,8 +9,11 @@ from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User, CrmAz
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timedelta
+from app.utils.calcola_scadenza_azione import calcola_scadenza_azione_intelligente
+
 
 router = APIRouter(prefix="/api/pipeline", tags=["Pipeline"])
+
 
 # === SCHEMI ===
 
@@ -276,7 +279,7 @@ def attiva_pipeline(
         assegnato_a=assegnato_a,
         stato_pipeline="preventivo",
         data_ultimo_contatto=datetime.utcnow(),
-        scadenza_azione=datetime.utcnow() + timedelta(hours=24),
+        scadenza_azione=calcola_scadenza_azione_intelligente(datetime.utcnow()),
         email_reminder_inviata=False,
         email_reminder_scheduled=None
     )
