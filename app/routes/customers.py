@@ -286,16 +286,8 @@ from app.schemas import ClienteConsensoRequest, ClienteConsensoResponse
 def registra_consenso_cliente(
     cliente_id: int,
     consenso: ClienteConsensoRequest,
-    Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
-    Authorize.jwt_required()
-    user_email = Authorize.get_jwt_subject()
-
-    user = db.query(User).filter(User.email == user_email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Utente non trovato")
-
     cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
@@ -307,7 +299,7 @@ def registra_consenso_cliente(
         marketing=consenso.marketing,
         ip=consenso.ip,
         note=consenso.note,
-        attivo=consenso.attivo, # ✅ aggiunto campo attivo
+        attivo=consenso.attivo,
         data_consenso=datetime.utcnow()
     )
 
@@ -316,6 +308,7 @@ def registra_consenso_cliente(
     db.refresh(nuovo_consenso)
 
     return nuovo_consenso
+
 
 @router.get("/clienti/{cliente_id}/consensi", response_model=List[ClienteConsensoResponse])
 def get_consensi_cliente(
