@@ -1,4 +1,5 @@
 ﻿import smtplib
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
 from sqlalchemy.orm import Session
@@ -62,7 +63,7 @@ def send_email(admin_id: int, to_email: str, subject: str, body: str):
         db.close()
         raise Exception("Impostazioni SMTP non configurate per questo admin.")
 
-    msg = MIMEText(body, "html", "utf-8")
+    msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
 
     if smtp_settings.smtp_alias and current_user.role == "superadmin":
@@ -72,6 +73,16 @@ def send_email(admin_id: int, to_email: str, subject: str, body: str):
 
     msg["From"] = formataddr((sender_alias, smtp_settings.smtp_user))
     msg["To"] = to_email
+
+    # Contenuto testuale (fallback)
+    text = "Questa email contiene una proposta di noleggio da Azure Automotive. Visualizzala in un client compatibile con HTML."
+
+    # Parte HTML (il tuo template renderizzato)
+    html_part = MIMEText(body, "html", "utf-8")
+    text_part = MIMEText(text, "plain", "utf-8")
+
+    msg.attach(text_part)
+    msg.attach(html_part)
 
     try:
         if smtp_settings.use_ssl:
