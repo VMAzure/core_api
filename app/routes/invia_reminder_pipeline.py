@@ -4,7 +4,7 @@ import traceback
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
-from app.models import NltPipeline, NltPreventivi, Cliente, User, NltPipelineLog
+from app.models import NltPipeline, NltPreventivi, Cliente, User, NltPipelineLog,SiteAdminSettings
 from app.utils.email import send_email
 
 # Logging globale
@@ -53,6 +53,12 @@ def invia_reminder_pipeline():
 
             admin_id = assegnatario.parent_id or assegnatario.id
 
+            # Recupera lo slug del dealer da SiteAdminSettings
+            admin_settings = db.query(SiteAdminSettings).filter_by(admin_id=admin_id).first()
+            slug = admin_settings.slug if admin_settings and admin_settings.slug else "default"
+            url_vetrina = f"https://www.azcore.it/vetrina-offerte/{slug}"
+
+
             # 🔍 Quanti preventivi ha lo stesso cliente?
             altri = db.query(NltPipeline).join(NltPreventivi).filter(
                 NltPipeline.id != p.id,
@@ -83,7 +89,7 @@ def invia_reminder_pipeline():
                 html = html.replace("{{indirizzo}}", assegnatario.indirizzo or "")
                 html = html.replace("{{citta}}", assegnatario.citta or "")
                 html = html.replace("{{logo_url}}", assegnatario.logo_url or "")
-                html = html.replace("{{url_vetrina_dealer}}", f"https://corewebapp-azcore.up.railway.app/vetrina-offerte/{assegnatario.slug}")
+                html = html.replace("{{url_vetrina_dealer}}", url_vetrina)
 
                 send_email(
                     admin_id=admin_id,
