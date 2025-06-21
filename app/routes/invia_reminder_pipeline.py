@@ -15,7 +15,7 @@ def prossima_fascia_lavorativa(da: datetime) -> datetime:
     if da.weekday() >= 5:  # Sabato o Domenica
         giorni_da_lunedi = 7 - da.weekday()
         return da.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=giorni_da_lunedi)
-    elif da.hour >= 17:
+    elif da.hour >= 21:
         return da.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
     elif da.hour < 9:
         return da.replace(hour=9, minute=0, second=0, microsecond=0)
