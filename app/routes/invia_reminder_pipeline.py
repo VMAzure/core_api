@@ -39,7 +39,7 @@ def invia_reminder_pipeline():
         giorno = now.weekday()
         ora = now.hour
 
-        if giorno < 6 and 9 <= ora < 17:
+        if giorno < 6 and 9 <= ora < 21:
             preventivo = db.query(NltPreventivi).filter_by(id=p.preventivo_id).first()
             if not preventivo:
                 logging.warning(f"⚠️ Preventivo non trovato per pipeline {p.id}")
