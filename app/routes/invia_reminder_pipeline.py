@@ -1,17 +1,18 @@
 ﻿import httpx
-from sqlalchemy.orm import Session
+import logging
+import traceback
 from datetime import datetime, timedelta
+from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models import NltPipeline, NltPreventivi, Cliente, User, NltPipelineLog
 from app.utils.email import send_email
-import logging
 
-
+# Configura il logger
 logging.basicConfig(level=logging.INFO)
 logging.info("🔁 Esecuzione invia_reminder_pipeline avviata")
 
 def prossima_fascia_lavorativa(da: datetime) -> datetime:
-    if da.weekday() >= 5:
+    if da.weekday() >= 5:  # Sabato o Domenica
         giorni_da_lunedi = 7 - da.weekday()
         return da.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=giorni_da_lunedi)
     elif da.hour >= 17:
@@ -22,7 +23,7 @@ def prossima_fascia_lavorativa(da: datetime) -> datetime:
 
 def invia_reminder_pipeline():
     db: Session = SessionLocal()
-    now = datetime.now()
+    now = datetime.now()  # coerente con timestamp senza timezone nel DB
 
     pipelines = db.query(NltPipeline).filter(
         NltPipeline.stato_pipeline == 'preventivo',
@@ -30,8 +31,7 @@ def invia_reminder_pipeline():
         NltPipeline.scadenza_azione <= now
     ).all()
 
-    print(f"🎯 Pipeline selezionate per invio reminder: {len(pipelines)}")
-
+    logging.info(f"🎯 Pipeline selezionate per invio reminder: {len(pipelines)}")
 
     for p in pipelines:
         logging.info(f"➡️  Pipeline ID: {p.id} | scadenza_azione: {p.scadenza_azione}")
@@ -43,7 +43,6 @@ def invia_reminder_pipeline():
             preventivo = db.query(NltPreventivi).filter_by(id=p.preventivo_id).first()
             if not preventivo:
                 logging.warning(f"⚠️ Preventivo non trovato per pipeline ID {p.id}")
-
                 continue
 
             cliente = db.query(Cliente).filter_by(id=preventivo.cliente_id).first()
@@ -51,7 +50,6 @@ def invia_reminder_pipeline():
 
             if not cliente or not assegnatario:
                 logging.warning(f"⚠️ Cliente o assegnatario non trovati per pipeline ID {p.id}")
-
                 continue
 
             admin_id = assegnatario.parent_id or assegnatario.id
@@ -59,12 +57,11 @@ def invia_reminder_pipeline():
             try:
                 logging.info(f"📨 Invio email a {cliente.email} per pipeline ID {p.id}")
 
-                # ✅ Versione sincrona della richiesta al frontend
                 template_res = httpx.get("https://corewebapp-azcore.up.railway.app/templates/email_reminder.html", timeout=10)
                 template_res.raise_for_status()
                 template_html = template_res.text
 
-                # Sostituzioni base
+                # Sostituzioni placeholder
                 template_html = template_html.replace("{{cliente_nome}}", cliente.nome or "")
                 template_html = template_html.replace("{{modello}}", preventivo.modello or "")
                 template_html = template_html.replace("{{marca}}", preventivo.marca or "")
@@ -80,8 +77,7 @@ def invia_reminder_pipeline():
                     admin_id=admin_id,
                     to_email=cliente.email,
                     subject="Hai valutato il tuo preventivo?",
-                    body=template_html,
-                    # reply_to_email=assegnatario.email  # solo se implementato
+                    body=template_html
                 )
 
                 p.email_reminder_inviata = True
@@ -97,15 +93,12 @@ def invia_reminder_pipeline():
                 logging.info(f"🔔 Reminder inviato a {cliente.email} per preventivo {preventivo.id}")
 
             except Exception as e:
-                import traceback
                 logging.error(f"❌ Errore invio reminder: {str(e)}")
                 logging.error(traceback.format_exc())
-
         else:
             fascia = prossima_fascia_lavorativa(now)
             logging.info(f"⏳ Fuori orario. Reminder rimandato per pipeline {p.id} a: {fascia}")
             p.email_reminder_scheduled = fascia
-
 
     db.commit()
     db.close()
