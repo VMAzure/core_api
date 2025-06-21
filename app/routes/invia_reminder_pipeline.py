@@ -21,7 +21,6 @@ def invia_reminder_pipeline():
     now = datetime.utcnow()
 
     pipelines = db.query(NltPipeline).filter(
-        NltPipeline.pipeline_attiva == True,
         NltPipeline.stato_pipeline == 'preventivo',
         NltPipeline.email_reminder_inviata == False,
         NltPipeline.scadenza_azione <= now
