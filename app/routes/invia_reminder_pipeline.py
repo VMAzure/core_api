@@ -9,6 +9,9 @@ import logging
 now = datetime.utcnow() + timedelta(hours=2)  # per simulare UTC+2
 
 
+logging.basicConfig(level=logging.INFO)
+logging.info("🔁 Esecuzione invia_reminder_pipeline avviata")
+
 def prossima_fascia_lavorativa(da: datetime) -> datetime:
     if da.weekday() >= 5:
         giorni_da_lunedi = 7 - da.weekday()
@@ -33,18 +36,24 @@ def invia_reminder_pipeline():
 
 
     for p in pipelines:
+        logging.info(f"➡️  Pipeline ID: {p.id} | scadenza_azione: {p.scadenza_azione}")
+
         giorno = now.weekday()
         ora = now.hour
 
         if giorno < 5 and 9 <= ora < 17:
             preventivo = db.query(NltPreventivi).filter_by(id=p.preventivo_id).first()
             if not preventivo:
+                logging.warning(f"⚠️ Preventivo non trovato per pipeline ID {p.id}")
+
                 continue
 
             cliente = db.query(Cliente).filter_by(id=preventivo.cliente_id).first()
             assegnatario = db.query(User).filter_by(id=p.assegnato_a).first()
 
             if not cliente or not assegnatario:
+                logging.warning(f"⚠️ Cliente o assegnatario non trovati per pipeline ID {p.id}")
+
                 continue
 
             admin_id = assegnatario.parent_id or assegnatario.id
@@ -94,9 +103,11 @@ def invia_reminder_pipeline():
                 logging.error(f"❌ Errore invio reminder: {str(e)}")
                 logging.error(traceback.format_exc())
 
-
         else:
-            p.email_reminder_scheduled = prossima_fascia_lavorativa(now)
+            fascia = prossima_fascia_lavorativa(now)
+            logging.info(f"⏳ Fuori orario. Reminder rimandato per pipeline {p.id} a: {fascia}")
+            p.email_reminder_scheduled = fascia
+
 
     db.commit()
     db.close()
