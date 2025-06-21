@@ -430,7 +430,7 @@ def concludi_pipeline_pubblica(pipeline_id: UUID, db: Session = Depends(get_db))
         return {"message": "Pipeline già conclusa."}
 
     # Aggiorna stato
-    pipeline.stato_pipeline = "concluso"
+    pipeline.stato_pipeline = "perso"
     pipeline.updated_at = datetime.utcnow()
 
     # Registra log
