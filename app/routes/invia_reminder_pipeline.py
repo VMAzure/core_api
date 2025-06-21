@@ -51,15 +51,38 @@ def invia_reminder_pipeline():
                 logging.warning(f"⚠️ Cliente o assegnatario mancanti per pipeline {p.id}")
                 continue
 
+            # 🔍 Admin e ID per fallback
             admin_id = assegnatario.parent_id or assegnatario.id
+            admin = db.query(User).filter_by(id=admin_id).first()
 
-            # Recupera lo slug del dealer da SiteAdminSettings
-            admin_settings = db.query(SiteAdminSettings).filter_by(admin_id=admin_id).first()
-            slug = admin_settings.slug if admin_settings and admin_settings.slug else "default"
+            # 🔍 Recupera le impostazioni dealer (prima per dealer_id, poi per admin_id)
+            dealer_settings = db.query(SiteAdminSettings).filter_by(dealer_id=assegnatario.id).first()
+            if not dealer_settings:
+                dealer_settings = (
+                    db.query(SiteAdminSettings)
+                    .filter_by(admin_id=admin.id)
+                    .order_by(SiteAdminSettings.id.asc())
+                    .first()
+                )
+
+            # 🎯 Slug vetrina
+            slug = dealer_settings.slug if dealer_settings and dealer_settings.slug else "default"
             url_vetrina = f"https://www.azcore.it/vetrina-offerte/{slug}"
 
+            # 🧠 Dati dealer con fallback su admin
+            def fallback(attr):
+                dealer_val = getattr(assegnatario, attr, None)
+                admin_val = getattr(admin, attr, None)
+                return dealer_val if dealer_val not in [None, ""] else admin_val
 
-            # 🔍 Quanti preventivi ha lo stesso cliente?
+            dealer_nome = f"{fallback('nome')} {fallback('cognome')}"
+            indirizzo = fallback('indirizzo') or ""
+            citta = fallback('citta') or ""
+            telefono = fallback('cellulare') or ""
+            email_contatto = fallback('email') or ""
+            logo_url = fallback('logo_url') or ""
+
+            # 🔍 Altri preventivi per decidere template
             altri = db.query(NltPipeline).join(NltPreventivi).filter(
                 NltPipeline.id != p.id,
                 NltPreventivi.cliente_id == preventivo.cliente_id
@@ -82,13 +105,13 @@ def invia_reminder_pipeline():
                 html = html.replace("{{cliente_nome}}", cliente.nome or "")
                 html = html.replace("{{modello}}", preventivo.modello or "")
                 html = html.replace("{{marca}}", preventivo.marca or "")
-                html = html.replace("{{dealer_nome}}", f"{assegnatario.nome} {assegnatario.cognome}")
+                html = html.replace("{{dealer_nome}}", dealer_nome)
                 html = html.replace("{{url_download}}", preventivo.file_url or "#")
-                html = html.replace("{{email}}", assegnatario.email or "")
-                html = html.replace("{{telefono}}", assegnatario.cellulare or "")
-                html = html.replace("{{indirizzo}}", assegnatario.indirizzo or "")
-                html = html.replace("{{citta}}", assegnatario.citta or "")
-                html = html.replace("{{logo_url}}", assegnatario.logo_url or "")
+                html = html.replace("{{email}}", email_contatto)
+                html = html.replace("{{telefono}}", telefono)
+                html = html.replace("{{indirizzo}}", indirizzo)
+                html = html.replace("{{citta}}", citta)
+                html = html.replace("{{logo_url}}", logo_url)
                 html = html.replace("{{url_vetrina_dealer}}", url_vetrina)
 
                 html = html.replace("{{url_contatto_personale}}", url_vetrina)
@@ -97,7 +120,7 @@ def invia_reminder_pipeline():
 
                 logging.info("📄 Contenuto finale email:")
                 logging.info(html)
-                
+
                 send_email(
                     admin_id=admin_id,
                     to_email=cliente.email,
@@ -119,6 +142,7 @@ def invia_reminder_pipeline():
             except Exception as e:
                 logging.error(f"❌ Errore invio email: {e}")
                 logging.error(traceback.format_exc())
+
 
         else:
             fascia = prossima_fascia_lavorativa(now)
