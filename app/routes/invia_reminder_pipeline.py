@@ -1,14 +1,13 @@
 ﻿import httpx
 import logging
 import traceback
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models import NltPipeline, NltPreventivi, Cliente, User, NltPipelineLog
 from app.utils.email import send_email
 
-
-# Configura il logger
+# Logging globale
 logging.basicConfig(level=logging.INFO)
 logging.info("🔁 Esecuzione invia_reminder_pipeline avviata")
 
@@ -24,7 +23,9 @@ def prossima_fascia_lavorativa(da: datetime) -> datetime:
 
 def invia_reminder_pipeline():
     db: Session = SessionLocal()
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # ✅ Usa ora locale italiana (UTC+2 in estate)
+    now = datetime.utcnow() + timedelta(hours=2)
 
     pipelines = db.query(NltPipeline).filter(
         NltPipeline.stato_pipeline == 'preventivo',
@@ -40,7 +41,7 @@ def invia_reminder_pipeline():
         giorno = now.weekday()
         ora = now.hour
 
-        if giorno < 5 and 9 <= ora < 17:
+        if giorno < 6 and 9 <= ora < 17:  # lunedì (0) → sabato (5)
             preventivo = db.query(NltPreventivi).filter_by(id=p.preventivo_id).first()
             if not preventivo:
                 logging.warning(f"⚠️ Preventivo non trovato per pipeline ID {p.id}")
@@ -62,7 +63,7 @@ def invia_reminder_pipeline():
                 template_res.raise_for_status()
                 template_html = template_res.text
 
-                # Sostituzioni placeholder
+                # Sostituzioni
                 template_html = template_html.replace("{{cliente_nome}}", cliente.nome or "")
                 template_html = template_html.replace("{{modello}}", preventivo.modello or "")
                 template_html = template_html.replace("{{marca}}", preventivo.marca or "")
@@ -91,7 +92,7 @@ def invia_reminder_pipeline():
                     utente_id=assegnatario.id
                 ))
 
-                logging.info(f"🔔 Reminder inviato a {cliente.email} per preventivo {preventivo.id}")
+                logging.info(f"✅ Reminder inviato a {cliente.email} per preventivo {preventivo.id}")
 
             except Exception as e:
                 logging.error(f"❌ Errore invio reminder: {str(e)}")
