@@ -419,33 +419,31 @@ def get_pipeline_collegate(pipeline_id: UUID, db: Session = Depends(get_db)):
 
     return risultati
 
-@router.get("/rifiuta/{token}")
-def rifiuta_offerta(token: str, db: Session = Depends(get_db)):
-    # Cerca il preventivo con quel token
-    preventivo = db.query(NltPreventivi).filter(NltPreventivi.token == token).first()
-    if not preventivo:
-        raise HTTPException(status_code=404, detail="Preventivo non trovato")
-
-    # Cerca la pipeline collegata
-    pipeline = db.query(NltPipeline).filter(NltPipeline.preventivo_id == preventivo.id).first()
+@router.get("/concludi/{pipeline_id}")
+def concludi_pipeline_pubblica(pipeline_id: UUID, db: Session = Depends(get_db)):
+    pipeline = db.query(NltPipeline).filter(NltPipeline.id == pipeline_id).first()
     if not pipeline:
         raise HTTPException(status_code=404, detail="Pipeline non trovata")
+
+    # Già concluso? Non rifare nulla
+    if pipeline.stato_pipeline == "concluso":
+        return {"message": "Pipeline già conclusa."}
 
     # Aggiorna stato
     pipeline.stato_pipeline = "concluso"
     pipeline.updated_at = datetime.utcnow()
 
-    # Crea log azione
+    # Registra log
     log = NltPipelineLog(
         pipeline_id=pipeline.id,
         tipo_azione="rifiutato",
-        note="Utente ha cliccato 'No, grazie'",
+        note="Utente ha concluso la pipeline via link pubblico",
         data_evento=datetime.utcnow(),
-        utente_id=None  # pubblico, nessun utente loggato
+        utente_id=None
     )
 
     db.add(log)
     db.commit()
 
-    return {"message": "Offerta rifiutata. Pipeline aggiornata."}
+    return {"message": "Pipeline aggiornata a 'concluso'"}
 
