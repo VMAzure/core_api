@@ -83,12 +83,18 @@ def invia_reminder_pipeline():
             logo_url = fallback('logo_url') or ""
 
             # 🔍 Altri preventivi per decidere template
-            altri = db.query(NltPipeline).join(NltPreventivi).filter(
+            # Calcolo dell'admin di riferimento dell’assegnatario corrente
+            admin_id_corrente = assegnatario.parent_id or assegnatario.id
+
+            # Trova altri preventivi con lo stesso cliente e stesso dealer
+            altri = db.query(NltPipeline).join(NltPreventivi).join(User, NltPipeline.assegnato_a == User.id).filter(
                 NltPipeline.id != p.id,
-                NltPreventivi.cliente_id == preventivo.cliente_id
+                NltPreventivi.cliente_id == preventivo.cliente_id,
+                (User.parent_id == admin_id_corrente) | (User.id == admin_id_corrente)
             ).all()
 
             usa_template_multiplo = len(altri) > 0
+
             template_url = (
                 "https://corewebapp-azcore.up.railway.app/templates/email_welcome_multipli.html"
                 if usa_template_multiplo else
