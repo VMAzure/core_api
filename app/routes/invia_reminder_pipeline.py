@@ -1,11 +1,12 @@
 ﻿import httpx
 import logging
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models import NltPipeline, NltPreventivi, Cliente, User, NltPipelineLog
 from app.utils.email import send_email
+
 
 # Configura il logger
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +24,7 @@ def prossima_fascia_lavorativa(da: datetime) -> datetime:
 
 def invia_reminder_pipeline():
     db: Session = SessionLocal()
-    now = datetime.now()  # coerente con timestamp senza timezone nel DB
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     pipelines = db.query(NltPipeline).filter(
         NltPipeline.stato_pipeline == 'preventivo',
