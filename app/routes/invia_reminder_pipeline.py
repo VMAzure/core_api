@@ -29,6 +29,9 @@ def invia_reminder_pipeline():
         NltPipeline.scadenza_azione <= now
     ).all()
 
+    print(f"🎯 Pipeline selezionate per invio reminder: {len(pipelines)}")
+
+
     for p in pipelines:
         giorno = now.weekday()
         ora = now.hour
@@ -47,6 +50,8 @@ def invia_reminder_pipeline():
             admin_id = assegnatario.parent_id or assegnatario.id
 
             try:
+                logging.info(f"📨 Invio email a {cliente.email} per pipeline ID {p.id}")
+
                 # ✅ Versione sincrona della richiesta al frontend
                 template_res = httpx.get("https://corewebapp-azcore.up.railway.app/templates/email_reminder.html", timeout=10)
                 template_res.raise_for_status()
@@ -85,7 +90,10 @@ def invia_reminder_pipeline():
                 logging.info(f"🔔 Reminder inviato a {cliente.email} per preventivo {preventivo.id}")
 
             except Exception as e:
+                import traceback
                 logging.error(f"❌ Errore invio reminder: {str(e)}")
+                logging.error(traceback.format_exc())
+
 
         else:
             p.email_reminder_scheduled = prossima_fascia_lavorativa(now)
