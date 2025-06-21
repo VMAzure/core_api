@@ -21,10 +21,9 @@ def prossima_fascia_lavorativa(da: datetime) -> datetime:
         return da.replace(hour=9, minute=0, second=0, microsecond=0)
     return da
 
+
 def invia_reminder_pipeline():
     db: Session = SessionLocal()
-
-    # ✅ Usa ora locale italiana (UTC+2 in estate)
     now = datetime.utcnow() + timedelta(hours=2)
 
     pipelines = db.query(NltPipeline).filter(
@@ -33,70 +32,81 @@ def invia_reminder_pipeline():
         NltPipeline.scadenza_azione <= now
     ).all()
 
-    logging.info(f"🎯 Pipeline selezionate per invio reminder: {len(pipelines)}")
+    logging.info(f"🎯 Pipeline selezionate per invio welcome: {len(pipelines)}")
 
     for p in pipelines:
-        logging.info(f"➡️  Pipeline ID: {p.id} | scadenza_azione: {p.scadenza_azione}")
-
+        logging.info(f"➡️ Pipeline ID: {p.id} | scadenza_azione: {p.scadenza_azione}")
         giorno = now.weekday()
         ora = now.hour
 
-        if giorno < 6 and 9 <= ora < 17:  # lunedì (0) → sabato (5)
+        if giorno < 6 and 9 <= ora < 17:
             preventivo = db.query(NltPreventivi).filter_by(id=p.preventivo_id).first()
             if not preventivo:
-                logging.warning(f"⚠️ Preventivo non trovato per pipeline ID {p.id}")
+                logging.warning(f"⚠️ Preventivo non trovato per pipeline {p.id}")
                 continue
 
             cliente = db.query(Cliente).filter_by(id=preventivo.cliente_id).first()
             assegnatario = db.query(User).filter_by(id=p.assegnato_a).first()
-
             if not cliente or not assegnatario:
-                logging.warning(f"⚠️ Cliente o assegnatario non trovati per pipeline ID {p.id}")
+                logging.warning(f"⚠️ Cliente o assegnatario mancanti per pipeline {p.id}")
                 continue
 
             admin_id = assegnatario.parent_id or assegnatario.id
 
+            # 🔍 Quanti preventivi ha lo stesso cliente?
+            altri = db.query(NltPipeline).join(NltPreventivi).filter(
+                NltPipeline.id != p.id,
+                NltPreventivi.cliente_id == preventivo.cliente_id
+            ).all()
+
+            usa_template_multiplo = len(altri) > 0
+            template_url = (
+                "https://corewebapp-azcore.up.railway.app/templates/email_welcome_multipli.html"
+                if usa_template_multiplo else
+                "https://corewebapp-azcore.up.railway.app/templates/email_welcome_singolo.html"
+            )
+
             try:
-                logging.info(f"📨 Invio email a {cliente.email} per pipeline ID {p.id}")
+                logging.info(f"📨 Invio email a {cliente.email} (template: {'multiplo' if usa_template_multiplo else 'singolo'})")
 
-                template_res = httpx.get("https://corewebapp-azcore.up.railway.app/templates/email_reminder.html", timeout=10)
+                template_res = httpx.get(template_url, timeout=10)
                 template_res.raise_for_status()
-                template_html = template_res.text
+                html = template_res.text
 
-                # Sostituzioni
-                template_html = template_html.replace("{{cliente_nome}}", cliente.nome or "")
-                template_html = template_html.replace("{{modello}}", preventivo.modello or "")
-                template_html = template_html.replace("{{marca}}", preventivo.marca or "")
-                template_html = template_html.replace("{{dealer_nome}}", f"{assegnatario.nome} {assegnatario.cognome}")
-                template_html = template_html.replace("{{url_download}}", preventivo.file_url or "#")
-                template_html = template_html.replace("{{email}}", assegnatario.email or "")
-                template_html = template_html.replace("{{telefono}}", assegnatario.cellulare or "")
-                template_html = template_html.replace("{{indirizzo}}", assegnatario.indirizzo or "")
-                template_html = template_html.replace("{{citta}}", assegnatario.citta or "")
-                template_html = template_html.replace("{{logo_url}}", assegnatario.logo_url or "")
+                html = html.replace("{{cliente_nome}}", cliente.nome or "")
+                html = html.replace("{{modello}}", preventivo.modello or "")
+                html = html.replace("{{marca}}", preventivo.marca or "")
+                html = html.replace("{{dealer_nome}}", f"{assegnatario.nome} {assegnatario.cognome}")
+                html = html.replace("{{url_download}}", preventivo.file_url or "#")
+                html = html.replace("{{email}}", assegnatario.email or "")
+                html = html.replace("{{telefono}}", assegnatario.cellulare or "")
+                html = html.replace("{{indirizzo}}", assegnatario.indirizzo or "")
+                html = html.replace("{{citta}}", assegnatario.citta or "")
+                html = html.replace("{{logo_url}}", assegnatario.logo_url or "")
+                html = html.replace("{{url_vetrina_dealer}}", f"https://corewebapp-azcore.up.railway.app/vetrina-offerte/{assegnatario.slug}")
 
                 send_email(
                     admin_id=admin_id,
                     to_email=cliente.email,
-                    subject="Hai valutato il tuo preventivo?",
-                    body=template_html
+                    subject="Noleggio Lungo Termine",
+                    body=html
                 )
 
                 p.email_reminder_inviata = True
-
                 db.add(NltPipelineLog(
                     pipeline_id=p.id,
-                    tipo_azione="[AUTO] Reminder inviato",
-                    note=f"Email automatica inviata a {cliente.email}",
+                    tipo_azione="[AUTO] Welcome email inviata",
+                    note=f"Inviata a {cliente.email} con template {'multiplo' if usa_template_multiplo else 'singolo'}",
                     data_evento=now,
                     utente_id=assegnatario.id
                 ))
 
-                logging.info(f"✅ Reminder inviato a {cliente.email} per preventivo {preventivo.id}")
+                logging.info(f"✅ Email inviata a {cliente.email} per preventivo {preventivo.id}")
 
             except Exception as e:
-                logging.error(f"❌ Errore invio reminder: {str(e)}")
+                logging.error(f"❌ Errore invio email: {e}")
                 logging.error(traceback.format_exc())
+
         else:
             fascia = prossima_fascia_lavorativa(now)
             logging.info(f"⏳ Fuori orario. Reminder rimandato per pipeline {p.id} a: {fascia}")
@@ -104,3 +114,4 @@ def invia_reminder_pipeline():
 
     db.commit()
     db.close()
+
