@@ -90,3 +90,7 @@ def invia_reminder_pipeline():
 
     db.commit()
     db.close()
+
+    if __name__ == "__main__":
+        invia_reminder_pipeline()
+

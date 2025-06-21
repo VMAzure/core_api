@@ -146,7 +146,9 @@ scheduler.add_job(sync_marche_settimanale, 'cron', day_of_week='mon', hour=1, mi
 scheduler.add_job(sync_modelli_settimanale, 'cron', day_of_week='mon', hour=2, minute=0)
 
 # Invia reminder pipeline ogni giorno lavorativo dalle 9:00 alle 17:30 ogni 30 minuti
-scheduler.add_job(invia_reminder_pipeline, 'cron', day_of_week='mon-fri', hour='9-17', minute='*/30')
+#scheduler.add_job(invia_reminder_pipeline, 'cron', day_of_week='mon-fri', hour='9-17', minute='*/30')
 
+# TEST: invia ogni 3 minuti, tutti i giorni
+scheduler.add_job(invia_reminder_pipeline, 'interval', minutes=1)
 
 
