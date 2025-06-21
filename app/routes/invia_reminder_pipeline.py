@@ -69,7 +69,7 @@ def invia_reminder_pipeline():
             slug = dealer_settings.slug if dealer_settings and dealer_settings.slug else "default"
             url_vetrina = f"https://www.azcore.it/vetrina-offerte/{slug}"
             url_non_interessato = f"https://coreapi-production-ca29.up.railway.app/api/pipeline/concludi/{p.id}"
-            url_contatto_personale= f"https://www.azcore.it/AZUREPeople/conferma-appuntamento.html?{p.id}"
+            url_contatto_personale= f"https://www.azcore.it/AZUREPeople/conferma-appuntamento.html?id={p.id}"
 
 
             # 🧠 Dati dealer con fallback su admin
