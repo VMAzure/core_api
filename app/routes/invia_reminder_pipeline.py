@@ -91,6 +91,11 @@ def invia_reminder_pipeline():
                 html = html.replace("{{logo_url}}", assegnatario.logo_url or "")
                 html = html.replace("{{url_vetrina_dealer}}", url_vetrina)
 
+                html = html.replace("{{url_contatto_personale}}", url_vetrina)
+                html = html.replace("{{url_altre_proposte}}", url_vetrina)
+                html = html.replace("{{url_non_interessato}}", url_vetrina)
+
+
                 send_email(
                     admin_id=admin_id,
                     to_email=cliente.email,
