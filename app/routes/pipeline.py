@@ -5,11 +5,13 @@ from fastapi_jwt_auth import AuthJWT
 from fastapi import Body
 from app.auth_helpers import is_admin_user, is_dealer_user, is_team_user, get_admin_id, get_dealer_id
 from app.database import get_db
-from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User, CrmAzione, NltPipelineLog
+from app.models import NltPipeline, NltPipelineStati, NltPreventivi, User, CrmAzione, NltPipelineLog, SiteAdminSettings
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from app.utils.calcola_scadenza_azione import calcola_scadenza_azione_intelligente
+from fastapi.responses import RedirectResponse
+
 
 
 router = APIRouter(prefix="/api/pipeline", tags=["Pipeline"])
@@ -425,28 +427,35 @@ def concludi_pipeline_pubblica(pipeline_id: UUID, db: Session = Depends(get_db))
     if not pipeline:
         raise HTTPException(status_code=404, detail="Pipeline non trovata")
 
-    # Già concluso? Non rifare nulla
     if pipeline.stato_pipeline == "concluso":
-        return {"message": "Pipeline già conclusa."}
+        return RedirectResponse(url="https://www.azcore.it/")
 
-    # Aggiorna stato
     pipeline.stato_pipeline = "perso"
     pipeline.updated_at = datetime.utcnow()
 
-    # Registra log
-    log = NltPipelineLog(
+    db.add(NltPipelineLog(
         pipeline_id=pipeline.id,
         tipo_azione="rifiutato",
         note="Utente ha concluso la pipeline via link pubblico",
         data_evento=datetime.utcnow(),
         utente_id=None
-    )
+    ))
 
-    db.add(log)
+    # ✅ Recupera slug come da logica corretta
+    assegnatario = db.query(User).filter_by(id=pipeline.assegnato_a).first()
+    admin_id = assegnatario.parent_id or assegnatario.id
+    admin = db.query(User).filter_by(id=admin_id).first()
+
+    dealer_settings = db.query(SiteAdminSettings).filter_by(dealer_id=assegnatario.id).first()
+    if not dealer_settings:
+        dealer_settings = db.query(SiteAdminSettings).filter_by(admin_id=admin.id).order_by(SiteAdminSettings.id.asc()).first()
+
+    slug = dealer_settings.slug if dealer_settings and dealer_settings.slug else "default"
+    url_vetrina = f"https://www.azcore.it/vetrina-offerte/{slug}"
+
     db.commit()
 
-    return {"message": "Pipeline aggiornata a 'concluso'"}
-
+    return RedirectResponse(url=url_vetrina, status_code=302)
 
 
 class RichiestaAppuntamentoInput(BaseModel):
