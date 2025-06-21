@@ -6,8 +6,6 @@ from app.models import NltPipeline, NltPreventivi, Cliente, User, NltPipelineLog
 from app.utils.email import send_email
 import logging
 
-now = datetime.utcnow() + timedelta(hours=2)  # per simulare UTC+2
-
 
 logging.basicConfig(level=logging.INFO)
 logging.info("🔁 Esecuzione invia_reminder_pipeline avviata")
@@ -24,7 +22,7 @@ def prossima_fascia_lavorativa(da: datetime) -> datetime:
 
 def invia_reminder_pipeline():
     db: Session = SessionLocal()
-    now = datetime.utcnow()
+    now = datetime.now()
 
     pipelines = db.query(NltPipeline).filter(
         NltPipeline.stato_pipeline == 'preventivo',
