@@ -6,6 +6,9 @@ from app.models import NltPipeline, NltPreventivi, Cliente, User, NltPipelineLog
 from app.utils.email import send_email
 import logging
 
+now = datetime.utcnow() + timedelta(hours=2)  # per simulare UTC+2
+
+
 def prossima_fascia_lavorativa(da: datetime) -> datetime:
     if da.weekday() >= 5:
         giorni_da_lunedi = 7 - da.weekday()
@@ -89,7 +92,3 @@ def invia_reminder_pipeline():
 
     db.commit()
     db.close()
-
-    if __name__ == "__main__":
-        invia_reminder_pipeline()
-
