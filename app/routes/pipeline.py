@@ -447,3 +447,47 @@ def concludi_pipeline_pubblica(pipeline_id: UUID, db: Session = Depends(get_db))
 
     return {"message": "Pipeline aggiornata a 'concluso'"}
 
+
+
+class RichiestaAppuntamentoInput(BaseModel):
+    data_preferita: str  # formato ISO string
+    modalita: str
+    note: Optional[str] = None
+
+
+@router.post("/richiesta-appuntamento/{pipeline_id}")
+def richiesta_appuntamento_pubblica(
+    pipeline_id: UUID,
+    payload: RichiestaAppuntamentoInput,
+    db: Session = Depends(get_db)
+):
+    pipeline = db.query(NltPipeline).filter(NltPipeline.id == pipeline_id).first()
+    if not pipeline:
+        raise HTTPException(status_code=404, detail="Pipeline non trovata")
+
+    # Componi le note
+    nota_finale = (
+        "Richiesta contatto pubblico\n"
+        f"Modalità: {payload.modalita.strip().capitalize()}\n"
+        f"Data preferita: {payload.data_preferita.strip()}\n"
+        f"Note: \"{payload.note.strip()}\"" if payload.note else "Note: (non specificate)"
+    )
+
+    # Aggiorna pipeline
+    pipeline.stato_pipeline = "negoziazione"
+    pipeline.note_commerciali = nota_finale
+    pipeline.updated_at = datetime.utcnow()
+
+    # Inserisci log
+    log = NltPipelineLog(
+        pipeline_id=pipeline.id,
+        tipo_azione="richiesta_contatto",
+        note=nota_finale,
+        data_evento=datetime.utcnow(),
+        utente_id=None  # anonimo
+    )
+
+    db.add(log)
+    db.commit()
+
+    return {"message": "Richiesta contatto registrata con successo"}
