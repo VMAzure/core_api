@@ -95,7 +95,9 @@ def invia_reminder_pipeline():
                 html = html.replace("{{url_altre_proposte}}", url_vetrina)
                 html = html.replace("{{url_non_interessato}}", url_vetrina)
 
-
+                logging.info("📄 Contenuto finale email:")
+                logging.info(html)
+                
                 send_email(
                     admin_id=admin_id,
                     to_email=cliente.email,
