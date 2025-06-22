@@ -24,6 +24,8 @@ class PipelineItemUpdate(BaseModel):
     note_commerciali: Optional[str] = None
     prossima_azione: Optional[str] = None
     scadenza_azione: Optional[datetime] = None
+    assegnato_a: Optional[int] = None  # ✅ Aggiunto!
+
 
 
 class PipelineItemOut(BaseModel):
