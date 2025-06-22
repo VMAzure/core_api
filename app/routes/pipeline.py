@@ -345,7 +345,7 @@ class PipelineLogOut(BaseModel):
     tipo_azione: str
     note: Optional[str]
     data_evento: datetime
-    utente_id: int
+    utente_id: Optional[int]  # ✅ ORA ACCETTA None
 
     class Config:
         orm_mode = True
