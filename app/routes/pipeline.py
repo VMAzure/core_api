@@ -474,7 +474,7 @@ def richiesta_appuntamento_pubblica(
     if not pipeline:
         raise HTTPException(status_code=404, detail="Pipeline non trovata")
 
-    # Componi note
+    # Componi note finali
     nota_finale = (
         "Richiesta contatto pubblico\n"
         f"Modalità: {payload.modalita.strip().capitalize()}\n"
@@ -487,10 +487,12 @@ def richiesta_appuntamento_pubblica(
     pipeline.note_commerciali = nota_finale
     pipeline.updated_at = datetime.utcnow()
 
-    # Imposta la scadenza solo se la data è valida
+    # Gestione scadenza e log.data_evento
+    data_evento_log = datetime.utcnow()
     if payload.data_preferita.lower().strip() != "il prima possibile":
         try:
-            pipeline.scadenza_azione = datetime.fromisoformat(payload.data_preferita)
+            data_evento_log = datetime.fromisoformat(payload.data_preferita)
+            pipeline.scadenza_azione = data_evento_log
         except ValueError:
             pipeline.scadenza_azione = None
     else:
@@ -501,7 +503,7 @@ def richiesta_appuntamento_pubblica(
         pipeline_id=pipeline.id,
         tipo_azione="richiesta_contatto",
         note=nota_finale,
-        data_evento=datetime.utcnow(),
+        data_evento=data_evento_log,
         utente_id=None
     )
 
