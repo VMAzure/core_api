@@ -211,14 +211,12 @@ async def upload_logo_web(
 ):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
-
     current_user = db.query(User).filter(User.email == user_email).first()
 
     if not current_user or not (is_admin_user(current_user) or is_dealer_user(current_user)):
         raise HTTPException(status_code=403, detail="Non autorizzato")
 
-    owner_id = get_settings_owner_id(current_user)  # 👈 qui cambiato!
-
+    # Verifica formato file
     allowed_extensions = {"png", "jpg", "jpeg", "webp"}
     file_extension = file.filename.split(".")[-1].lower()
     if file_extension not in allowed_extensions:
@@ -228,22 +226,36 @@ async def upload_logo_web(
     if len(file_content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File troppo grande! Dimensione massima: 5MB.")
 
-    # Caricamento file su Supabase
+    # Caricamento su Supabase
+    owner_id = get_settings_owner_id(current_user)
+    file_name = f"{owner_id}/{uuid.uuid4()}_{file.filename}"
     try:
-        file_name = f"{owner_id}/{uuid.uuid4()}_{file.filename}"  # 👈 qui cambiato!
-        response = supabase.storage.from_(SUPABASE_BUCKET_LOGO_WEB).upload(
+        supabase.storage.from_(SUPABASE_BUCKET_LOGO_WEB).upload(
             file_name, file_content, {"content-type": file.content_type}
         )
         logo_web_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_LOGO_WEB}/{file_name}"
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore upload file: {str(e)}")
 
-    # Aggiornamento automatico della tabella
-    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == owner_id).first()  # 👈 qui cambiato!
+    # Recupera/imposta settings corretti (admin o dealer)
+    if is_admin_user(current_user):
+        settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.admin_id == current_user.id,
+            SiteAdminSettings.dealer_id == None
+        ).first()
+    else:
+        settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.admin_id == get_admin_id(current_user),
+            SiteAdminSettings.dealer_id == current_user.id
+        ).first()
 
+    # Se non esiste, crea nuovo record
     if not settings:
-        settings = SiteAdminSettings(admin_id=owner_id, logo_web=logo_web_url)  # 👈 qui cambiato!
+        settings = SiteAdminSettings(
+            admin_id=current_user.id if is_admin_user(current_user) else get_admin_id(current_user),
+            dealer_id=None if is_admin_user(current_user) else current_user.id,
+            logo_web=logo_web_url
+        )
         db.add(settings)
     else:
         settings.logo_web = logo_web_url
