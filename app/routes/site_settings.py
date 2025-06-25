@@ -104,6 +104,8 @@ class SiteSettingsPayload(BaseModel):
     contact_address: str = None
     slug: str = None
     prov_vetrina: int = None
+    site_url: str = None  # 👈 aggiunto
+
 
     servizi_visibili: dict = {
         "NLT": False,
@@ -328,6 +330,7 @@ async def get_site_settings(
             favicon_url="https://example.com/favicon.ico",
             contact_email=current_user.email,
             contact_phone=current_user.cellulare,
+            site_url="https://www.azureautomotive.it",
             contact_address=f"{current_user.indirizzo}, {current_user.cap} {current_user.citta}",
             servizi_visibili={
                 "NLT": False, "REWIND": False, "NOS": False, "NBT": False
@@ -361,6 +364,7 @@ async def get_site_settings(
         "created_at": settings.created_at,
         "updated_at": settings.updated_at,
         "prov_vetrina": settings.prov_vetrina,
+        "site_url": settings.site_url or "",
 
         "servizi_visibili": settings.servizi_visibili or {
             "NLT": False, "REWIND": False, "NOS": False, "NBT": False
@@ -402,6 +406,7 @@ async def get_site_settings_public(
         "contact_email": contact_email,
         "contact_phone": contact_phone,
         "contact_address": contact_address,
+        "site_url": settings.site_url or "",
         "servizi_visibili": settings.servizi_visibili or {
             "NLT": False, "REWIND": False, "NOS": False, "NBT": False
         },

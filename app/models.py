@@ -267,6 +267,7 @@ class SiteAdminSettings(Base):
     contact_email = Column(String(255), nullable=True)
     contact_phone = Column(String(50), nullable=True)
     contact_address = Column(String(255), nullable=True)
+    site_url = Column(String, nullable=True)
 
     created_at = Column(DateTime, default=func.now(), nullable=True)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=True)
