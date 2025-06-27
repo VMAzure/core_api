@@ -48,7 +48,6 @@ async def twilio_callback(request: Request):
     return JSONResponse(status_code=200, content={"status": "ok"})
 
 
-router = APIRouter()
 
 @router.get("/test-twilio")
 def test_whatsapp():
