@@ -1,7 +1,7 @@
 ﻿from fastapi import APIRouter, Request, status
 from fastapi.responses import JSONResponse
 from datetime import datetime
-from utils.twilio_client import send_whatsapp_message
+from app.utils.twilio_client import send_whatsapp_message
 
 
 router = APIRouter(prefix="/twilio", tags=["Twilio"])
