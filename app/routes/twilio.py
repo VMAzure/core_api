@@ -53,7 +53,7 @@ router = APIRouter()
 @router.get("/test-twilio")
 def test_whatsapp():
     sid = send_whatsapp_message(
-        to="whatsapp:+39XXXXXXXXXX",  # tuo numero attivato
+        to="whatsapp:+393505048119",  # tuo numero attivato
         body="✅ Test WhatsApp AZCORE — tutto funziona!"
     )
     return {"status": "ok" if sid else "errore", "sid": sid}
