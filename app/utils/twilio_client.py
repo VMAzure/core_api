@@ -1,0 +1,31 @@
+﻿import os
+from twilio.rest import Client
+
+# ✅ Variabili lette da Railway (già configurate)
+TWILIO_SID = os.getenv("TWILIO_SID")
+TWILIO_TOKEN = os.getenv("TWILIO_TOKEN")
+TWILIO_WHATSAPP_FROM = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")  # default sandbox
+
+# ⚙️ Inizializzazione client Twilio
+client = Client(TWILIO_SID, TWILIO_TOKEN)
+
+
+def send_whatsapp_message(to: str, body: str) -> str | None:
+    """
+    Invia un messaggio WhatsApp testuale (compatibile con sandbox Twilio).
+    
+    :param to: Numero destinatario nel formato 'whatsapp:+39...'
+    :param body: Testo del messaggio
+    :return: SID del messaggio inviato, oppure None in caso di errore
+    """
+    try:
+        message = client.messages.create(
+            from_=TWILIO_WHATSAPP_FROM,
+            to=to,
+            body=body
+        )
+        print(f"✅ WhatsApp inviato a {to} — SID: {message.sid}")
+        return message.sid
+    except Exception as e:
+        print(f"❌ Errore invio WhatsApp a {to}: {e}")
+        return None
