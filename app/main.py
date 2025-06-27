@@ -47,6 +47,7 @@ from app.routes.azinsurance import insurance, setup
 from app.routes import openai_config  
 from app.routes.openai_config import genera_descrizione_gpt
 from app.routes.pipeline import router as pipeline_router
+from app.routes import twilio  
 
 
 
@@ -173,6 +174,9 @@ app.include_router(insurance.router, prefix="/azinsurance")
 app.include_router(setup.router, prefix="/azinsurance")
 app.include_router(openai_config.router)
 app.include_router(pipeline_router)
+
+app.include_router(twilio.router)
+
 
 
 
