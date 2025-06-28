@@ -1,7 +1,8 @@
 ﻿import os
 import json
-
 from twilio.rest import Client
+import requests
+from requests.auth import HTTPBasicAuth
 
 # ✅ Variabili lette da Railway (già configurate)
 TWILIO_SID = os.getenv("TWILIO_SID")
@@ -36,22 +37,29 @@ def send_whatsapp_message(to: str, body: str) -> str | None:
 
 def send_whatsapp_template(to: str, content_sid: str, content_variables: dict) -> str | None:
     try:
-        print("📤 Invio template con:", {
-            "to": to,
-            "messaging_service_sid": TWILIO_MESSAGING_SERVICE_SID,
-            "content_sid": content_sid,
-            "variables": content_variables
-        })
+        payload = {
+            "To": to,
+            "MessagingServiceSid": TWILIO_MESSAGING_SERVICE_SID,
+            "ContentSid": content_sid,
+            "ContentVariables": json.dumps(content_variables)
+        }
 
-        message = client.messages.create(
-            to=to,
-            messaging_service_sid=TWILIO_MESSAGING_SERVICE_SID,
-            content_sid=content_sid,
-            content_variables=json.dumps(content_variables)
+        print("📤 Request a Twilio:", payload)
+
+        response = requests.post(
+            f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_SID}/Messages.json",
+            auth=HTTPBasicAuth(TWILIO_SID, TWILIO_TOKEN),
+            data=payload
         )
-        print(f"✅ Template WhatsApp inviato a {to} — SID: {message.sid}")
-        return message.sid
+
+        if response.status_code >= 400:
+            print("❌ Twilio response:", response.status_code, response.text)
+            return None
+
+        data = response.json()
+        print(f"✅ Template WhatsApp inviato a {to} — SID: {data.get('sid')}")
+        return data.get("sid")
 
     except Exception as e:
-        print(f"❌ Errore invio template WhatsApp a {to}: {e}")
+        print(f"❌ Errore invio template WhatsApp via Content API: {e}")
         return None
