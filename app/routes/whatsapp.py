@@ -179,6 +179,8 @@ async def log_messaggio_inbound(
     msg_sid = form.get("MessageSid")
     timestamp = datetime.utcnow()
 
+    print("📩 INBOUND DEBUG — From:", sender, "| Body:", message, "| SID:", msg_sid)
+
     if not sender or not message:
         raise HTTPException(status_code=400, detail="Messaggio non valido")
 
@@ -195,6 +197,7 @@ async def log_messaggio_inbound(
     )
 
     if not pipeline:
+        print("❌ Nessuna pipeline trovata per numero:", numero)
         raise HTTPException(status_code=404, detail="Pipeline non trovata per questo numero")
 
     nuovo_log = NltMessaggiWhatsapp(
@@ -209,6 +212,7 @@ async def log_messaggio_inbound(
     db.add(nuovo_log)
     db.commit()
 
-    logging.info(f"\U0001f4e9 Messaggio IN ricevuto da {numero}: {message}")
+    logging.info(f"📨 Messaggio IN ricevuto da {numero}: {message}")
 
     return {"status": "ok"}
+
