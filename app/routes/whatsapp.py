@@ -86,15 +86,18 @@ def invia_messaggio_libero(
     if not pipeline or not pipeline.preventivo or not pipeline.preventivo.cliente or not pipeline.preventivo.cliente.telefono:
         raise HTTPException(status_code=404, detail="Numero telefono cliente non trovato")
 
-    numero = f"whatsapp:{pipeline.preventivo.cliente.telefono.strip()}"
+    numero = pipeline.preventivo.cliente.telefono.strip()
+    wa_numero = f"whatsapp:{numero}"
 
     sid = send_whatsapp_message(
-        to=numero,
+        to=wa_numero,
         body=data.messaggio.strip()
     )
 
     if not sid:
         raise HTTPException(status_code=500, detail="Errore invio messaggio WhatsApp")
+
+    print(f"📤 Log WhatsApp in DB — SID salvato: {sid} → Numero: {numero}")
 
     nuovo_log = NltMessaggiWhatsapp(
         pipeline_id=pipeline.id,
@@ -108,7 +111,7 @@ def invia_messaggio_libero(
     db.add(nuovo_log)
     db.commit()
 
-    logging.info(f"\U0001f4ac Messaggio libero inviato da utente {utente_id} alla pipeline {pipeline_id}")
+    logging.info(f"💬 Messaggio libero inviato da utente {utente_id} alla pipeline {pipeline_id}")
 
     return {
         "status": "ok",
