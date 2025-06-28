@@ -204,14 +204,18 @@ def get_lista_sessioni(
 
     sessioni_query = db.query(WhatsappSessione).join(Cliente, WhatsappSessione.cliente_id == Cliente.id)
 
-    if utente.role in ["admin_team", "dealer_team"]:
-        sessioni_query = sessioni_query.filter(Cliente.dealer_id == utente.id)
+    from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 
-        membri_team_subq = select(User.id).where(User.parent_id == utente.id)
+    if is_dealer_user(utente):
+        dealer_id = get_dealer_id(utente)
+        sessioni_query = sessioni_query.filter(Cliente.dealer_id == dealer_id)
 
+    elif is_admin_user(utente):
+        admin_id = get_admin_id(utente)
+        membri_team_subq = select(User.id).where(User.parent_id == admin_id)
         sessioni_query = sessioni_query.filter(
             or_(
-                Cliente.dealer_id == utente.id,
+                Cliente.dealer_id == admin_id,
                 Cliente.dealer_id.in_(membri_team_subq)
             )
         )
