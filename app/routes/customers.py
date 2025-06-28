@@ -1261,12 +1261,13 @@ def get_clienti_filtrati(
 
     clienti_query = db.query(Cliente)
 
-    if user.ruolo in ("admin", "admin_team"):
+    if user.role in ("admin", "admin_team"):
         clienti_query = clienti_query.filter(Cliente.admin_id == admin_id)
-    elif user.ruolo in ("dealer", "dealer_team"):
+    elif user.role in ("dealer", "dealer_team"):
         clienti_query = clienti_query.filter(Cliente.dealer_id == dealer_id)
     else:
         raise HTTPException(403, detail="Ruolo non autorizzato")
+
 
     # 🧠 Filtro in base al contesto
     if contesto == "pipeline":
