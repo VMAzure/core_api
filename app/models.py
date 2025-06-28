@@ -861,7 +861,6 @@ class NltMessaggiWhatsapp(Base):
     __tablename__ = "nlt_messaggi_whatsapp"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
-    pipeline_id = Column(UUID(as_uuid=True), ForeignKey("public.nlt_pipeline.id", ondelete="CASCADE"), nullable=False)
     mittente = Column(String, nullable=False)  # 'cliente' o 'utente'
     messaggio = Column(Text, nullable=False)
     twilio_sid = Column(String)
