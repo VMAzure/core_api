@@ -292,6 +292,8 @@ def get_nuovi_messaggi(sessione_id: str, timestamp: str, Authorize: AuthJWT = De
 class WhatsAppTemplateOut(BaseModel):
     nome: str
     content_sid: str
+    contesto: str  
+
 
 @router.get("/templates", response_model=List[WhatsAppTemplateOut])
 def get_templates(
@@ -305,7 +307,14 @@ def get_templates(
         .order_by(WhatsAppTemplate.nome.asc())
         .all()
     )
-    return [{"nome": t.nome, "content_sid": t.content_sid} for t in templates]
+    return [
+        {
+            "nome": t.nome,
+            "content_sid": t.content_sid,
+            "contesto": t.contesto 
+        }
+        for t in templates
+    ]
 
 @router.post("/sync-templates")
 def sync_twilio_templates(

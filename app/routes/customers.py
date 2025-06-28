@@ -1255,7 +1255,7 @@ class ClienteFiltroOut(BaseModel):
     class Config:
         orm_mode = True
 
-@router.get("/api/clienti/filtrati", response_model=List[ClienteFiltroOut])
+@router.get("/clienti/filtrati", response_model=List[ClienteFiltroOut])
 def get_clienti_filtrati(
     contesto: str = Query(..., description="Valori possibili: pipeline, preventivo, marketing"),
     Authorize: AuthJWT = Depends(),
