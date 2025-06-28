@@ -41,13 +41,17 @@ def invia_template_whatsapp(
     if not pipeline or not pipeline.preventivo or not pipeline.preventivo.cliente or not pipeline.preventivo.cliente.telefono:
         raise HTTPException(status_code=404, detail="Numero telefono cliente non trovato")
 
-    numero = f"whatsapp:{pipeline.preventivo.cliente.telefono.strip()}"
+    numero = pipeline.preventivo.cliente.telefono.strip()
+    if not numero.startswith("+"):
+        numero = "+39" + numero
+    wa_numero = f"whatsapp:{numero}"
 
     sid = send_whatsapp_template(
-        to=numero,
+        to=wa_numero,
         content_sid=template.content_sid,
         content_variables=data.variables
     )
+
 
     if not sid:
         raise HTTPException(status_code=500, detail="Errore invio messaggio WhatsApp")
@@ -96,7 +100,10 @@ def invia_messaggio_libero(
         raise HTTPException(status_code=404, detail="Numero telefono cliente non trovato")
 
     numero = pipeline.preventivo.cliente.telefono.strip()
+    if not numero.startswith("+"):
+        numero = "+39" + numero
     wa_numero = f"whatsapp:{numero}"
+
 
     sid = send_whatsapp_message(
         to=wa_numero,
