@@ -7,6 +7,8 @@ from twilio.rest import Client
 TWILIO_SID = os.getenv("TWILIO_SID")
 TWILIO_TOKEN = os.getenv("TWILIO_TOKEN")
 TWILIO_WHATSAPP_FROM = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")  # default sandbox
+TWILIO_MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
+
 
 # ⚙️ Inizializzazione client Twilio
 client = Client(TWILIO_SID, TWILIO_TOKEN)
@@ -35,8 +37,8 @@ def send_whatsapp_message(to: str, body: str) -> str | None:
 def send_whatsapp_template(to: str, content_sid: str, content_variables: dict) -> str | None:
     try:
         message = client.messages.create(
-            from_=TWILIO_WHATSAPP_FROM,
             to=to,
+            messaging_service_sid=TWILIO_MESSAGING_SERVICE_SID,
             content_sid=content_sid,
             content_variables=json.dumps(content_variables)
         )
