@@ -178,7 +178,7 @@ app.include_router(openai_config.router)
 app.include_router(pipeline_router)
 
 app.include_router(twilio.router)
-app.include_router(whatsapp_router, prefix="/api/whatsapp", tags=["WhatsApp"])
+app.include_router(whatsapp_router)
 
 
 
