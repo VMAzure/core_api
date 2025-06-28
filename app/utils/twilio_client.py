@@ -36,6 +36,13 @@ def send_whatsapp_message(to: str, body: str) -> str | None:
 
 def send_whatsapp_template(to: str, content_sid: str, content_variables: dict) -> str | None:
     try:
+        print("📤 Invio template con:", {
+            "to": to,
+            "messaging_service_sid": TWILIO_MESSAGING_SERVICE_SID,
+            "content_sid": content_sid,
+            "variables": content_variables
+        })
+
         message = client.messages.create(
             to=to,
             messaging_service_sid=TWILIO_MESSAGING_SERVICE_SID,
@@ -44,6 +51,7 @@ def send_whatsapp_template(to: str, content_sid: str, content_variables: dict) -
         )
         print(f"✅ Template WhatsApp inviato a {to} — SID: {message.sid}")
         return message.sid
+
     except Exception as e:
         print(f"❌ Errore invio template WhatsApp a {to}: {e}")
         return None
