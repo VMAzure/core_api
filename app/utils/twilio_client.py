@@ -1,4 +1,6 @@
 ﻿import os
+import json
+
 from twilio.rest import Client
 
 # ✅ Variabili lette da Railway (già configurate)
@@ -28,4 +30,18 @@ def send_whatsapp_message(to: str, body: str) -> str | None:
         return message.sid
     except Exception as e:
         print(f"❌ Errore invio WhatsApp a {to}: {e}")
+        return None
+
+def send_whatsapp_template(to: str, content_sid: str, content_variables: dict) -> str | None:
+    try:
+        message = client.messages.create(
+            from_=TWILIO_WHATSAPP_FROM,
+            to=to,
+            content_sid=content_sid,
+            content_variables=json.dumps(content_variables)
+        )
+        print(f"✅ Template WhatsApp inviato a {to} — SID: {message.sid}")
+        return message.sid
+    except Exception as e:
+        print(f"❌ Errore invio template WhatsApp a {to}: {e}")
         return None

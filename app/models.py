@@ -848,3 +848,32 @@ class NltPipelineLog(Base):
     pipeline_id = Column(UUID(as_uuid=True), ForeignKey("public.nlt_pipeline.id", ondelete="CASCADE"), nullable=False)
     utente_id = Column(ForeignKey("public.utenti.id"), nullable=False)
 
+class WhatsAppTemplate(Base):
+    __tablename__ = "whatsapp_templates"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    nome = Column(String, unique=True, nullable=False)
+    content_sid = Column(String, nullable=False)
+    descrizione = Column(String)
+    attivo = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class NltMessaggiWhatsapp(Base):
+    __tablename__ = "nlt_messaggi_whatsapp"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    pipeline_id = Column(UUID(as_uuid=True), ForeignKey("nlt_pipeline.id", ondelete="CASCADE"), nullable=False)
+    mittente = Column(String, nullable=False)  # 'cliente' o 'utente'
+    messaggio = Column(Text, nullable=False)
+    twilio_sid = Column(String)
+    stato_messaggio = Column(String, nullable=True)
+
+    template_usato = Column(String)
+    direzione = Column(String, nullable=False)  # 'in' o 'out'
+    utente_id = Column(Integer, ForeignKey("utenti.id"))
+    data_invio = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Facoltative per relazioni
+    pipeline = relationship("NltPipeline", backref="messaggi_whatsapp")
+    utente = relationship("User", backref="messaggi_whatsapp")
+
