@@ -4,7 +4,7 @@ from typing import Dict, List
 from app.utils.twilio_client import send_whatsapp_template, send_whatsapp_message
 from app.models import NltPipeline, NltPreventivi, Cliente, User, WhatsAppTemplate, NltMessaggiWhatsapp, WhatsappSessione
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from app.database import get_db
 from fastapi_jwt_auth import AuthJWT
 import logging
@@ -280,13 +280,14 @@ def get_lista_sessioni(
         # Solo i clienti assegnati a me
         sessioni_query = sessioni_query.filter(Cliente.dealer_id == utente.id)
     elif utente.role in ["admin", "dealer"]:
-        # Tutti i clienti del proprio team (parent_id)
-        membri_team = (
-            db.query(User.id)
-            .filter(User.parent_id == utente.id)
-            .subquery()
+        membri_team = db.query(User.id).filter(User.parent_id == utente.id).subquery()
+        sessioni_query = sessioni_query.filter(
+            or_(
+                Cliente.dealer_id == utente.id,
+                Cliente.dealer_id.in_(membri_team)
+            )
         )
-        sessioni_query = sessioni_query.filter(Cliente.dealer_id.in_([utente.id]).union(membri_team))
+
     else:
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
 
