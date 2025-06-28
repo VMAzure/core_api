@@ -2,7 +2,7 @@
 from pydantic import BaseModel
 from typing import Dict, List
 from app.utils.twilio_client import send_whatsapp_template, send_whatsapp_message
-from app.models import NltPipeline, NltClientiPubblici, User, WhatsAppTemplate, NltMessaggiWhatsapp
+from app.models import NltPipeline, NltPreventivi, Cliente, User, WhatsAppTemplate, NltMessaggiWhatsapp
 from sqlalchemy.orm import Session
 from app.database import get_db
 from fastapi_jwt_auth import AuthJWT
@@ -34,10 +34,10 @@ def invia_template_whatsapp(
         raise HTTPException(status_code=400, detail="Template non riconosciuto o disattivo")
 
     pipeline = db.query(NltPipeline).filter_by(id=pipeline_id).first()
-    if not pipeline or not pipeline.telefono:
-        raise HTTPException(status_code=404, detail="Pipeline o numero cliente non trovato")
+    if not pipeline or not pipeline.preventivo or not pipeline.preventivo.cliente or not pipeline.preventivo.cliente.telefono:
+        raise HTTPException(status_code=404, detail="Numero telefono cliente non trovato")
 
-    numero = f"whatsapp:{pipeline.telefono.strip()}"
+    numero = f"whatsapp:{pipeline.preventivo.cliente.telefono.strip()}"
 
     sid = send_whatsapp_template(
         to=numero,
@@ -83,10 +83,10 @@ def invia_messaggio_libero(
     utente_id = Authorize.get_jwt_subject()
 
     pipeline = db.query(NltPipeline).filter_by(id=pipeline_id).first()
-    if not pipeline or not pipeline.telefono:
-        raise HTTPException(status_code=404, detail="Pipeline o numero cliente non trovato")
+    if not pipeline or not pipeline.preventivo or not pipeline.preventivo.cliente or not pipeline.preventivo.cliente.telefono:
+        raise HTTPException(status_code=404, detail="Numero telefono cliente non trovato")
 
-    numero = f"whatsapp:{pipeline.telefono.strip()}"
+    numero = f"whatsapp:{pipeline.preventivo.cliente.telefono.strip()}"
 
     sid = send_whatsapp_message(
         to=numero,
@@ -144,7 +144,6 @@ def get_messaggi_pipeline(
             "twilio_sid": m.twilio_sid,
             "utente_id": m.utente_id,
             "stato_messaggio": m.stato_messaggio,
-
         }
         for m in messaggi
     ]
@@ -165,7 +164,14 @@ async def log_messaggio_inbound(
         raise HTTPException(status_code=400, detail="Messaggio non valido")
 
     numero = sender.replace("whatsapp:", "").strip()
-    pipeline = db.query(NltPipeline).filter(NltPipeline.telefono == numero).first()
+
+    pipeline = (
+        db.query(NltPipeline)
+        .join(NltPreventivi, NltPipeline.preventivo_id == NltPreventivi.id)
+        .join(Cliente, NltPreventivi.cliente_id == Cliente.id)
+        .filter(Cliente.telefono == numero)
+        .first()
+    )
 
     if not pipeline:
         raise HTTPException(status_code=404, detail="Pipeline non trovata per questo numero")
