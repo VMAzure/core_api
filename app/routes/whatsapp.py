@@ -262,4 +262,62 @@ async def log_messaggio_inbound(
 
     return {"status": "ok"}
 
+@router.get("/sessioni")
+def get_lista_sessioni(
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    email = Authorize.get_jwt_subject()
 
+    utente = db.query(User).filter_by(email=email).first()
+    if not utente:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+
+    sessioni_query = db.query(WhatsappSessione).join(Cliente, WhatsappSessione.cliente_id == Cliente.id)
+
+    if utente.role in ["admin_team", "dealer_team"]:
+        # Solo i clienti assegnati a me
+        sessioni_query = sessioni_query.filter(Cliente.dealer_id == utente.id)
+    elif utente.role in ["admin", "dealer"]:
+        # Tutti i clienti del proprio team (parent_id)
+        membri_team = (
+            db.query(User.id)
+            .filter(User.parent_id == utente.id)
+            .subquery()
+        )
+        sessioni_query = sessioni_query.filter(Cliente.dealer_id.in_([utente.id]).union(membri_team))
+    else:
+        raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
+
+    sessioni = sessioni_query.order_by(WhatsappSessione.ultimo_aggiornamento.desc()).all()
+
+    risposta = []
+    for s in sessioni:
+        ultimo = (
+            db.query(NltMessaggiWhatsapp)
+            .filter(NltMessaggiWhatsapp.sessione_id == s.id)
+            .order_by(NltMessaggiWhatsapp.data_invio.desc())
+            .first()
+        )
+
+        non_letti = (
+            db.query(func.count())
+            .select_from(NltMessaggiWhatsapp)
+            .filter_by(sessione_id=s.id, direzione="in", stato_messaggio=None)
+            .scalar()
+        )
+
+        cliente = s.cliente
+        nome = cliente.ragione_sociale or f"{cliente.nome} {cliente.cognome}"
+
+        risposta.append({
+            "sessione_id": str(s.id),
+            "cliente_nome": nome,
+            "numero": s.numero,
+            "ultimo_messaggio": ultimo.messaggio if ultimo else "",
+            "data_ultima_attivita": s.ultimo_aggiornamento.isoformat(),
+            "non_letti": non_letti
+        })
+
+    return risposta
