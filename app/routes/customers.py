@@ -1261,23 +1261,26 @@ def get_clienti_filtrati(
 
     clienti_query = db.query(Cliente)
 
-    if is_admin_user(user):
+    if user.ruolo in ("admin", "admin_team"):
         clienti_query = clienti_query.filter(Cliente.admin_id == admin_id)
-    elif is_dealer_user(user):
+    elif user.ruolo in ("dealer", "dealer_team"):
         clienti_query = clienti_query.filter(Cliente.dealer_id == dealer_id)
     else:
         raise HTTPException(403, detail="Ruolo non autorizzato")
 
     # 🧠 Filtro in base al contesto
     if contesto == "pipeline":
-        clienti_ids = db.query(NltPipeline.preventivo_id).join(NltPreventivi).with_entities(NltPreventivi.cliente_id)
+        clienti_ids = (
+            db.query(NltPipeline.preventivo_id)
+            .join(NltPreventivi)
+            .with_entities(NltPreventivi.cliente_id)
+        )
         clienti_query = clienti_query.filter(Cliente.id.in_(clienti_ids))
     elif contesto == "preventivo":
         clienti_ids = db.query(NltPreventivi.cliente_id).distinct()
         clienti_query = clienti_query.filter(Cliente.id.in_(clienti_ids))
     elif contesto == "marketing":
-        # Nessun filtro: ritorna tutti i clienti visibili
-        pass
+        pass  # nessun filtro ulteriore
     else:
         raise HTTPException(400, detail="Contesto non valido")
 
