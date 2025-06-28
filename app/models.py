@@ -837,15 +837,14 @@ class NltPipelineLog(Base):
     __table_args__ = {"schema": "public"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    pipeline_id = Column(UUID(as_uuid=True), ForeignKey("nlt_pipeline.id", ondelete="CASCADE"), nullable=False)
     tipo_azione = Column(String, nullable=False)  # es: 'Email', 'Telefono', 'WhatsApp'
     note = Column(Text)
     data_evento = Column(DateTime, default=datetime.utcnow, nullable=False)
-    utente_id = Column(ForeignKey("utenti.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Facoltativi per joinedload in GET log
     pipeline_id = Column(UUID(as_uuid=True), ForeignKey("public.nlt_pipeline.id", ondelete="CASCADE"), nullable=False)
+
     utente_id = Column(ForeignKey("public.utenti.id"), nullable=False)
 
 class WhatsAppTemplate(Base):
@@ -862,7 +861,7 @@ class NltMessaggiWhatsapp(Base):
     __tablename__ = "nlt_messaggi_whatsapp"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
-    pipeline_id = Column(UUID(as_uuid=True), ForeignKey("nlt_pipeline.id", ondelete="CASCADE"), nullable=False)
+    pipeline_id = Column(UUID(as_uuid=True), ForeignKey("public.nlt_pipeline.id", ondelete="CASCADE"), nullable=False)
     mittente = Column(String, nullable=False)  # 'cliente' o 'utente'
     messaggio = Column(Text, nullable=False)
     twilio_sid = Column(String)
