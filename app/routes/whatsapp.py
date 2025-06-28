@@ -54,6 +54,7 @@ def invia_template_whatsapp(
         content_variables=data.variables
     )
 
+
     if not sid:
         raise HTTPException(500, detail="Errore invio messaggio WhatsApp")
 
