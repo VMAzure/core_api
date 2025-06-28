@@ -1227,3 +1227,15 @@ def aggiorna_email_cliente_pubblico(
         "success": True,
         "message": "Email aggiornata. Preventivo in invio."
     }
+
+@router.get("/clienti/{cliente_id}")
+def get_cliente_singolo(
+    cliente_id: int,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
+    return cliente
