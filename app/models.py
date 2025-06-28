@@ -855,6 +855,8 @@ class WhatsAppTemplate(Base):
     content_sid = Column(String, nullable=False)
     descrizione = Column(String)
     attivo = Column(Boolean, nullable=False, default=True)
+    contesto = Column(String(50), default="generico")  # 👈 AGGIUNTO QUI
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class NltMessaggiWhatsapp(Base):

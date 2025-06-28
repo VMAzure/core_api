@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from app.database import get_db, engine  # sostituisci con import corretto
 
-from app.models import User, Cliente, ClienteModifica, NltClientiPubbliciCreate, NltPreventivi, NltPreventiviLinks, NltClientiPubblici, SiteAdminSettings
+from app.models import User, Cliente, ClienteModifica, NltClientiPubbliciCreate, NltPreventivi, NltPreventiviLinks, NltClientiPubblici, SiteAdminSettings, NltPipeline
 from fastapi_jwt_auth import AuthJWT
 from typing import List, Optional
 from app.schemas import ClienteResponse, ClienteCreateRequest,  NltClientiPubbliciResponse
@@ -17,6 +17,9 @@ from sqlalchemy import or_, func
 from app.models import NltOfferte, NltService, NltPlayers, NltDocumentiRichiesti
 import asyncio
 import os
+
+from typing import List
+
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET")
@@ -1239,3 +1242,55 @@ def get_cliente_singolo(
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente non trovato")
     return cliente
+
+
+
+class ClienteFiltroOut(BaseModel):
+    id: int
+    nome: str | None
+    cognome: str | None
+    ragione_sociale: str | None
+    telefono: str | None
+
+    class Config:
+        orm_mode = True
+
+@router.get("/api/clienti/filtrati", response_model=List[ClienteFiltroOut])
+def get_clienti_filtrati(
+    contesto: str = Query(..., description="Valori possibili: pipeline, preventivo, marketing"),
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    email = Authorize.get_jwt_subject()
+    user = db.query(User).filter_by(email=email).first()
+    if not user:
+        raise HTTPException(404, detail="Utente non trovato")
+
+    admin_id = get_admin_id(user)
+    dealer_id = get_dealer_id(user)
+
+    clienti_query = db.query(Cliente)
+
+    if is_admin_user(user):
+        clienti_query = clienti_query.filter(Cliente.admin_id == admin_id)
+    elif is_dealer_user(user):
+        clienti_query = clienti_query.filter(Cliente.dealer_id == dealer_id)
+    else:
+        raise HTTPException(403, detail="Ruolo non autorizzato")
+
+    # 🧠 Filtro in base al contesto
+    if contesto == "pipeline":
+        clienti_ids = db.query(NltPipeline.preventivo_id).join(NltPreventivi).with_entities(NltPreventivi.cliente_id)
+        clienti_query = clienti_query.filter(Cliente.id.in_(clienti_ids))
+    elif contesto == "preventivo":
+        clienti_ids = db.query(NltPreventivi.cliente_id).distinct()
+        clienti_query = clienti_query.filter(Cliente.id.in_(clienti_ids))
+    elif contesto == "marketing":
+        # Nessun filtro: ritorna tutti i clienti visibili
+        pass
+    else:
+        raise HTTPException(400, detail="Contesto non valido")
+
+    return clienti_query.all()
+
