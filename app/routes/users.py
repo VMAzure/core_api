@@ -449,53 +449,57 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
         }
 
         if user.role in ["dealer", "dealer_team"]:
-            # Ricaviamo il dealer effettivo
             dealer_id = get_dealer_id(user)
             dealer = db.query(User).filter(User.id == dealer_id).first()
 
-            # Ricaviamo l'admin collegato al dealer
-            admin = db.query(User).filter(User.id == dealer.parent_id).first()
+            response["dealer_info"] = {
+                "id": user.id,
+                "email": user.email,
+                "nome": user.nome,
+                "cognome": user.cognome,
+                "cellulare": user.cellulare
+            }
 
-            response["dealer_info"] = user_data
             response["admin_info"] = {
-                "id": admin.id,
-                "email": admin.email,
-                "nome": admin.nome,
-                "cognome": admin.cognome,
-                "ragione_sociale": admin.ragione_sociale,
-                "partita_iva": admin.partita_iva,
-                "indirizzo": admin.indirizzo,
-                "cap": admin.cap,
-                "citta": admin.citta,
-                "codice_sdi": admin.codice_sdi,
-                "cellulare": admin.cellulare,
-                "credit": admin.credit,
-                "logo_url": admin.logo_url,
-                "created_at": admin.created_at.isoformat() if admin.created_at else None,
-                "updated_at": admin.updated_at.isoformat() if admin.updated_at else None
+                "id": dealer.parent.id if dealer.parent else None,
+                "email": dealer.parent.email if dealer.parent else None,
+                "nome": dealer.parent.nome if dealer.parent else None,
+                "cognome": dealer.parent.cognome if dealer.parent else None,
+                "ragione_sociale": dealer.parent.ragione_sociale if dealer.parent else None,
+                "partita_iva": dealer.parent.partita_iva if dealer.parent else None,
+                "indirizzo": dealer.parent.indirizzo if dealer.parent else None,
+                "cap": dealer.parent.cap if dealer.parent else None,
+                "citta": dealer.parent.citta if dealer.parent else None,
+                "codice_sdi": dealer.parent.codice_sdi if dealer.parent else None,
+                "cellulare": dealer.parent.cellulare if dealer.parent else None,
+                "credit": dealer.parent.credit if dealer.parent else None,
+                "logo_url": dealer.parent.logo_url if dealer.parent else None,
+                "created_at": dealer.parent.created_at.isoformat() if dealer.parent and dealer.parent.created_at else None,
+                "updated_at": dealer.parent.updated_at.isoformat() if dealer.parent and dealer.parent.updated_at else None
             }
 
         elif user.role in ["admin", "admin_team"]:
             admin_id = get_admin_id(user)
-            admin = user if user.role == "admin" else db.query(User).filter(User.id == admin_id).first()
+            admin = db.query(User).filter(User.id == admin_id).first()
 
             response["admin_info"] = {
                 "id": admin.id,
                 "email": admin.email,
-                "nome": admin.nome,
-                "cognome": admin.cognome,
+                "nome": user.nome if user.role == "admin_team" else admin.nome,
+                "cognome": user.cognome if user.role == "admin_team" else admin.cognome,
                 "ragione_sociale": admin.ragione_sociale,
                 "partita_iva": admin.partita_iva,
                 "indirizzo": admin.indirizzo,
                 "cap": admin.cap,
                 "citta": admin.citta,
                 "codice_sdi": admin.codice_sdi,
-                "cellulare": admin.cellulare,
+                "cellulare": user.cellulare if user.role == "admin_team" else admin.cellulare,
                 "credit": admin.credit,
                 "logo_url": admin.logo_url,
                 "created_at": admin.created_at.isoformat() if admin.created_at else None,
                 "updated_at": admin.updated_at.isoformat() if admin.updated_at else None
             }
+
 
         return response
 
