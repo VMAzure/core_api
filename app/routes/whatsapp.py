@@ -9,6 +9,7 @@ from app.database import get_db
 from fastapi_jwt_auth import AuthJWT
 import logging
 from datetime import datetime
+from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 
 
 router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp"])
@@ -190,6 +191,7 @@ async def log_messaggio_inbound(
 
     return {"status": "ok"}
 
+
 @router.get("/sessioni")
 def get_lista_sessioni(
     Authorize: AuthJWT = Depends(),
@@ -203,8 +205,6 @@ def get_lista_sessioni(
         raise HTTPException(status_code=404, detail="Utente non trovato")
 
     sessioni_query = db.query(WhatsappSessione).join(Cliente, WhatsappSessione.cliente_id == Cliente.id)
-
-    from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 
     if is_dealer_user(utente):
         dealer_id = get_dealer_id(utente)
@@ -254,6 +254,7 @@ def get_lista_sessioni(
         })
 
     return risposta
+
 
 @router.get("/messaggi-sessione/{sessione_id}/since/{timestamp}")
 def get_nuovi_messaggi(sessione_id: str, timestamp: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
