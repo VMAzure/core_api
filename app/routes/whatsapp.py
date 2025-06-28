@@ -27,7 +27,11 @@ def invia_template_whatsapp(
     db: Session = Depends(get_db)
 ):
     Authorize.jwt_required()
-    utente_id = Authorize.get_jwt_subject()
+    utente_email = Authorize.get_jwt_subject()
+    utente = db.query(User).filter_by(email=utente_email).first()
+    if not utente:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+    utente_id = utente.id
 
     template = db.query(WhatsAppTemplate).filter_by(nome=data.template, attivo=True).first()
     if not template:
@@ -80,7 +84,12 @@ def invia_messaggio_libero(
     db: Session = Depends(get_db)
 ):
     Authorize.jwt_required()
-    utente_id = Authorize.get_jwt_subject()
+    utente_email = Authorize.get_jwt_subject()
+    utente = db.query(User).filter_by(email=utente_email).first()
+    if not utente:
+        raise HTTPException(status_code=404, detail="Utente non trovato")
+    utente_id = utente.id
+
 
     pipeline = db.query(NltPipeline).filter_by(id=pipeline_id).first()
     if not pipeline or not pipeline.preventivo or not pipeline.preventivo.cliente or not pipeline.preventivo.cliente.telefono:
