@@ -361,3 +361,28 @@ def sync_twilio_templates(
         "totali": len(data.get("templates", []))
     }
 
+@router.post("/sessioni/crea/{cliente_id}")
+def crea_sessione_whatsapp(
+    cliente_id: int,
+    db: Session = Depends(get_db),
+    Authorize: AuthJWT = Depends()
+):
+    Authorize.jwt_required()
+
+    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not cliente or not cliente.telefono:
+        raise HTTPException(status_code=404, detail="Cliente non trovato o telefono mancante")
+
+    sessione = db.query(WhatsappSessione).filter_by(cliente_id=cliente.id).first()
+
+    if not sessione:
+        sessione = WhatsappSessione(
+            cliente_id=cliente.id,
+            numero=cliente.telefono.strip()
+        )
+        db.add(sessione)
+        db.commit()
+        db.refresh(sessione)
+
+    return {"id": str(sessione.id)}
+
