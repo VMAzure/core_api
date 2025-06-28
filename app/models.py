@@ -875,4 +875,19 @@ class NltMessaggiWhatsapp(Base):
     # Facoltative per relazioni
     pipeline = relationship("NltPipeline", backref="messaggi_whatsapp")
     utente = relationship("User", backref="messaggi_whatsapp")
+    sessione_id = Column(UUID(as_uuid=True), ForeignKey("public.whatsapp_sessioni.id"), nullable=True)
+    sessione = relationship("WhatsappSessione", backref="messaggi")
 
+
+class WhatsappSessione(Base):
+    __tablename__ = "whatsapp_sessioni"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cliente_id = Column(Integer, ForeignKey("public.clienti.id"), nullable=False)
+    numero = Column(String(20), nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    ultimo_aggiornamento = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    cliente = relationship("Cliente", backref="whatsapp_sessione")

@@ -2,10 +2,9 @@
 from pydantic import BaseModel
 from typing import Dict, List
 from app.utils.twilio_client import send_whatsapp_template, send_whatsapp_message
-from app.models import NltPipeline, NltPreventivi, Cliente, User, WhatsAppTemplate, NltMessaggiWhatsapp
+from app.models import NltPipeline, NltPreventivi, Cliente, User, WhatsAppTemplate, NltMessaggiWhatsapp, WhatsappSessione
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-
 from app.database import get_db
 from fastapi_jwt_auth import AuthJWT
 import logging
@@ -169,6 +168,36 @@ def get_messaggi_pipeline(
         for m in messaggi
     ]
 
+@router.get("/messaggi-sessione/{sessione_id}")
+def get_messaggi_sessione(
+    sessione_id: str,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+
+    messaggi = (
+        db.query(NltMessaggiWhatsapp)
+        .filter_by(sessione_id=sessione_id)
+        .order_by(NltMessaggiWhatsapp.data_invio.asc())
+        .all()
+    )
+
+    return [
+        {
+            "id": str(m.id),
+            "mittente": m.mittente,
+            "messaggio": m.messaggio,
+            "data_invio": m.data_invio.isoformat(),
+            "direzione": m.direzione,
+            "template_usato": m.template_usato,
+            "twilio_sid": m.twilio_sid,
+            "utente_id": m.utente_id,
+            "stato_messaggio": m.stato_messaggio
+        }
+        for m in messaggi
+    ]
+
 
 @router.post("/log-inbound")
 async def log_messaggio_inbound(
@@ -181,7 +210,7 @@ async def log_messaggio_inbound(
     msg_sid = form.get("MessageSid")
     timestamp = datetime.utcnow()
 
-    print("📩 INBOUND DEBUG — From:", sender, "| Body:", message, "| SID:", msg_sid)
+    print("📩 INBOUND DEBUG — From:", sender, "| Body:", message)
 
     if not sender or not message:
         raise HTTPException(status_code=400, detail="Messaggio non valido")
@@ -190,20 +219,35 @@ async def log_messaggio_inbound(
     if not numero.startswith("+"):
         numero = "+39" + numero
 
-    pipeline = (
-        db.query(NltPipeline)
-        .join(NltPreventivi, NltPipeline.preventivo_id == NltPreventivi.id)
-        .join(Cliente, NltPreventivi.cliente_id == Cliente.id)
+    # Cerca cliente tramite numero normalizzato
+    cliente = (
+        db.query(Cliente)
         .filter(func.replace(Cliente.telefono, '+39', '') == numero.replace('+39', ''))
         .first()
     )
 
-    if not pipeline:
-        print("❌ Nessuna pipeline trovata per numero:", numero)
-        raise HTTPException(status_code=404, detail="Pipeline non trovata per questo numero")
+    if not cliente:
+        print("❌ Nessun cliente trovato per numero:", numero)
+        raise HTTPException(status_code=404, detail="Cliente non trovato")
 
+    # Cerca o crea la sessione
+    sessione = (
+        db.query(WhatsappSessione)
+        .filter_by(cliente_id=cliente.id)
+        .first()
+    )
+
+    if not sessione:
+        sessione = WhatsappSessione(
+            cliente_id=cliente.id,
+            numero=numero
+        )
+        db.add(sessione)
+        db.flush()  # per ottenere sessione.id
+
+    # Logga il messaggio
     nuovo_log = NltMessaggiWhatsapp(
-        pipeline_id=pipeline.id,
+        sessione_id=sessione.id,
         mittente="cliente",
         messaggio=message,
         twilio_sid=msg_sid,
@@ -214,7 +258,8 @@ async def log_messaggio_inbound(
     db.add(nuovo_log)
     db.commit()
 
-    logging.info(f"📨 Messaggio IN ricevuto da {numero}: {message}")
+    logging.info(f"📨 Messaggio IN salvato — Cliente: {cliente.id} | Sessione: {sessione.id}")
 
     return {"status": "ok"}
+
 
