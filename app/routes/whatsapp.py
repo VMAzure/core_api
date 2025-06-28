@@ -396,3 +396,22 @@ def crea_sessione_whatsapp(
 
     return {"id": str(sessione.id)}
 
+@router.post("/sessioni/{sessione_id}/segna-come-letta")
+def segna_sessione_come_letta(
+    sessione_id: str,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+
+    # Segna tutti i messaggi IN della sessione come letti (stato_messaggio = 'letto')
+    aggiornati = (
+        db.query(NltMessaggiWhatsapp)
+        .filter_by(sessione_id=sessione_id, direzione="in", stato_messaggio=None)
+        .update({"stato_messaggio": "letto"})
+    )
+
+    db.commit()
+    return {"status": "ok", "aggiornati": aggiornati}
+
+
