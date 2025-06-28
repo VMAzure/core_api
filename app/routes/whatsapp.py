@@ -190,7 +190,7 @@ async def log_messaggio_inbound(
         db.query(NltPipeline)
         .join(NltPreventivi, NltPipeline.preventivo_id == NltPreventivi.id)
         .join(Cliente, NltPreventivi.cliente_id == Cliente.id)
-        .filter(Cliente.telefono == numero)
+        .filter(func.replace(Cliente.telefono, '+39', '') == numero.replace('+39', ''))
         .first()
     )
 
