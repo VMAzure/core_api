@@ -247,3 +247,33 @@ def get_lista_sessioni(
         })
 
     return risposta
+
+@router.get("/messaggi-sessione/{sessione_id}/since/{timestamp}")
+def get_nuovi_messaggi(sessione_id: str, timestamp: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    Authorize.jwt_required()
+    try:
+        dt = datetime.fromisoformat(timestamp)
+    except ValueError:
+        raise HTTPException(400, detail="Formato timestamp non valido")
+
+    messaggi = (
+        db.query(NltMessaggiWhatsapp)
+        .filter(
+            NltMessaggiWhatsapp.sessione_id == sessione_id,
+            NltMessaggiWhatsapp.data_invio > dt
+        )
+        .order_by(NltMessaggiWhatsapp.data_invio.asc())
+        .all()
+    )
+
+    return [{
+        "id": str(m.id),
+        "mittente": m.mittente,
+        "messaggio": m.messaggio,
+        "data_invio": m.data_invio.isoformat(),
+        "direzione": m.direzione,
+        "template_usato": m.template_usato,
+        "twilio_sid": m.twilio_sid,
+        "utente_id": m.utente_id,
+        "stato_messaggio": m.stato_messaggio
+    } for m in messaggi]
