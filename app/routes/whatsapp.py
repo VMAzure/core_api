@@ -183,6 +183,8 @@ async def log_messaggio_inbound(
         raise HTTPException(status_code=400, detail="Messaggio non valido")
 
     numero = sender.replace("whatsapp:", "").strip()
+    if not numero.startswith("+"):
+        numero = "+39" + numero
 
     pipeline = (
         db.query(NltPipeline)
