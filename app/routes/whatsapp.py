@@ -10,6 +10,7 @@ from fastapi_jwt_auth import AuthJWT
 import logging
 from datetime import datetime
 
+
 router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp"])
 
 class TemplateRequest(BaseModel):
@@ -279,3 +280,21 @@ def get_nuovi_messaggi(sessione_id: str, timestamp: str, Authorize: AuthJWT = De
         "utente_id": m.utente_id,
         "stato_messaggio": m.stato_messaggio
     } for m in messaggi]
+
+class WhatsAppTemplateOut(BaseModel):
+    nome: str
+    content_sid: str
+
+@router.get("/templates", response_model=List[WhatsAppTemplateOut])
+def get_templates(
+    db: Session = Depends(get_db),
+    Authorize: AuthJWT = Depends()
+):
+    Authorize.jwt_required()
+    templates = (
+        db.query(WhatsAppTemplate)
+        .filter_by(attivo=True)
+        .order_by(WhatsAppTemplate.nome.asc())
+        .all()
+    )
+    return [{"nome": t.nome, "content_sid": t.content_sid} for t in templates]
