@@ -4,6 +4,8 @@ from typing import Dict, List
 from app.utils.twilio_client import send_whatsapp_template, send_whatsapp_message
 from app.models import NltPipeline, NltPreventivi, Cliente, User, WhatsAppTemplate, NltMessaggiWhatsapp
 from sqlalchemy.orm import Session
+from sqlalchemy import func
+
 from app.database import get_db
 from fastapi_jwt_auth import AuthJWT
 import logging
