@@ -873,7 +873,6 @@ class NltMessaggiWhatsapp(Base):
     data_invio = Column(DateTime(timezone=True), server_default=func.now())
 
     # Facoltative per relazioni
-    pipeline = relationship("NltPipeline", backref="messaggi_whatsapp")
     utente = relationship("User", backref="messaggi_whatsapp")
     sessione_id = Column(UUID(as_uuid=True), ForeignKey("public.whatsapp_sessioni.id"), nullable=True)
     sessione = relationship("WhatsappSessione", backref="messaggi")
