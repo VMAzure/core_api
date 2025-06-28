@@ -10,6 +10,8 @@ from fastapi_jwt_auth import AuthJWT
 import logging
 from datetime import datetime
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
+import os
+import requests
 
 
 router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp"])
@@ -303,3 +305,59 @@ def get_templates(
         .all()
     )
     return [{"nome": t.nome, "content_sid": t.content_sid} for t in templates]
+
+@router.post("/sync-templates")
+def sync_twilio_templates(
+    db: Session = Depends(get_db),
+    Authorize: AuthJWT = Depends()
+):
+    Authorize.jwt_required()
+
+    # 🔐 Opzionale: limita agli admin
+    utente = db.query(User).filter_by(email=Authorize.get_jwt_subject()).first()
+    if not utente or utente.role not in ["admin", "superadmin"]:
+        raise HTTPException(403, detail="Accesso non autorizzato")
+
+    TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+    TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+
+    if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
+        raise HTTPException(500, detail="Credenziali Twilio mancanti")
+
+    url = f"https://messaging.twilio.com/v1/Services/{TWILIO_ACCOUNT_SID}/Templates"
+
+    response = requests.get(url, auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN))
+    if response.status_code != 200:
+        raise HTTPException(500, detail="Errore richiesta Twilio")
+
+    data = response.json()
+    inseriti = 0
+
+    for t in data.get("templates", []):
+        nome = t["name"]
+        content_sid = t["sid"]
+        descrizione = t.get("friendly_name") or "—"
+
+        template_db = db.query(WhatsAppTemplate).filter_by(nome=nome).first()
+        if template_db:
+            template_db.content_sid = content_sid
+            template_db.descrizione = descrizione
+            template_db.attivo = True
+        else:
+            nuovo = WhatsAppTemplate(
+                nome=nome,
+                content_sid=content_sid,
+                descrizione=descrizione,
+                attivo=True
+            )
+            db.add(nuovo)
+            inseriti += 1
+
+    db.commit()
+
+    return {
+        "status": "ok",
+        "sincronizzati": inseriti,
+        "totali": len(data.get("templates", []))
+    }
+
