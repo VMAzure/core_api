@@ -869,7 +869,7 @@ class NltMessaggiWhatsapp(Base):
 
     template_usato = Column(String)
     direzione = Column(String, nullable=False)  # 'in' o 'out'
-    utente_id = Column(Integer, ForeignKey("utenti.id"))
+    utente_id = Column(Integer, ForeignKey("public.utenti.id"))
     data_invio = Column(DateTime(timezone=True), server_default=func.now())
 
     # Facoltative per relazioni
