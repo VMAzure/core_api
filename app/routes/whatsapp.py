@@ -293,6 +293,8 @@ class WhatsAppTemplateOut(BaseModel):
     nome: str
     content_sid: str
     contesto: str  
+    descrizione: str | None = None
+
 
 
 @router.get("/templates", response_model=List[WhatsAppTemplateOut])
@@ -311,7 +313,9 @@ def get_templates(
         {
             "nome": t.nome,
             "content_sid": t.content_sid,
-            "contesto": t.contesto 
+            "contesto": t.contesto, 
+            "descrizione": t.descrizione or ""  # fallback vuoto se None
+
         }
         for t in templates
     ]
