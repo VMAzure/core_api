@@ -325,7 +325,7 @@ async def get_site_settings(
         SiteAdminSettings.dealer_id == dealer_id
     ).first()
 
-
+    # Se mancano, crea impostazioni di default
     if not settings:
         mese_corrente = datetime.now().strftime('%B %Y').capitalize()
         new_slug = generate_slug(current_user.ragione_sociale)
@@ -355,6 +355,12 @@ async def get_site_settings(
         db.commit()
         db.refresh(settings)
 
+    # Dati anagrafici dell’utente per uniformità con /me
+    nome = current_user.nome
+    cognome = current_user.cognome
+    ragione_sociale = current_user.ragione_sociale or f"{nome} {cognome}"
+    email = current_user.email
+
     return {
         "primary_color": settings.primary_color or "",
         "secondary_color": settings.secondary_color or "",
@@ -377,11 +383,15 @@ async def get_site_settings(
         "updated_at": settings.updated_at,
         "prov_vetrina": settings.prov_vetrina,
         "site_url": settings.site_url or "",
-
         "servizi_visibili": settings.servizi_visibili or {
             "NLT": False, "REWIND": False, "NOS": False, "NBT": False
-        }
+        },
+        "nome": nome,
+        "cognome": cognome,
+        "ragione_sociale": ragione_sociale,
+        "email": email
     }
+
 
 
 @router.get("/site-settings-public/{slug}")
