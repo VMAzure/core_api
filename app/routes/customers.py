@@ -1284,6 +1284,16 @@ def get_clienti_filtrati(
         )
 
         clienti_query = clienti_query.filter(Cliente.id.in_(clienti_ids))
+    elif contesto == "preventivo":
+        clienti_ids = db.query(NltPreventivi.cliente_id).distinct()
+        clienti_query = clienti_query.filter(Cliente.id.in_(clienti_ids))
+    elif contesto == "marketing":
+        pass
+    else:
+        raise HTTPException(400, detail="Contesto non valido")
+
+    clienti = clienti_query.all()
+    return clienti or []
 
 
 
