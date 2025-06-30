@@ -1271,21 +1271,20 @@ def get_clienti_filtrati(
 
     # 🧠 Filtro in base al contesto
     if contesto == "pipeline":
-        clienti_ids = (
+        pipeline_subq = (
             db.query(NltPipeline.preventivo_id)
-            .join(NltPreventivi)
-            .with_entities(NltPreventivi.cliente_id)
+            .filter(NltPipeline.assegnato_a == user.id)  # ✅ solo pipeline assegnate all'utente loggato
+            .subquery()
         )
-        clienti_query = clienti_query.filter(Cliente.id.in_(clienti_ids))
-    elif contesto == "preventivo":
-        clienti_ids = db.query(NltPreventivi.cliente_id).distinct()
-        clienti_query = clienti_query.filter(Cliente.id.in_(clienti_ids))
-    elif contesto == "marketing":
-        pass  # nessun filtro ulteriore
-    else:
-        raise HTTPException(400, detail="Contesto non valido")
 
-    return clienti_query.all()
+        clienti_ids = (
+            db.query(NltPreventivi.cliente_id)
+            .filter(NltPreventivi.id.in_(pipeline_subq))
+            .subquery()
+        )
+
+        clienti_query = clienti_query.filter(Cliente.id.in_(clienti_ids))
+
 
 
 @router.get("/clienti/{cliente_id}")
