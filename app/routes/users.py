@@ -457,7 +457,9 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
                 "email": user.email,
                 "nome": user.nome,
                 "cognome": user.cognome,
-                "cellulare": user.cellulare
+                "cellulare": user.cellulare,
+                "ragione_sociale": user.ragione_sociale or f"{user.nome} {user.cognome}"
+
             }
 
             response["admin_info"] = {
