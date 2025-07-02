@@ -277,6 +277,20 @@ class SiteAdminSettings(Base):
 
     prov_vetrina = Column(Integer, nullable=True)
 
+    # Campi social
+    facebook_url = Column(String, nullable=True)
+    instagram_url = Column(String, nullable=True)
+    tiktok_url = Column(String, nullable=True)
+    linkedin_url = Column(String, nullable=True)
+    whatsapp_url = Column(String, nullable=True)
+    x_url = Column(String, nullable=True)  # ex Twitter
+    youtube_url = Column(String, nullable=True)
+    telegram_url = Column(String, nullable=True)
+
+    # Campo libero "Chi siamo"
+    chi_siamo = Column(Text, nullable=True)
+
+
 
 
 

@@ -105,6 +105,17 @@ class SiteSettingsPayload(BaseModel):
     slug: str = None
     prov_vetrina: int = None
     site_url: str = None  # 👈 aggiunto
+    facebook_url: str = None
+    instagram_url: str = None
+    tiktok_url: str = None
+    linkedin_url: str = None
+    whatsapp_url: str = None
+    x_url: str = None
+    youtube_url: str = None
+    telegram_url: str = None
+
+    chi_siamo: str = None
+
 
 
     servizi_visibili: dict = {
@@ -389,7 +400,17 @@ async def get_site_settings(
         "nome": nome,
         "cognome": cognome,
         "ragione_sociale": ragione_sociale,
-        "email": email
+        "email": email,
+        "facebook_url": settings.facebook_url or "",
+        "instagram_url": settings.instagram_url or "",
+        "tiktok_url": settings.tiktok_url or "",
+        "linkedin_url": settings.linkedin_url or "",
+        "whatsapp_url": settings.whatsapp_url or "",
+        "x_url": settings.x_url or "",
+        "youtube_url": settings.youtube_url or "",
+        "telegram_url": settings.telegram_url or "",
+        "chi_siamo": settings.chi_siamo or ""
+
     }
 
 
@@ -432,6 +453,16 @@ async def get_site_settings_public(
         "servizi_visibili": settings.servizi_visibili or {
             "NLT": False, "REWIND": False, "NOS": False, "NBT": False
         },
-    "agency_type": settings.prov_vetrina or 0  # ✅ aggiunto qui
+        "facebook_url": settings.facebook_url or "",
+        "instagram_url": settings.instagram_url or "",
+        "tiktok_url": settings.tiktok_url or "",
+        "linkedin_url": settings.linkedin_url or "",
+        "whatsapp_url": settings.whatsapp_url or "",
+        "x_url": settings.x_url or "",
+        "youtube_url": settings.youtube_url or "",
+        "telegram_url": settings.telegram_url or "",
+        "chi_siamo": settings.chi_siamo or "",
+
+        "agency_type": settings.prov_vetrina or 0  # ✅ aggiunto qui
 
     }
