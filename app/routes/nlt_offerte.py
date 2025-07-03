@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, Query, Body
+﻿from fastapi import APIRouter, Depends, HTTPException, Request, Query, Body
 from sqlalchemy.orm import Session, selectinload
 from typing import Optional, List
 from app.database import get_db
@@ -24,7 +24,8 @@ from sqlalchemy import or_
 from app.utils.quotazioni import calcola_quotazione, calcola_quotazione_custom
 from app.schemas import CanoneRequest
 
-
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
 
 from app.auth_helpers import (
@@ -895,16 +896,18 @@ async def calcola_canone(
 
     return {"canone": round(canone_finale, 2)}
 
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 
-templates = Jinja2Templates(directory="templates")  # Assicurati che esista la cartella
+
+templates = Jinja2Templates(directory="templates")
 
 @router.get("/vetrina-preview/{slug}", response_class=HTMLResponse)
 async def vetrina_preview(
     slug: str,
+    request: Request,
     marca: Optional[str] = Query(None),
     segmento: Optional[str] = Query(None),
+    tipo: Optional[str] = Query(None),
+    budget: Optional[float] = Query(None),
     db: Session = Depends(get_db)
 ):
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
@@ -912,23 +915,45 @@ async def vetrina_preview(
         raise HTTPException(status_code=404, detail="Dealer non trovato.")
 
     dealer_name = settings.ragione_sociale or "Azure Automotive"
-    image_url = settings.logo_web or "http://www.azcore.it/AZURELease/assets/logo-default.png"
+    image_url = settings.logo_web or "https://www.azcore.it/AZURELease/assets/logo-default.png"
+    url = f"https://www.azcore.it/vetrina-offerte/{slug}"
 
+    parts = []
+
+    if segmento:
+        parts.append(segmento.capitalize())
     if marca:
-        title = f"Offerte {marca.capitalize()} – Noleggio Lungo Termine | {dealer_name}"
-        description = f"Scopri tutte le offerte {marca.upper()} disponibili per il noleggio auto a lungo termine da {dealer_name}."
-    elif segmento:
-        title = f"{segmento.capitalize()} – Offerte Noleggio Lungo Termine | {dealer_name}"
-        description = f"Scegli il segmento {segmento.upper()} tra le nostre migliori offerte a lungo termine da {dealer_name}."
+        parts.append(marca.capitalize())
+    if tipo:
+        parts.append("per privati" if tipo == "privato" else "per aziende")
+    if budget:
+        parts.append(f"sotto i {int(budget * 1.1)}€")
+
+    # Titolo sintetico
+    if parts:
+        title = " ".join(parts) + f" – Noleggio Lungo Termine | {dealer_name}"
     else:
         title = f"Offerte Noleggio Lungo Termine | {dealer_name}"
-        description = f"Scopri le offerte di auto a noleggio da {dealer_name}. Canoni trasparenti, servizi inclusi, zero sorprese."
+
+    # Descrizione dettagliata
+    descr_parts = ["Scopri le offerte di noleggio a lungo termine"]
+    if marca:
+        descr_parts.append(f"per {marca.upper()}")
+    if segmento:
+        descr_parts.append(f"nel segmento {segmento.upper()}")
+    if tipo:
+        descr_parts.append(f"dedicate a {'privati' if tipo == 'privato' else 'aziende'}")
+    if budget:
+        descr_parts.append(f"con canone mensile inferiore a {int(budget * 1.1)}€")
+
+    descr_parts.append(f"offerte disponibili da {dealer_name}.")
+    description = ", ".join(descr_parts)
 
     return templates.TemplateResponse("meta_preview.html", {
-        "request": {},  # richiesto da FastAPI
+        "request": request,
         "title": title,
         "description": description,
         "image_url": image_url,
-        "url": f"https://www.azcore.it/vetrina-offerte/{slug}"  # o altra URL reale
+        "url": url
     })
 
