@@ -914,7 +914,7 @@ async def vetrina_preview(
     if not settings:
         raise HTTPException(status_code=404, detail="Dealer non trovato.")
 
-    dealer_name = settings.ragione_sociale or "Azure Automotive"
+    dealer_name = user.ragione_sociale or "Azure Automotive"
     image_url = settings.logo_web or "https://www.azcore.it/AZURELease/assets/logo-default.png"
     url = f"https://www.azcore.it/vetrina-offerte/{slug}"
 
