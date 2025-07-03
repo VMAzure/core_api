@@ -45,7 +45,7 @@ async def meta_preview(slug: str, request: Request, db: Session = Depends(get_db
 
     og_image = immagine_auto or settings.logo_web or "https://nlt.rent/assets/logo-default.jpg"
 
-    og_image = settings.logo_web or "https://www.nlt.rent/assets/logo-default.jpg"
+   
     page_url = f"https://www.nlt.rent/vetrina-offerte/{slug}"
 
     # Rilevamento bot social
