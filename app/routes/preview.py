@@ -10,13 +10,22 @@ import io
 
 router = APIRouter()
 
+from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.models import SiteAdminSettings, NltOfferte, MnetModelli, User
+from random import choice
+
+router = APIRouter()
+
 @router.get("/vetrina-offerte/{slug}", response_class=HTMLResponse)
 async def meta_preview(slug: str, request: Request, db: Session = Depends(get_db)):
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
         raise HTTPException(status_code=404, detail=f"Dealer con slug '{slug}' non trovato.")
 
-    # Costruisci nome dealer dinamico
+    # 🔹 Nome dealer (ragione sociale)
     dealer_name = slug
     if settings.dealer_id:
         dealer = db.query(User).filter(User.id == settings.dealer_id).first()
@@ -26,7 +35,7 @@ async def meta_preview(slug: str, request: Request, db: Session = Depends(get_db
     og_title = f"Offerte Noleggio Lungo Termine | {dealer_name}"
     og_description = settings.meta_description or "Scopri le offerte di noleggio a lungo termine disponibili."
 
-    # Determina admin_id corretto per filtrare offerte
+    # 🔹 Determina admin_id per le offerte
     admin_id = settings.admin_id
     if settings.dealer_id:
         dealer = db.query(User).filter(User.id == settings.dealer_id).first()
@@ -35,25 +44,25 @@ async def meta_preview(slug: str, request: Request, db: Session = Depends(get_db
         else:
             admin_id = settings.dealer_id
 
+    # 🔹 Estrai una offerta casuale
     offerte = db.query(NltOfferte).filter(
         NltOfferte.id_admin == admin_id,
         NltOfferte.attivo.is_(True),
         NltOfferte.codice_modello.isnot(None)
     ).all()
 
-    offerta_random = None
+    og_image = settings.logo_web or "https://nlt.rent/assets/logo-default.jpg"
+
     if offerte:
         offerta_random = choice(offerte)
+        modello = db.query(MnetModelli).filter(MnetModelli.codice_modello == offerta_random.codice_modello).first()
+        if modello and modello.default_img:
+            og_image = modello.default_img
 
-    # Og:image: immagine generata con badge
-    if offerta_random:
-        og_image = f"https://preview.nlt.rent/og-image/{offerta_random.id_offerta}"
-    else:
-        og_image = settings.logo_web or "https://nlt.rent/assets/logo-default.jpg"
-
+    # 🔹 URL finale della pagina reale
     page_url = f"https://www.nlt.rent/vetrina-offerte/{slug}"
 
-    # Bot detection
+    # 🔹 Bot detection
     user_agent = request.headers.get("user-agent", "").lower()
     bot_keywords = ["facebook", "whatsapp", "twitterbot", "linkedin", "telegram", "slackbot", "discord", "googlebot"]
     is_bot = any(bot in user_agent for bot in bot_keywords)
@@ -61,6 +70,7 @@ async def meta_preview(slug: str, request: Request, db: Session = Depends(get_db
     if not is_bot:
         return RedirectResponse(url=page_url)
 
+    # 🔹 HTML con meta Open Graph
     html = f"""
     <!DOCTYPE html>
     <html lang="it">
