@@ -565,6 +565,7 @@ async def offerte_nlt_pubbliche(
             "versione": offerta.versione,
             "cambio": offerta.cambio,
             "alimentazione": offerta.alimentazione,
+            "segmento": offerta.segmento,
             "canone_mensile": float(canone),  # 👈 Canone diretto da tabella quotazioni (nessun anticipo!)
             "prezzo_listino": float(offerta.prezzo_listino),
             "prezzo_totale": float(offerta.prezzo_totale or offerta.prezzo_listino),  # ✅ corretto e definitivo
