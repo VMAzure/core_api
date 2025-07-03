@@ -899,7 +899,7 @@ async def calcola_canone(
 
 
 
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="app/templates")
 
 @router.get("/vetrina-preview/{slug}", response_class=HTMLResponse)
 async def vetrina_preview(
