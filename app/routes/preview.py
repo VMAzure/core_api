@@ -73,6 +73,7 @@ async def meta_preview(slug: str, request: Request, db: Session = Depends(get_db
     <head>
         <meta charset="UTF-8">
         <title>{og_title}</title>
+        <meta name="description" content="{og_description}" />
         <meta property="og:title" content="{og_title}" />
         <meta property="og:description" content="{og_description}" />
         <meta property="og:image" content="{og_image}" />
@@ -87,13 +88,6 @@ async def meta_preview(slug: str, request: Request, db: Session = Depends(get_db
     """
     return HTMLResponse(content=html)
 
-from fastapi import APIRouter, Request, Depends, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models import NltOfferte, MnetModelli
-
-router = APIRouter()
 
 @router.get("/offerta/{dealer_slug}/{slug_offerta}", response_class=HTMLResponse)
 def preview_offerta(dealer_slug: str, slug_offerta: str, db: Session = Depends(get_db)):
@@ -107,8 +101,8 @@ def preview_offerta(dealer_slug: str, slug_offerta: str, db: Session = Depends(g
     og_title = f"{offerta.marca} {offerta.modello} - {offerta.versione or ''}".strip()
     alimentazione = offerta.alimentazione or "-"
     cambio = offerta.cambio or "-"
-    prezzo = int(offerta.canone_mensile) if offerta.canone_mensile else "—"
-    og_description = f"{cambio}, {alimentazione}. Noleggio a lungo termine da {prezzo}€/mese."
+    og_description = f"{cambio}, {alimentazione}. Noleggio a lungo termine."
+
 
     redirect_url = f"https://www.nlt.rent/AZURELease/dealer/offerta-noleggio-lungo-termine.html?dealer={dealer_slug}&slug={slug_offerta}"
 
@@ -118,15 +112,23 @@ def preview_offerta(dealer_slug: str, slug_offerta: str, db: Session = Depends(g
     <head>
         <meta charset="utf-8" />
         <title>{og_title}</title>
+
+        <!-- Standard SEO meta -->
+        <meta name="description" content="{og_description}" />
+
+        <!-- Open Graph -->
         <meta property="og:title" content="{og_title}" />
         <meta property="og:description" content="{og_description}" />
         <meta property="og:image" content="{immagine}" />
         <meta property="og:url" content="{redirect_url}" />
         <meta property="og:type" content="website" />
+
+        <!-- Twitter -->
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="{og_title}" />
         <meta name="twitter:description" content="{og_description}" />
         <meta name="twitter:image" content="{immagine}" />
+
         <meta http-equiv="refresh" content="2;url={redirect_url}" />
     </head>
     <body>
