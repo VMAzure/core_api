@@ -1,21 +1,8 @@
 ﻿from fastapi import APIRouter, Request, Depends, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
-from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models import SiteAdminSettings, NltOfferte, MnetModelli, User
-from random import choice
-from PIL import Image, ImageDraw, ImageFont
-import requests
-import io
-
-router = APIRouter()
-
-from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import SiteAdminSettings, NltOfferte, MnetModelli, User
-from random import choice
+from app.models import SiteAdminSettings, User
 
 router = APIRouter()
 
@@ -25,42 +12,35 @@ async def meta_preview(slug: str, request: Request, db: Session = Depends(get_db
     if not settings:
         raise HTTPException(status_code=404, detail=f"Dealer con slug '{slug}' non trovato.")
 
-    # 🔹 Nome dealer (ragione sociale)
+    # 🔹 Recupera ragione sociale del dealer
     dealer_name = slug
     if settings.dealer_id:
         dealer = db.query(User).filter(User.id == settings.dealer_id).first()
         if dealer and dealer.ragione_sociale:
             dealer_name = dealer.ragione_sociale
 
+    # 🔹 Parametri dalla query string
+    query = request.query_params
+    marca = query.get("marca", "").capitalize()
+    budget = query.get("budget", "")
+    segmento = query.get("segmento", "").capitalize()
+    tipo = query.get("tipo", "").capitalize()
+
+    # 🔹 Meta tag dinamici
     og_title = f"Offerte Noleggio Lungo Termine | {dealer_name}"
-    og_description = settings.meta_description or "Scopri le offerte di noleggio a lungo termine disponibili."
 
-    # 🔹 Determina admin_id per le offerte
-    admin_id = settings.admin_id
-    if settings.dealer_id:
-        dealer = db.query(User).filter(User.id == settings.dealer_id).first()
-        if dealer and dealer.parent_id:
-            admin_id = dealer.parent_id
-        else:
-            admin_id = settings.dealer_id
-
-    # 🔹 Estrai una offerta casuale
-    offerte = db.query(NltOfferte).filter(
-        NltOfferte.id_admin == admin_id,
-        NltOfferte.attivo.is_(True),
-        NltOfferte.codice_modello.isnot(None)
-    ).all()
+    if marca and budget:
+        og_description = f"Scopri le offerte {segmento + ' ' if segmento else ''}{marca} da {budget}€/mese su {dealer_name}."
+    else:
+        og_description = settings.meta_description or "Scopri le offerte di noleggio a lungo termine disponibili."
 
     og_image = settings.logo_web or "https://nlt.rent/assets/logo-default.jpg"
 
-    if offerte:
-        offerta_random = choice(offerte)
-        modello = db.query(MnetModelli).filter(MnetModelli.codice_modello == offerta_random.codice_modello).first()
-        if modello and modello.default_img:
-            og_image = modello.default_img
-
-    # 🔹 URL finale della pagina reale
+    # 🔹 Ricostruzione URL di redirect
+    query_string = request.url.query
     page_url = f"https://www.nlt.rent/vetrina-offerte/{slug}"
+    if query_string:
+        page_url += f"?{query_string}"
 
     # 🔹 Bot detection
     user_agent = request.headers.get("user-agent", "").lower()
@@ -70,7 +50,7 @@ async def meta_preview(slug: str, request: Request, db: Session = Depends(get_db
     if not is_bot:
         return RedirectResponse(url=page_url)
 
-    # 🔹 HTML con meta Open Graph
+    # 🔹 HTML con meta tag
     html = f"""
     <!DOCTYPE html>
     <html lang="it">
@@ -90,33 +70,3 @@ async def meta_preview(slug: str, request: Request, db: Session = Depends(get_db
     </html>
     """
     return HTMLResponse(content=html)
-
-
-@router.get("/og-image/{offerta_id}")
-def badge_image(offerta_id: int, db: Session = Depends(get_db)):
-    offerta = db.query(NltOfferte).filter(NltOfferte.id_offerta == offerta_id).first()
-    if not offerta:
-        raise HTTPException(status_code=404, detail="Offerta non trovata")
-
-    modello = db.query(MnetModelli).filter(MnetModelli.codice_modello == offerta.codice_modello).first()
-    if not modello or not modello.default_img:
-        raise HTTPException(status_code=404, detail="Modello o immagine non trovati")
-
-    response = requests.get(modello.default_img)
-    image = Image.open(io.BytesIO(response.content)).convert("RGBA")
-
-    draw = ImageDraw.Draw(image)
-    try:
-        font = ImageFont.truetype("arial.ttf", size=40)
-    except:
-        font = ImageFont.load_default()
-
-    testo = f"{offerta.marca} {offerta.modello} da €{int(offerta.canone_mensile)}"
-    x, y = 40, image.height - 90
-    draw.rectangle([x, y, image.width - 40, y + 60], fill=(0, 0, 0, 200))
-    draw.text((x + 20, y + 15), testo, fill="white", font=font)
-
-    output = io.BytesIO()
-    image.save(output, format="PNG")
-    output.seek(0)
-    return StreamingResponse(output, media_type="image/png")
