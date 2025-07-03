@@ -3,6 +3,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from app.database import get_db  # ✅ usa il tuo import corretto
 from app.models import SiteAdminSettings  # ✅ path corretto al model
+from random import choice
+from app.models import NltOfferte, MnetModelli
+from app.models import User  # ✅ importa il modello User
+
+
 
 router = APIRouter()
 
@@ -16,6 +21,30 @@ async def meta_preview(slug: str, request: Request, db: Session = Depends(get_db
     # Meta content con fallback
     og_title = settings.meta_title or f"Offerte Noleggio Lungo Termine – {slug}"
     og_description = settings.meta_description or "Scopri le offerte di noleggio a lungo termine disponibili."
+    
+    # Determina l'admin id reale da usare
+    admin_id = settings.admin_id
+    if settings.dealer_id:
+        # potresti voler verificare parent_id se necessario
+        admin_id = db.query(User).filter(User.id == settings.dealer_id).first().parent_id or settings.dealer_id
+
+    # Recupera offerte attive del dealer/admin
+    offerte = db.query(NltOfferte).filter(
+        NltOfferte.id_admin == admin_id,
+        NltOfferte.attivo.is_(True),
+        NltOfferte.codice_modello.isnot(None)
+    ).all()
+
+    immagine_auto = None
+
+    if offerte:
+        offerta_random = choice(offerte)
+        modello = db.query(MnetModelli).filter(MnetModelli.codice_modello == offerta_random.codice_modello).first()
+        if modello and modello.default_img:
+            immagine_auto = modello.default_img
+
+    og_image = immagine_auto or settings.logo_web or "https://nlt.rent/assets/logo-default.jpg"
+
     og_image = settings.logo_web or "https://www.nlt.rent/assets/logo-default.jpg"
     page_url = f"https://www.nlt.rent/vetrina-offerte/{slug}"
 
