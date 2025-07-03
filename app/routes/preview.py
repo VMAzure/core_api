@@ -16,8 +16,8 @@ async def meta_preview(slug: str, request: Request, db: Session = Depends(get_db
     # Meta content con fallback
     og_title = settings.meta_title or f"Offerte Noleggio Lungo Termine – {slug}"
     og_description = settings.meta_description or "Scopri le offerte di noleggio a lungo termine disponibili."
-    og_image = settings.logo_web or "https://nlt.rent/assets/logo-default.jpg"
-    page_url = f"https://nlt.rent/vetrina-offerte/{slug}"
+    og_image = settings.logo_web or "https://www.nlt.rent/assets/logo-default.jpg"
+    page_url = f"https://www.nlt.rent/vetrina-offerte/{slug}"
 
     # Rilevamento bot social
     user_agent = request.headers.get("user-agent", "").lower()
