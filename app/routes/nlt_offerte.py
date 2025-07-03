@@ -973,7 +973,7 @@ async def vetrina_preview(
     descr_parts.append(f"offerte disponibili da {dealer_name}.")
     description = ", ".join(descr_parts)
 
-    return templates.TemplateResponse("meta_preview.html", {
+    return templates.TemplateResponse("meta-preview.html", {
         "request": request,
         "title": title,
         "description": description,
