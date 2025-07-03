@@ -137,6 +137,8 @@ app.add_middleware(
         "https://cig.up.railway.app/",
         "https://www.azcore.it",  # 👈 AGGIUNGI QUESTA RIGA
         "https://azcore.it"       # 👈 AGGIUNGI ANCHE QUESTO SENZA WWW se usato
+        "https://nlt.rent",
+        "https://www.nlt.rent",
     ],
     allow_credentials=True,
     allow_methods=["*"],
