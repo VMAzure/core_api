@@ -23,6 +23,7 @@ from app.routes.image import get_vehicle_image
 from sqlalchemy import or_
 from app.utils.quotazioni import calcola_quotazione, calcola_quotazione_custom
 from app.schemas import CanoneRequest
+from urllib.parse import urlencode
 
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -914,9 +915,26 @@ async def vetrina_preview(
     if not settings:
         raise HTTPException(status_code=404, detail="Dealer non trovato.")
 
+    user_id = settings.dealer_id if settings.dealer_id else settings.admin_id
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato per questo dealer.")
+
     dealer_name = user.ragione_sociale or "Azure Automotive"
+
     image_url = settings.logo_web or "https://www.azcore.it/AZURELease/assets/logo-default.png"
-    url = f"https://www.azcore.it/vetrina-offerte/{slug}"
+
+    base_url = f"https://www.azcore.it/vetrina-offerte/{slug}"
+
+    query_params = {}
+    if marca: query_params["marca"] = marca
+    if segmento: query_params["segmento"] = segmento
+    if tipo: query_params["tipo"] = tipo
+    if budget: query_params["budget"] = str(budget)
+
+    query_string = urlencode(query_params)
+    url = f"{base_url}?{query_string}" if query_string else base_url
 
     parts = []
 
