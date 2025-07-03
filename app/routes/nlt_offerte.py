@@ -899,7 +899,13 @@ async def calcola_canone(
 
 
 
-templates = Jinja2Templates(directory="app/templates")
+import os
+from fastapi.templating import Jinja2Templates
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # /app/routes
+TEMPLATES_DIR = os.path.join(BASE_DIR, "..", "..", "templates")
+
+templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 @router.get("/vetrina-preview/{slug}", response_class=HTMLResponse)
 async def vetrina_preview(
