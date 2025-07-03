@@ -899,14 +899,22 @@ async def calcola_canone(
 
 
 
-import os
+from fastapi import APIRouter, Request, Depends, Query, HTTPException
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+from typing import Optional
 from pathlib import Path
+from urllib.parse import urlencode
 
-TEMPLATES_DIR = Path(__file__).resolve().parent  # 👈 ora è la cartella del .py
+from app.database import get_db
+from app.models import SiteAdminSettings, User
+
+router = APIRouter()
+
+# 📁 Template nella stessa cartella di questo file .py
+TEMPLATES_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-
-templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 @router.get("/vetrina-preview/{slug}", response_class=HTMLResponse)
 async def vetrina_preview(
@@ -918,20 +926,20 @@ async def vetrina_preview(
     budget: Optional[float] = Query(None),
     db: Session = Depends(get_db)
 ):
+    # 🔍 Recupero configurazione dealer
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
         raise HTTPException(status_code=404, detail="Dealer non trovato.")
 
-    user_id = settings.dealer_id if settings.dealer_id else settings.admin_id
-
+    user_id = settings.dealer_id or settings.admin_id
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato per questo dealer.")
 
     dealer_name = user.ragione_sociale or "Azure Automotive"
-
     image_url = settings.logo_web or "https://www.azcore.it/AZURELease/assets/logo-default.png"
 
+    # 🔗 URL reale della vetrina
     base_url = f"https://www.azcore.it/vetrina-offerte/{slug}"
 
     query_params = {}
@@ -943,8 +951,8 @@ async def vetrina_preview(
     query_string = urlencode(query_params)
     url = f"{base_url}?{query_string}" if query_string else base_url
 
+    # 🧠 Costruzione titolo
     parts = []
-
     if segmento:
         parts.append(segmento.capitalize())
     if marca:
@@ -954,13 +962,9 @@ async def vetrina_preview(
     if budget:
         parts.append(f"sotto i {int(budget * 1.1)}€")
 
-    # Titolo sintetico
-    if parts:
-        title = " ".join(parts) + f" – Noleggio Lungo Termine | {dealer_name}"
-    else:
-        title = f"Offerte Noleggio Lungo Termine | {dealer_name}"
+    title = " ".join(parts) + f" – Noleggio Lungo Termine | {dealer_name}" if parts else f"Offerte Noleggio Lungo Termine | {dealer_name}"
 
-    # Descrizione dettagliata
+    # 📝 Descrizione meta
     descr_parts = ["Scopri le offerte di noleggio a lungo termine"]
     if marca:
         descr_parts.append(f"per {marca.upper()}")
@@ -974,6 +978,7 @@ async def vetrina_preview(
     descr_parts.append(f"offerte disponibili da {dealer_name}.")
     description = ", ".join(descr_parts)
 
+    # ✅ Render con redirect JS e meta tag corretti
     return templates.TemplateResponse("meta-preview.html", {
         "request": request,
         "title": title,
@@ -981,4 +986,5 @@ async def vetrina_preview(
         "image_url": image_url,
         "url": url
     })
+
 
