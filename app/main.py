@@ -49,6 +49,9 @@ from app.routes.openai_config import genera_descrizione_gpt
 from app.routes.pipeline import router as pipeline_router
 from app.routes import twilio  
 from app.routes.whatsapp import router as whatsapp_router
+from app.routes import preview
+
+
 
 
 
@@ -181,6 +184,8 @@ app.include_router(pipeline_router)
 
 app.include_router(twilio.router)
 app.include_router(whatsapp_router)
+app.include_router(preview.router)
+
 
 
 
