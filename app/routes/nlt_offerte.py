@@ -895,4 +895,40 @@ async def calcola_canone(
 
     return {"canone": round(canone_finale, 2)}
 
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+
+templates = Jinja2Templates(directory="templates")  # Assicurati che esista la cartella
+
+@router.get("/vetrina-preview/{slug}", response_class=HTMLResponse)
+async def vetrina_preview(
+    slug: str,
+    marca: Optional[str] = Query(None),
+    segmento: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail="Dealer non trovato.")
+
+    dealer_name = settings.ragione_sociale or "Azure Automotive"
+    image_url = settings.logo_web or "http://www.azcore.it/AZURELease/assets/logo-default.png"
+
+    if marca:
+        title = f"Offerte {marca.capitalize()} – Noleggio Lungo Termine | {dealer_name}"
+        description = f"Scopri tutte le offerte {marca.upper()} disponibili per il noleggio auto a lungo termine da {dealer_name}."
+    elif segmento:
+        title = f"{segmento.capitalize()} – Offerte Noleggio Lungo Termine | {dealer_name}"
+        description = f"Scegli il segmento {segmento.upper()} tra le nostre migliori offerte a lungo termine da {dealer_name}."
+    else:
+        title = f"Offerte Noleggio Lungo Termine | {dealer_name}"
+        description = f"Scopri le offerte di auto a noleggio da {dealer_name}. Canoni trasparenti, servizi inclusi, zero sorprese."
+
+    return templates.TemplateResponse("meta_preview.html", {
+        "request": {},  # richiesto da FastAPI
+        "title": title,
+        "description": description,
+        "image_url": image_url,
+        "url": f"https://www.azcore.it/vetrina-offerte/{slug}"  # o altra URL reale
+    })
 
