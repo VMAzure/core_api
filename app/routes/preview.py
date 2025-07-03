@@ -29,10 +29,25 @@ async def meta_preview(slug: str, request: Request, db: Session = Depends(get_db
     # 🔹 Meta tag dinamici
     og_title = f"Offerte Noleggio Lungo Termine | {dealer_name}"
 
-    if marca and budget:
-        og_description = f"Scopri le offerte {segmento + ' ' if segmento else ''}{marca} da {budget}€/mese su {dealer_name}."
-    else:
-        og_description = settings.meta_description or "Scopri le offerte di noleggio a lungo termine disponibili."
+    marca = query.get("marca", "").capitalize()
+    segmento = query.get("segmento", "").capitalize()
+    budget = query.get("budget", "")
+    tipo = query.get("tipo", "").capitalize()
+
+    descrizione_parts = ["Scopri le offerte"]
+
+    if segmento:
+        descrizione_parts.append(segmento)
+    if marca:
+        descrizione_parts.append(marca)
+    if tipo:
+        descrizione_parts.append(f"per {tipo}")
+    if budget:
+        descrizione_parts.append(f"da {budget}€/mese")
+
+    descrizione_parts.append(f"su {dealer_name}")
+
+    og_description = " ".join(descrizione_parts)
 
     og_image = settings.logo_web or "https://nlt.rent/assets/logo-default.jpg"
 
