@@ -901,9 +901,10 @@ async def calcola_canone(
 
 import os
 from fastapi.templating import Jinja2Templates
+from pathlib import Path
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # /app/routes
-TEMPLATES_DIR = os.path.join(BASE_DIR, "..", "..", "templates")
+TEMPLATES_DIR = Path(__file__).resolve().parent  # 👈 ora è la cartella del .py
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
