@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session, selectinload
 from typing import Optional, List
 from app.database import get_db
-from app.models import NltPneumatici, NltAutoSostitutiva, NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt  
+from app.models import MnetDettagli,NltPneumatici, NltAutoSostitutiva, NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt  
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
@@ -543,19 +543,27 @@ async def offerte_nlt_pubbliche(
     risultato = []
 
     for offerta, quotazione in offerte:
-        # Seleziona il canone iniziale in base a regole predefinite
         dealer_context = settings.dealer_id is not None
         dealer_id_for_context = settings.dealer_id if dealer_context else None
         durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
-        offerta, quotazione, user, db, dealer_context=dealer_context, dealer_id=dealer_id_for_context
-    )
+            offerta, quotazione, user, db,
+            dealer_context=dealer_context, dealer_id=dealer_id_for_context
+        )
 
         if canone is None:
-            continue  # escludi offerte non quotabili
+            continue
 
+        # 🔹 Spostato QUI: recupero dei dettagli per ogni offerta
+        dettagli = db.query(MnetDettagli).filter(
+            MnetDettagli.codice_motornet_uni == offerta.codice_motornet
+        ).first()
 
-        # Usa direttamente default_img da mnet_modelli
-        modello_db = db.query(MnetModelli).filter(MnetModelli.codice_modello == offerta.codice_modello).first()
+        tipo_descrizione = dettagli.tipo_descrizione if dettagli else None
+        segmento_descrizione = dettagli.segmento_descrizione if dettagli else None
+
+        modello_db = db.query(MnetModelli).filter(
+            MnetModelli.codice_modello == offerta.codice_modello
+        ).first()
 
         immagine_url = modello_db.default_img if modello_db and modello_db.default_img else "/default-placeholder.png"
 
@@ -568,18 +576,19 @@ async def offerte_nlt_pubbliche(
             "cambio": offerta.cambio,
             "alimentazione": offerta.alimentazione,
             "segmento": offerta.segmento,
-            "canone_mensile": float(canone),  # 👈 Canone diretto da tabella quotazioni (nessun anticipo!)
+            "segmento_descrizione": segmento_descrizione,
+            "tipo_descrizione": tipo_descrizione,
+            "canone_mensile": float(canone),
             "prezzo_listino": float(offerta.prezzo_listino),
-            "prezzo_totale": float(offerta.prezzo_totale or offerta.prezzo_listino),  # ✅ corretto e definitivo
+            "prezzo_totale": float(offerta.prezzo_totale or offerta.prezzo_listino),
             "slug": offerta.slug,
             "solo_privati": offerta.solo_privati,
             "durata_mesi": durata_mesi,
             "km_inclusi": km_inclusi,
             "logo_web": settings.logo_web or "",
-            "dealer_slug": dealer_slug  # ✅ aggiunto correttamente
-
-
+            "dealer_slug": dealer_slug
         })
+
 
     return risultato
 
