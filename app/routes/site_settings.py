@@ -480,3 +480,63 @@ async def get_site_settings_public(
         "agency_type": settings.prov_vetrina or 0  # ✅ aggiunto qui
 
     }
+
+@router.post("/site-settings/hero-image")
+async def upload_hero_image(
+    file: UploadFile = File(...),
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    current_user = db.query(User).filter(User.email == user_email).first()
+
+    if not current_user or not (is_admin_user(current_user) or is_dealer_user(current_user)):
+        raise HTTPException(status_code=403, detail="Non autorizzato")
+
+    # Estensione valida
+    allowed_extensions = {"png", "jpg", "jpeg", "webp"}
+    file_extension = file.filename.split(".")[-1].lower()
+    if file_extension not in allowed_extensions:
+        raise HTTPException(status_code=400, detail="Formato file non valido!")
+
+    file_content = await file.read()
+    if len(file_content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File troppo grande! Massimo 5MB.")
+
+    # Supabase Upload
+    HERO_BUCKET = "hero-banner"
+    owner_id = get_settings_owner_id(current_user)
+    file_name = f"{owner_id}/{uuid.uuid4()}_{file.filename}"
+
+    try:
+        supabase.storage.from_(HERO_BUCKET).upload(
+            file_name, file_content, {"content-type": file.content_type}
+        )
+        image_url = f"{SUPABASE_URL}/storage/v1/object/public/{HERO_BUCKET}/{file_name}"
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore upload: {str(e)}")
+
+    # Recupera settings
+    settings = db.query(SiteAdminSettings).filter(
+        SiteAdminSettings.admin_id == get_admin_id(current_user),
+        SiteAdminSettings.dealer_id == (None if is_admin_user(current_user) else current_user.id)
+    ).first()
+
+    if not settings:
+        settings = SiteAdminSettings(
+            admin_id=get_admin_id(current_user),
+            dealer_id=None if is_admin_user(current_user) else current_user.id,
+            hero_image_url=image_url
+        )
+        db.add(settings)
+    else:
+        settings.hero_image_url = image_url
+
+    db.commit()
+    db.refresh(settings)
+
+    return {
+        "status": "success",
+        "hero_image_url": image_url
+    }
