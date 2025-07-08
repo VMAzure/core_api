@@ -631,7 +631,7 @@ class MnetDettagli(Base):
     hc = Column(Text)
     nox = Column(Text)
     pm10 = Column(Text)
-    tipo_cons = Column(Text)
+    #tipo_cons = Column(Text)
     wltp = Column(Text)
 
     ridotte = Column(Boolean)
@@ -639,6 +639,7 @@ class MnetDettagli(Base):
     freni = Column(Text)
 
     ultima_modifica = Column(TIMESTAMP, default=func.now(), onupdate=func.now())
+
 
 class AzImage(Base):
     __tablename__ = "az_image"
