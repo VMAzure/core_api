@@ -116,6 +116,11 @@ class SiteSettingsPayload(BaseModel):
 
     chi_siamo: str = None
 
+    hero_image_url: str = None
+    hero_title: str = None
+    hero_subtitle: str = None
+
+
 
 
     servizi_visibili: dict = {
@@ -353,6 +358,7 @@ async def get_site_settings(
             favicon_url="https://example.com/favicon.ico",
             contact_email=current_user.email,
             contact_phone=current_user.cellulare,
+
             site_url="https://www.azureautomotive.it",
             contact_address=f"{current_user.indirizzo}, {current_user.cap} {current_user.citta}",
             servizi_visibili={
@@ -409,7 +415,11 @@ async def get_site_settings(
         "x_url": settings.x_url or "",
         "youtube_url": settings.youtube_url or "",
         "telegram_url": settings.telegram_url or "",
-        "chi_siamo": settings.chi_siamo or ""
+        "chi_siamo": settings.chi_siamo or "",
+        "hero_image_url": settings.hero_image_url or "",
+        "hero_title": settings.hero_title or "",
+        "hero_subtitle": settings.hero_subtitle or ""
+
 
     }
 
@@ -462,6 +472,10 @@ async def get_site_settings_public(
         "youtube_url": settings.youtube_url or "",
         "telegram_url": settings.telegram_url or "",
         "chi_siamo": settings.chi_siamo or "",
+        "hero_image_url": settings.hero_image_url or "",
+        "hero_title": settings.hero_title or "",
+        "hero_subtitle": settings.hero_subtitle or "",
+
 
         "agency_type": settings.prov_vetrina or 0  # ✅ aggiunto qui
 

@@ -290,6 +290,12 @@ class SiteAdminSettings(Base):
     # Campo libero "Chi siamo"
     chi_siamo = Column(Text, nullable=True)
 
+    # ... dentro class SiteAdminSettings ...
+    hero_image_url = Column(String(255), nullable=True)
+    hero_title = Column(String(255), nullable=True)
+    hero_subtitle = Column(String(255), nullable=True)
+
+
 
 
 
