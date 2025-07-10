@@ -593,6 +593,94 @@ async def offerte_nlt_pubbliche(
     return risultato
 
 
+@router.get("/offerte-nlt-pubbliche/tantastrada/{slug}")
+async def offerte_nlt_tantastrada(
+    slug: str,
+    db: Session = Depends(get_db)
+):
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail=f"Slug '{slug}' non trovato.")
+
+    user_id = settings.dealer_id if settings.dealer_id else settings.admin_id
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato per questo slug.")
+
+    if user.role == "dealer":
+        if user.parent_id is None:
+            raise HTTPException(status_code=400, detail="Dealer senza admin principale associato.")
+        admin_id = user.parent_id
+    else:
+        admin_id = user.id
+
+    offerte = db.query(NltOfferte, NltQuotazioni).join(
+        NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
+    ).filter(
+        NltOfferte.id_admin == admin_id,
+        NltOfferte.attivo.is_(True),
+        NltOfferte.prezzo_listino.isnot(None),
+        NltQuotazioni.mesi_60_40.isnot(None)
+    ).order_by(NltOfferte.prezzo_listino.asc()).all()
+
+    risultato = []
+
+    for offerta, quotazione in offerte:
+        canone_base = quotazione.mesi_60_40
+        if not canone_base:
+            continue
+
+        dealer_context = settings.dealer_id is not None
+        dealer_id_for_context = settings.dealer_id if dealer_context else None
+
+        durata_mesi = 60
+        km_inclusi = 40000
+
+        durata, km, canone, dealer_slug = calcola_quotazione_custom(
+            offerta, durata_mesi, km_inclusi, canone_base, user, db,
+            dealer_context=dealer_context, dealer_id=dealer_id_for_context
+        )
+
+        if canone is None:
+            continue
+
+        dettagli = db.query(MnetDettagli).filter(
+            MnetDettagli.codice_motornet_uni == offerta.codice_motornet
+        ).first()
+
+        tipo_descrizione = dettagli.tipo_descrizione if dettagli else None
+        segmento_descrizione = dettagli.segmento_descrizione if dettagli else None
+
+        modello_db = db.query(MnetModelli).filter(
+            MnetModelli.codice_modello == offerta.codice_modello
+        ).first()
+
+        immagine_url = modello_db.default_img if modello_db and modello_db.default_img else "/default-placeholder.png"
+
+        risultato.append({
+            "id_offerta": offerta.id_offerta,
+            "immagine": immagine_url,
+            "marca": offerta.marca,
+            "modello": offerta.modello,
+            "versione": offerta.versione,
+            "cambio": offerta.cambio,
+            "alimentazione": offerta.alimentazione,
+            "segmento": offerta.segmento,
+            "segmento_descrizione": segmento_descrizione,
+            "tipo_descrizione": tipo_descrizione,
+            "canone_mensile": float(canone),
+            "prezzo_listino": float(offerta.prezzo_listino),
+            "prezzo_totale": float(offerta.prezzo_totale or offerta.prezzo_listino),
+            "slug": offerta.slug,
+            "solo_privati": offerta.solo_privati,
+            "durata_mesi": durata,
+            "km_inclusi": km,
+            "logo_web": settings.logo_web or "",
+            "dealer_slug": dealer_slug
+        })
+
+    return risultato
+
 # Funzione separata con gestione retry (3 tentativi con 2 secondi tra tentativi)
 
 logger = logging.getLogger(__name__)
