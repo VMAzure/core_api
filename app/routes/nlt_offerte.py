@@ -508,11 +508,12 @@ async def get_tags(db: Session = Depends(get_db)):
 
 
 # Importa modello necessario
-from app.models import MnetModelli
 
 @router.get("/offerte-nlt-pubbliche/{slug}")
 async def offerte_nlt_pubbliche(
     slug: str,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, le=500),
     db: Session = Depends(get_db)
 ):
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
@@ -524,14 +525,9 @@ async def offerte_nlt_pubbliche(
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato per questo slug.")
 
-    if user.role == "dealer":
-        if user.parent_id is None:
-            raise HTTPException(status_code=400, detail="Dealer senza admin principale associato.")
-        admin_id = user.parent_id
-    else:
-        admin_id = user.id
+    admin_id = user.parent_id if user.role == "dealer" and user.parent_id else user.id
 
-    offerte = db.query(NltOfferte, NltQuotazioni).join(
+    offerte_query = db.query(NltOfferte, NltQuotazioni).join(
         NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
     ).filter(
         NltOfferte.id_admin == admin_id,
@@ -542,13 +538,16 @@ async def offerte_nlt_pubbliche(
             NltQuotazioni.mesi_48_10.isnot(None),
             NltQuotazioni.mesi_48_30.isnot(None)
         )
-    ).order_by(NltOfferte.prezzo_listino.asc()).all()  # Ordinamento per prezzo_listino crescente
+    ).order_by(NltOfferte.prezzo_listino.asc())
+
+    offerte = offerte_query.offset(offset).limit(limit).all()
 
     risultato = []
 
     for offerta, quotazione in offerte:
         dealer_context = settings.dealer_id is not None
         dealer_id_for_context = settings.dealer_id if dealer_context else None
+
         durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
             offerta, quotazione, user, db,
             dealer_context=dealer_context, dealer_id=dealer_id_for_context
@@ -557,7 +556,6 @@ async def offerte_nlt_pubbliche(
         if canone is None:
             continue
 
-        # 🔹 Spostato QUI: recupero dei dettagli per ogni offerta
         dettagli = db.query(MnetDettagli).filter(
             MnetDettagli.codice_motornet_uni == offerta.codice_motornet
         ).first()
@@ -592,7 +590,6 @@ async def offerte_nlt_pubbliche(
             "logo_web": settings.logo_web or "",
             "dealer_slug": dealer_slug
         })
-
 
     return risultato
 
