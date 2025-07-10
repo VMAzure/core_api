@@ -29,6 +29,10 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 
+from sqlalchemy.orm import joinedload
+from sqlalchemy import not_
+
+
 from app.auth_helpers import (
     get_admin_id,
     get_dealer_id,
@@ -593,6 +597,7 @@ async def offerte_nlt_pubbliche(
     return risultato
 
 
+
 @router.get("/offerte-nlt-pubbliche/tantastrada/{slug}")
 async def offerte_nlt_tantastrada(
     slug: str,
@@ -614,18 +619,29 @@ async def offerte_nlt_tantastrada(
     else:
         admin_id = user.id
 
-    offerte = db.query(NltOfferte, NltQuotazioni).join(
+    ESCLUDI_SEGMENTI = [
+        "Superutilitarie",
+        "Utilitarie",
+        "SUV piccoli",
+        "Medio-inferiori"
+    ]
+
+    offerte = db.query(NltOfferte, NltQuotazioni, MnetDettagli).join(
         NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
+    ).join(
+        MnetDettagli, MnetDettagli.codice_motornet_uni == NltOfferte.codice_motornet
     ).filter(
         NltOfferte.id_admin == admin_id,
+        NltOfferte.id_player == 5,  # ✅ solo UnipolRental
         NltOfferte.attivo.is_(True),
         NltOfferte.prezzo_listino.isnot(None),
-        NltQuotazioni.mesi_60_40.isnot(None)
+        NltQuotazioni.mesi_60_40.isnot(None),
+        not_(MnetDettagli.segmento_descrizione.in_(ESCLUDI_SEGMENTI))
     ).order_by(NltOfferte.prezzo_listino.asc()).all()
 
     risultato = []
 
-    for offerta, quotazione in offerte:
+    for offerta, quotazione, dettagli in offerte:
         canone_base = quotazione.mesi_60_40
         if not canone_base:
             continue
@@ -644,13 +660,6 @@ async def offerte_nlt_tantastrada(
         if canone is None:
             continue
 
-        dettagli = db.query(MnetDettagli).filter(
-            MnetDettagli.codice_motornet_uni == offerta.codice_motornet
-        ).first()
-
-        tipo_descrizione = dettagli.tipo_descrizione if dettagli else None
-        segmento_descrizione = dettagli.segmento_descrizione if dettagli else None
-
         modello_db = db.query(MnetModelli).filter(
             MnetModelli.codice_modello == offerta.codice_modello
         ).first()
@@ -666,8 +675,8 @@ async def offerte_nlt_tantastrada(
             "cambio": offerta.cambio,
             "alimentazione": offerta.alimentazione,
             "segmento": offerta.segmento,
-            "segmento_descrizione": segmento_descrizione,
-            "tipo_descrizione": tipo_descrizione,
+            "segmento_descrizione": dettagli.segmento_descrizione if dettagli else None,
+            "tipo_descrizione": dettagli.tipo_descrizione if dettagli else None,
             "canone_mensile": float(canone),
             "prezzo_listino": float(offerta.prezzo_listino),
             "prezzo_totale": float(offerta.prezzo_totale or offerta.prezzo_listino),
@@ -680,6 +689,7 @@ async def offerte_nlt_tantastrada(
         })
 
     return risultato
+
 
 # Funzione separata con gestione retry (3 tentativi con 2 secondi tra tentativi)
 
