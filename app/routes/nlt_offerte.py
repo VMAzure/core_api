@@ -898,7 +898,6 @@ async def offerta_nlt_tantastrada(
     dealer_context = settings.dealer_id is not None
     dealer_id_for_context = settings.dealer_id if dealer_context else None
 
-    from app.utils.calcolo_quotazione import calcola_quotazione_custom
     _, _, canone_finale, dealer_slug = calcola_quotazione_custom(
         offerta, durata, km, canone_base, user, db,
         dealer_context=dealer_context, dealer_id=dealer_id_for_context
