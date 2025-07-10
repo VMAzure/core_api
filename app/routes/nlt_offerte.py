@@ -859,6 +859,85 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
         "dettagli_motornet": dettagli_motornet
     }
 
+@router.get("/offerte-nlt-pubbliche/tantastrada/{slug_dealer}/{slug_offerta}")
+async def offerta_nlt_tantastrada(
+    slug_dealer: str,
+    slug_offerta: str,
+    db: Session = Depends(get_db)
+):
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug_dealer).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail=f"Dealer '{slug_dealer}' non trovato.")
+
+    user_id = settings.dealer_id if settings.dealer_id else settings.admin_id
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente admin non trovato per questo dealer.")
+
+    offerta = db.query(NltOfferte).join(User, NltOfferte.id_admin == User.id).filter(
+        User.id == settings.admin_id,
+        NltOfferte.slug == slug_offerta,
+        NltOfferte.attivo == True
+    ).first()
+
+    if not offerta:
+        raise HTTPException(status_code=404, detail="Offerta non trovata.")
+
+    quotazione = db.query(NltQuotazioni).filter(
+        NltQuotazioni.id_offerta == offerta.id_offerta
+    ).first()
+
+    if not quotazione or not quotazione.mesi_60_40:
+        raise HTTPException(status_code=404, detail="Quotazione 60/40 non disponibile per questa offerta.")
+
+    canone_base = quotazione.mesi_60_40
+    durata = 60
+    km = 40000
+
+    # Calcola canone finale con provvigioni
+    dealer_context = settings.dealer_id is not None
+    dealer_id_for_context = settings.dealer_id if dealer_context else None
+
+    from app.utils.calcolo_quotazione import calcola_quotazione_custom
+    _, _, canone_finale, dealer_slug = calcola_quotazione_custom(
+        offerta, durata, km, canone_base, user, db,
+        dealer_context=dealer_context, dealer_id=dealer_id_for_context
+    )
+
+    # Recupera dettagli motornet
+    token = get_motornet_token()
+
+    try:
+        dettagli_motornet = await fetch_motornet_details(offerta.codice_motornet, token)
+        motornet_status = "OK"
+    except HTTPException:
+        dettagli_motornet = get_dati_nd()
+        motornet_status = "KO"
+        logger.error(f"Motornet non raggiungibile per {offerta.codice_motornet}")
+
+    return {
+        "id_offerta": offerta.id_offerta,
+        "immagine": offerta.default_img,
+        "marca": offerta.marca,
+        "modello": offerta.modello,
+        "versione": offerta.versione,
+        "cambio": offerta.cambio,
+        "alimentazione": offerta.alimentazione,
+        "prezzo_listino": float(offerta.prezzo_listino) if offerta.prezzo_listino else None,
+        "prezzo_totale": float(offerta.prezzo_totale) if offerta.prezzo_totale else None,
+        "descrizione_breve": offerta.descrizione_breve,
+        "slug": offerta.slug,
+        "solo_privati": offerta.solo_privati,
+        "descrizione_ai": offerta.descrizione_ai,
+        "motornet_status": motornet_status,
+        "canone_mensile": float(canone_finale) if canone_finale else None,
+        "durata": durata,
+        "km": km,
+        "dealer_slug": dealer_slug,
+        "dettagli_motornet": dettagli_motornet
+    }
+
+
 
 @router.put("/quotazioni/{id_offerta}")
 def aggiorna_quotazioni(
