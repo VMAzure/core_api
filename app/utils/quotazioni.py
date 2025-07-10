@@ -46,6 +46,10 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, dealer_co
             if settings_dealer.slug:
                 slug_finale = settings_dealer.slug
 
+    if offerta.id_player == 5:
+        prov_admin = 0.0
+        prov_dealer = 0.0
+
     incremento_totale = prezzo_netto * (prov_admin + prov_dealer) / 100.0
     canone_finale = canone_base + (incremento_totale / durata)
 
@@ -76,6 +80,10 @@ def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db
             prov_dealer = float(settings_dealer.prov_vetrina or 0)
             if settings_dealer.slug:
                 slug_finale = settings_dealer.slug
+
+    if offerta.id_player == 5:
+        prov_admin = 0.0
+        prov_dealer = 0.0
 
     incremento_totale = prezzo_netto * (prov_admin + prov_dealer) / 100.0
     canone_finale = canone_base + (incremento_totale / durata)
