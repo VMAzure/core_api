@@ -28,7 +28,7 @@ def aggiorna_default_images():
         params = {
             "make": marca,
             "modelFamily": modello_nome,
-            "angle": 28,
+            "angle": 23,
             "customer": "it-azureautomotive",
             "billingtag": "core",
             "zoomlevel": 1,
