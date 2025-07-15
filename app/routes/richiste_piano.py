@@ -34,4 +34,4 @@ async def invia_richiesta_piano(
     
     except Exception as e:
         print("❌ Errore invio email:", e)
-        raise HTTPException(status_code=500, detail="Errore durante l'invio dell'email.")
+        raise HTTPException(status_code=500, detail="Errore durante l'invio.")
