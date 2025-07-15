@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.utils.email import send_email  # Adatta al tuo path reale se diverso
+
 router = APIRouter()
 
 @router.post("/api/invia-richiesta-piano")
@@ -14,7 +15,7 @@ async def invia_richiesta_piano(
     piano: str = Form(None),
     db: Session = Depends(get_db)
 ):
-    admin_id = 13  # ID admin fisso
+    admin_id = 13  # ID admin 
 
     subject = f"📩 Nuova richiesta piano NLT.rent - {piano or 'non specificato'}"
 
