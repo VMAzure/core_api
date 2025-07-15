@@ -53,12 +53,6 @@ from app.routes import preview
 from app.routes import richieste_piano
 
 
-
-
-
-
-
-
 # ✅ Configuriamo il logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
 logger = logging.getLogger("uvicorn")
