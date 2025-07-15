@@ -50,7 +50,7 @@ from app.routes.pipeline import router as pipeline_router
 from app.routes import twilio  
 from app.routes.whatsapp import router as whatsapp_router
 from app.routes import preview
-from app.routes import richieste_piano
+from app.routes.richieste_piano import router as richieste_piano_router
 
 
 # ✅ Configuriamo il logging
@@ -181,7 +181,7 @@ app.include_router(pipeline_router)
 app.include_router(twilio.router)
 app.include_router(whatsapp_router)
 app.include_router(preview.router)
-app.include_router(richieste_piano.router)
+app.include_router(richieste_piano_router)
 
 
 
