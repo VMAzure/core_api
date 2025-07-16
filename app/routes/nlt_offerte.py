@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session, selectinload
 from typing import Optional, List
 from app.database import get_db
-from app.models import MnetDettagli,NltPneumatici, NltAutoSostitutiva, NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt  
+from app.models import MnetDettagli,NltPneumatici, NltAutoSostitutiva, NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt, NltOfferteClick
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
@@ -1078,4 +1078,34 @@ async def calcola_canone(
         canone_finale *= 1.22
 
     return {"canone": round(canone_finale, 2)}
+
+
+@router.post("/click")
+async def registra_click_offerta(
+    dealer_slug: str = Body(...),
+    id_offerta: int = Body(...),
+    db: Session = Depends(get_db)
+):
+    # 1. Recupera settings dealer/admin
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail=f"Dealer '{dealer_slug}' non trovato.")
+
+    id_dealer = settings.dealer_id if settings.dealer_id else settings.admin_id
+
+    # 2. Verifica che l'offerta esista e sia collegata all'admin corretto
+    offerta = db.query(NltOfferte).filter(NltOfferte.id_offerta == id_offerta).first()
+    if not offerta:
+        raise HTTPException(status_code=404, detail="Offerta non trovata.")
+
+    # 3. Registra click (sempre dealer o admin)
+    nuovo_click = NltOfferteClick(
+        id_offerta=id_offerta,
+        id_dealer=id_dealer
+    )
+    db.add(nuovo_click)
+    db.commit()
+
+    return {"success": True}
+
 

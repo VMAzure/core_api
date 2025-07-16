@@ -912,3 +912,16 @@ class WhatsappSessione(Base):
     ultimo_aggiornamento = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     cliente = relationship("Cliente", backref="whatsapp_sessione")
+
+class NltOfferteClick(Base):
+    __tablename__ = "nlt_offerte_click"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    id_offerta = Column(Integer, ForeignKey("public.nlt_offerte.id_offerta", ondelete="CASCADE"), nullable=False, index=True)
+    id_dealer = Column(Integer, ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False, index=True)
+    clicked_at = Column(DateTime, default=func.now(), nullable=False, index=True)
+
+    # Relazioni (opzionali, utili per joinedload)
+    offerta = relationship("NltOfferte", backref="clicks")
+    dealer = relationship("User", backref="offerte_click")
