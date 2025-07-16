@@ -49,6 +49,8 @@ def offerte_piu_cliccate(
             NltOfferte.marca,
             NltOfferte.modello,
             NltOfferte.versione,
+            NltOfferte.solo_privati,        # ✅ AGGIUNGI QUI
+
             User.id,
             User.ragione_sociale
         ).order_by(desc("totale_click"))
@@ -61,6 +63,7 @@ def offerte_piu_cliccate(
                 "versione": r.versione,
                 "totale_click": r.totale_click,
                 "dealer_id": r.dealer_id,
+                "solo_privati": r.solo_privati,
                 "dealer_ragione_sociale": r.ragione_sociale
             }
             for r in query.all()
