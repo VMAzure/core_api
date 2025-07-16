@@ -352,8 +352,6 @@ class AZUsatoInsertRequest(BaseModel):
 
 class NltOfferte(Base):
     __tablename__ = 'nlt_offerte'
-    __table_args__ = {"schema": "public"}  # 👈 AGGIUNGILO QUI
-
 
     id_offerta = Column(Integer, primary_key=True)
     id_admin = Column(Integer, nullable=False)
@@ -391,8 +389,6 @@ class NltOfferte(Base):
 
 class NltQuotazioni(Base):
     __tablename__ = 'nlt_quotazioni'
-    __table_args__ = {"schema": "public"}  # 👈 AGGIUNGILO QUI
-
 
     id_quotazione = Column(Integer, primary_key=True)
     id_offerta = Column(Integer, ForeignKey('nlt_offerte.id_offerta', ondelete='CASCADE'))
@@ -419,8 +415,6 @@ class NltQuotazioni(Base):
 
 class NltImmagini(Base):
     __tablename__ = 'nlt_immagini'
-    __table_args__ = {"schema": "public"}  # 👈 AGGIUNGILO QUI
-
 
     id_immagine = Column(Integer, primary_key=True)
     id_offerta = Column(Integer, ForeignKey('nlt_offerte.id_offerta', ondelete='CASCADE'))
@@ -431,8 +425,6 @@ class NltImmagini(Base):
 
 class NltOfferteTag(Base):
     __tablename__ = 'nlt_offerte_tag'
-    __table_args__ = {"schema": "public"}  # 👈 AGGIUNGILO QUI
-
 
     id_tag = Column(Integer, primary_key=True)
     nome = Column(String(50), nullable=False, unique=True)
@@ -443,8 +435,6 @@ class NltOfferteTag(Base):
 
 class NltOffertaTag(Base):
     __tablename__ = 'nlt_offerta_tag'
-    __table_args__ = {"schema": "public"}  # 👈 AGGIUNGILO QUI
-
 
     id_offerta = Column(Integer, ForeignKey('nlt_offerte.id_offerta', ondelete='CASCADE'), primary_key=True)
     id_tag = Column(Integer, ForeignKey('nlt_offerte_tag.id_tag', ondelete='CASCADE'), primary_key=True)
@@ -460,8 +450,6 @@ class NltPlayers(Base):
 
 class NltOffertaAccessori(Base):
     __tablename__ = 'nlt_offerta_accessori'
-    __table_args__ = {"schema": "public"}  # 👈 AGGIUNGILO QUI
-
 
     id = Column(Integer, primary_key=True)
     id_offerta = Column(Integer, ForeignKey('nlt_offerte.id_offerta', ondelete='CASCADE'))
@@ -929,8 +917,8 @@ class NltOfferteClick(Base):
     __tablename__ = "nlt_offerte_click"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    id_offerta = Column(Integer, ForeignKey("public.nlt_offerte.id_offerta", ondelete="CASCADE"), nullable=False, index=True)
-    id_dealer = Column(Integer, ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False, index=True)
+    id_offerta = Column(Integer, ForeignKey("nlt_offerte.id_offerta", ondelete="CASCADE"), nullable=False, index=True)
+    id_dealer = Column(Integer, ForeignKey("utenti.id", ondelete="CASCADE"), nullable=False, index=True)
     clicked_at = Column(DateTime, default=func.now(), nullable=False, index=True)
 
     offerta = relationship("NltOfferte", backref="clicks", foreign_keys=[id_offerta])
