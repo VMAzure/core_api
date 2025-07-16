@@ -351,6 +351,7 @@ class AZUsatoInsertRequest(BaseModel):
     visibile: Optional[bool] = True
 
 class NltOfferte(Base):
+    __table_args__ = {"schema": "public"}
     __tablename__ = 'nlt_offerte'
 
     id_offerta = Column(Integer, primary_key=True)
