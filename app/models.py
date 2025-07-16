@@ -351,7 +351,6 @@ class AZUsatoInsertRequest(BaseModel):
     visibile: Optional[bool] = True
 
 class NltOfferte(Base):
-    __table_args__ = {"schema": "public"}
     __tablename__ = 'nlt_offerte'
 
     id_offerta = Column(Integer, primary_key=True)
@@ -916,7 +915,6 @@ class WhatsappSessione(Base):
 
 class NltOfferteClick(Base):
     __tablename__ = "nlt_offerte_click"
-    __table_args__ = {"schema": "public"}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     id_offerta = Column(Integer, ForeignKey("public.nlt_offerte.id_offerta", ondelete="CASCADE"), nullable=False, index=True)
