@@ -21,13 +21,9 @@ router = APIRouter(
 @router.get("/offerte-piu-cliccate")
 def offerte_piu_cliccate(
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)  # payload JWT con sub = email
+    current_user: User = Depends(get_current_user)  # ✅ È User, non dict
 ):
     from app.auth_helpers import get_dealer_id, get_admin_id, is_admin_user
-
-    user = db.query(User).filter(User.email == current_user["sub"]).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Utente non trovato")
 
     query = db.query(
         NltOfferteClick.id_offerta,
@@ -37,12 +33,12 @@ def offerte_piu_cliccate(
         NltOfferte.versione
     ).join(NltOfferte, NltOfferteClick.id_offerta == NltOfferte.id_offerta)
 
-    if is_admin_user(user):
-        admin_id = get_admin_id(user)
+    if is_admin_user(current_user):
+        admin_id = get_admin_id(current_user)
         if admin_id:
             query = query.filter(NltOfferte.id_admin == admin_id)
     else:
-        dealer_id = get_dealer_id(user)
+        dealer_id = get_dealer_id(current_user)
         query = query.filter(NltOfferteClick.id_dealer == dealer_id)
 
     query = query.group_by(
@@ -62,6 +58,7 @@ def offerte_piu_cliccate(
         }
         for r in query.all()
     ]
+
 
 
 @router.get("/clicks-giornalieri")
