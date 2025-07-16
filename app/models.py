@@ -922,6 +922,5 @@ class NltOfferteClick(Base):
     id_dealer = Column(Integer, ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False, index=True)
     clicked_at = Column(DateTime, default=func.now(), nullable=False, index=True)
 
-    # Relazioni (opzionali, utili per joinedload)
     offerta = relationship("NltOfferte", backref="clicks")
     dealer = relationship("User", backref="offerte_click")
