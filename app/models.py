@@ -918,8 +918,9 @@ class NltOfferteClick(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     id_offerta = Column(Integer, ForeignKey("nlt_offerte.id_offerta", ondelete="CASCADE"), nullable=False, index=True)
-    id_dealer = Column(Integer, ForeignKey("utenti.id", ondelete="CASCADE"), nullable=False, index=True)
+    id_dealer = Column(Integer, ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False, index=True)
     clicked_at = Column(DateTime, default=func.now(), nullable=False, index=True)
 
     offerta = relationship("NltOfferte", backref="clicks", foreign_keys=[id_offerta])
     dealer = relationship("User", backref="offerte_click")
+
