@@ -85,19 +85,19 @@ def offerte_piu_cliccate(
              NltOfferte.versione
          ).order_by(desc("totale_click"))
 
-    return [
+        return [
         {
             "id_offerta": r.id_offerta,
             "marca": r.marca,
             "modello": r.modello,
             "versione": r.versione,
             "totale_click": r.totale_click,
-            "dealer_id": r.dealer_id,
-            "dealer_ragione_sociale": r.ragione_sociale,
             "solo_privati": r.solo_privati
         }
         for r in query.all()
     ]
+
+
 
 
 
