@@ -157,3 +157,57 @@ def clicks_giornalieri(
             {"giorno": str(r.giorno), "click": r.click}
             for r in query.all()
         ]
+
+@router.get("/offerte-piu-cliccate-global")
+def offerte_piu_cliccate_global(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Solo gli admin possono accedere a questa statistica")
+
+    admin_id = get_admin_id(current_user)
+
+    query = db.query(
+        NltOfferte.marca,
+        NltOfferte.modello,
+        NltOfferte.versione,
+        NltOfferte.solo_privati,
+        func.count(NltOfferteClick.id).label("totale_click")
+    ).join(NltOfferte, NltOfferteClick.id_offerta == NltOfferte.id_offerta)
+
+    if admin_id:
+        query = query.filter(NltOfferte.id_admin == admin_id)
+
+    query = query.group_by(
+        NltOfferte.marca,
+        NltOfferte.modello,
+        NltOfferte.versione,
+        NltOfferte.solo_privati
+    ).order_by(desc("totale_click"))
+
+    return query.all()
+
+
+@router.get("/clicks-per-dealer")
+def clicks_per_dealer(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Solo gli admin possono accedere a questa statistica")
+
+    admin_id = get_admin_id(current_user)
+
+    query = db.query(
+        User.id.label("dealer_id"),
+        User.ragione_sociale,
+        func.count(NltOfferteClick.id).label("totale_click")
+    ).join(User, NltOfferteClick.id_dealer == User.id)
+
+    if admin_id:
+        query = query.filter(User.parent_id == admin_id)
+
+    query = query.group_by(User.id, User.ragione_sociale).order_by(desc("totale_click"))
+
+    return query.all()
