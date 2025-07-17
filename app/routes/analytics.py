@@ -23,12 +23,11 @@ def offerte_piu_cliccate(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from app.auth_helpers import get_dealer_id, get_admin_id, is_admin_user
+    admin_id = get_admin_id(current_user)
+    dealer_id = get_dealer_id(current_user)
 
     if is_admin_user(current_user):
-        admin_id = get_admin_id(current_user)
-
-        # Click aggregati per offerta e dealer
+        # Admin → offerte cliccate dove id_admin == mio ID
         query = db.query(
             NltOfferteClick.id_offerta,
             func.count().label("totale_click"),
@@ -39,18 +38,14 @@ def offerte_piu_cliccate(
             User.id.label("dealer_id"),
             User.ragione_sociale
         ).join(NltOfferte, NltOfferteClick.id_offerta == NltOfferte.id_offerta)\
-         .join(User, NltOfferteClick.id_dealer == User.id)
-
-        if admin_id:
-            query = query.filter(User.parent_id == admin_id)
-
-        query = query.group_by(
+         .join(User, NltOfferteClick.id_dealer == User.id)\
+         .filter(NltOfferte.id_admin == admin_id)\
+         .group_by(
             NltOfferteClick.id_offerta,
             NltOfferte.marca,
             NltOfferte.modello,
             NltOfferte.versione,
-            NltOfferte.solo_privati,        # ✅ AGGIUNGI QUI
-
+            NltOfferte.solo_privati,
             User.id,
             User.ragione_sociale
         ).order_by(desc("totale_click"))
@@ -70,8 +65,9 @@ def offerte_piu_cliccate(
         ]
 
     else:
-        dealer_id = get_dealer_id(current_user)
-
+        # Dealer → offerte cliccate su offerte dove:
+        # - il dealer è sé stesso
+        # - oppure l’offerta è del suo admin
         query = db.query(
             NltOfferteClick.id_offerta,
             func.count().label("totale_click"),
@@ -80,25 +76,29 @@ def offerte_piu_cliccate(
             NltOfferte.versione,
             NltOfferte.solo_privati
         ).join(NltOfferte, NltOfferteClick.id_offerta == NltOfferte.id_offerta)\
-         .filter(NltOfferteClick.id_dealer == dealer_id)\
+         .filter(
+            (NltOfferteClick.id_dealer == dealer_id) |
+            (NltOfferte.id_admin == admin_id)
+         )\
          .group_by(
-             NltOfferteClick.id_offerta,
-             NltOfferte.marca,
-             NltOfferte.modello,
-             NltOfferte.versione
-         ).order_by(desc("totale_click"))
+            NltOfferteClick.id_offerta,
+            NltOfferte.marca,
+            NltOfferte.modello,
+            NltOfferte.versione,
+            NltOfferte.solo_privati
+        ).order_by(desc("totale_click"))
 
         return [
-        {
-            "id_offerta": r.id_offerta,
-            "marca": r.marca,
-            "modello": r.modello,
-            "versione": r.versione,
-            "totale_click": r.totale_click,
-            "solo_privati": r.solo_privati
-        }
-        for r in query.all()
-    ]
+            {
+                "id_offerta": r.id_offerta,
+                "marca": r.marca,
+                "modello": r.modello,
+                "versione": r.versione,
+                "totale_click": r.totale_click,
+                "solo_privati": r.solo_privati
+            }
+            for r in query.all()
+        ]
 
 
 @router.get("/clicks-giornalieri")
@@ -106,52 +106,43 @@ def clicks_giornalieri(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from app.auth_helpers import get_dealer_id, get_admin_id, is_admin_user
-
     oggi = datetime.utcnow().date()
     inizio = oggi - timedelta(days=13)
 
-    if is_admin_user(current_user):
-        admin_id = get_admin_id(current_user)
+    admin_id = get_admin_id(current_user)
+    dealer_id = get_dealer_id(current_user)
 
-        # Click per giorno e dealer
+    # === Admin ===
+    if is_admin_user(current_user):
         query = db.query(
             cast(NltOfferteClick.clicked_at, Date).label("giorno"),
-            NltOfferteClick.id_dealer,
-            User.ragione_sociale,
             func.count().label("click")
-        ).join(User, NltOfferteClick.id_dealer == User.id)\
-         .filter(NltOfferteClick.clicked_at >= inizio)
-
-        if admin_id:
-            query = query.filter(User.parent_id == admin_id)
-
-        query = query.group_by("giorno", NltOfferteClick.id_dealer, User.ragione_sociale)\
-                     .order_by("giorno")
+        ).join(NltOfferte, NltOfferteClick.id_offerta == NltOfferte.id_offerta)\
+         .filter(
+             NltOfferteClick.clicked_at >= inizio,
+             NltOfferte.id_admin == admin_id  # include offerte sue e dei suoi dealer
+         )\
+         .group_by("giorno").order_by("giorno")
 
         return [
-            {
-                "giorno": str(r.giorno),
-                "click": r.click,
-                "dealer_id": r.id_dealer,
-                "dealer_ragione_sociale": r.ragione_sociale
-            }
+            {"giorno": str(r.giorno), "click": int(r.click)}
             for r in query.all()
         ]
 
+    # === Dealer ===
     else:
-        dealer_id = get_dealer_id(current_user)
-
         query = db.query(
             cast(NltOfferteClick.clicked_at, Date).label("giorno"),
             func.count().label("click")
-        ).filter(
-            NltOfferteClick.clicked_at >= inizio,
-            NltOfferteClick.id_dealer == dealer_id
-        ).group_by("giorno").order_by("giorno")
+        ).join(NltOfferte, NltOfferteClick.id_offerta == NltOfferte.id_offerta)\
+         .filter(
+             NltOfferteClick.clicked_at >= inizio,
+             (NltOfferteClick.id_dealer == dealer_id) | (NltOfferte.id_admin == admin_id)
+         )\
+         .group_by("giorno").order_by("giorno")
 
         return [
-            {"giorno": str(r.giorno), "click": r.click}
+            {"giorno": str(r.giorno), "click": int(r.click)}
             for r in query.all()
         ]
 
