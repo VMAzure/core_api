@@ -343,4 +343,75 @@ async def registra_click_vetrina(
 
     return {"success": True}
 
+@router.get("/vetrine-piu-visitate")
+def vetrine_piu_visitate(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Solo gli admin possono accedere a questa statistica")
+
+    admin_id = get_admin_id(current_user)
+
+    # dealer figli + admin stesso
+    query = db.query(
+        User.id.label("dealer_id"),
+        User.ragione_sociale.label("ragione_sociale"),
+        func.count(NltVetrinaClick.id).label("totale_click")
+    ).join(User, NltVetrinaClick.id_dealer == User.id)\
+     .filter(
+         (User.parent_id == admin_id) | (User.id == admin_id)
+     )\
+     .group_by(User.id, User.ragione_sociale)\
+     .order_by(desc("totale_click"))
+
+    return [
+        {
+            "dealer_id": r.dealer_id,
+            "ragione_sociale": r.ragione_sociale,
+            "totale_click": r.totale_click
+        }
+        for r in query.all()
+    ]
+
+@router.get("/clicks-vetrina-giornalieri")
+def clicks_vetrina_giornalieri(
+    giorni: int = 7,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    oggi = datetime.utcnow().date()
+    inizio = oggi - timedelta(days=giorni - 1)
+
+    admin_id = get_admin_id(current_user)
+    dealer_id = get_dealer_id(current_user)
+
+    if is_admin_user(current_user):
+        # Vetrine dei dealer figli + admin stesso
+        subq = db.query(
+            cast(NltVetrinaClick.clicked_at, Date).label("giorno"),
+            func.count().label("click")
+        ).join(User, NltVetrinaClick.id_dealer == User.id)\
+         .filter(
+            NltVetrinaClick.clicked_at >= inizio,
+            (User.parent_id == admin_id) | (User.id == admin_id)
+         )\
+         .group_by("giorno").order_by("giorno")
+    else:
+        # Solo la propria vetrina
+        subq = db.query(
+            cast(NltVetrinaClick.clicked_at, Date).label("giorno"),
+            func.count().label("click")
+        ).filter(
+            NltVetrinaClick.clicked_at >= inizio,
+            NltVetrinaClick.id_dealer == dealer_id
+        )\
+        .group_by("giorno").order_by("giorno")
+
+    return [
+        {"giorno": str(r.giorno), "click": int(r.click)}
+        for r in subq.all()
+    ]
+
+
 
