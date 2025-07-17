@@ -195,44 +195,47 @@ def offerte_piu_cliccate_global(
         raise HTTPException(status_code=500, detail="Errore interno")
 
 
+from sqlalchemy import union_all, literal
+
 @router.get("/clicks-per-dealer")
 def clicks_per_dealer(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    try:
-        if not is_admin_user(current_user):
-            raise HTTPException(status_code=403, detail="Solo gli admin possono accedere a questa statistica")
+    if not is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Solo gli admin possono accedere a questa statistica")
 
-        admin_id = get_admin_id(current_user)
-        print("🔎 admin_id:", admin_id)
+    admin_id = get_admin_id(current_user)
 
-        query = db.query(
-            User.id.label("dealer_id"),
-            User.ragione_sociale,
-            func.count(NltOfferteClick.id).label("totale_click")
-        ).join(User, NltOfferteClick.id_dealer == User.id)
+    # Click per dealer
+    subq_dealer = db.query(
+        User.id.label("dealer_id"),
+        User.ragione_sociale.label("ragione_sociale"),
+        func.count(NltOfferteClick.id).label("totale_click")
+    ).join(User, NltOfferteClick.id_dealer == User.id)\
+     .filter(User.parent_id == admin_id)\
+     .group_by(User.id, User.ragione_sociale)
 
-        if admin_id:
-            query = query.filter(User.parent_id == admin_id)
+    # Click per offerte pubblicate direttamente dall’admin
+    subq_admin = db.query(
+        literal(admin_id).label("dealer_id"),
+        literal(current_user.ragione_sociale or "Admin").label("ragione_sociale"),
+        func.count(NltOfferteClick.id).label("totale_click")
+    ).join(NltOfferte, NltOfferteClick.id_offerta == NltOfferte.id_offerta)\
+     .filter(NltOfferte.id_admin == admin_id)
 
-        query = query.group_by(User.id, User.ragione_sociale).order_by(desc("totale_click"))
+    # Combina le due query
+    union_query = subq_dealer.union_all(subq_admin).order_by(desc("totale_click"))
 
-        risultati = query.all()
-        print(f"✅ Totale dealer trovati: {len(risultati)}")
+    return [
+        {
+            "dealer_id": int(r.dealer_id),
+            "dealer_ragione_sociale": r.ragione_sociale,
+            "totale_click": int(r.totale_click)
+        }
+        for r in union_query.all()
+    ]
 
-        return [
-            {
-                "dealer_id": int(r.dealer_id),
-                "dealer_ragione_sociale": r.ragione_sociale or "—",
-                "totale_click": int(r.totale_click)
-            }
-            for r in risultati
-        ]
-
-    except Exception as e:
-        print("❌ Errore in /clicks-per-dealer:", repr(e))
-        raise HTTPException(status_code=500, detail="Errore interno")
 
 @router.get("/offerte-cliccate-per-dealer/{dealer_id}")
 def offerte_cliccate_per_dealer(
