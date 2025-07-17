@@ -195,7 +195,8 @@ def offerte_piu_cliccate_global(
         raise HTTPException(status_code=500, detail="Errore interno")
 
 
-from sqlalchemy import union_all, literal
+
+from sqlalchemy import union_all, literal, select
 
 @router.get("/clicks-per-dealer")
 def clicks_per_dealer(
@@ -207,7 +208,18 @@ def clicks_per_dealer(
 
     admin_id = get_admin_id(current_user)
 
-    # Click per dealer
+    # 👤 Click dell'admin come se fosse un dealer (solo su sue offerte, cliccate sulla sua vetrina)
+    subq_admin = db.query(
+        literal(admin_id).label("dealer_id"),
+        literal(current_user.ragione_sociale or "Admin").label("ragione_sociale"),
+        func.count(NltOfferteClick.id).label("totale_click")
+    ).join(NltOfferte, NltOfferteClick.id_offerta == NltOfferte.id_offerta)\
+     .filter(
+         NltOfferte.id_admin == admin_id,
+         NltOfferteClick.id_dealer == admin_id  # cliccate sulla vetrina dell’admin
+     )
+
+    # 👥 Click per tutti i dealer figli dell’admin
     subq_dealer = db.query(
         User.id.label("dealer_id"),
         User.ragione_sociale.label("ragione_sociale"),
@@ -216,25 +228,19 @@ def clicks_per_dealer(
      .filter(User.parent_id == admin_id)\
      .group_by(User.id, User.ragione_sociale)
 
-    # Click per offerte pubblicate direttamente dall’admin
-    subq_admin = db.query(
-        literal(admin_id).label("dealer_id"),
-        literal(current_user.ragione_sociale or "Admin").label("ragione_sociale"),
-        func.count(NltOfferteClick.id).label("totale_click")
-    ).join(NltOfferte, NltOfferteClick.id_offerta == NltOfferte.id_offerta)\
-     .filter(NltOfferte.id_admin == admin_id)
-
-    # Combina le due query
+    # 🔁 Unione
     union_query = subq_dealer.union_all(subq_admin).order_by(desc("totale_click"))
 
+    risultati = union_query.all()
     return [
         {
             "dealer_id": int(r.dealer_id),
-            "dealer_ragione_sociale": r.ragione_sociale,
+            "dealer_ragione_sociale": r.ragione_sociale or "—",
             "totale_click": int(r.totale_click)
         }
-        for r in union_query.all()
+        for r in risultati
     ]
+
 
 
 @router.get("/offerte-cliccate-per-dealer/{dealer_id}")
