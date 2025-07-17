@@ -316,9 +316,6 @@ def offerte_cliccate_per_dealer(
     ]
 
 
-
-router = APIRouter()
-
 @router.post("/click-vetrina")
 async def registra_click_vetrina(
     dealer_slug: str = Body(...),
