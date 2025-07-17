@@ -249,23 +249,40 @@ def offerte_cliccate_per_dealer(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    try:
-        from app.auth_helpers import is_admin_user, get_admin_id
+    from app.auth_helpers import is_admin_user, get_admin_id
 
-        if not is_admin_user(current_user):
-            raise HTTPException(status_code=403, detail="Solo gli admin possono accedere a questa statistica")
+    if not is_admin_user(current_user):
+        raise HTTPException(status_code=403, detail="Solo gli admin possono accedere a questa statistica")
 
-        admin_id = get_admin_id(current_user)
-        if admin_id:
-            # 🔒 Verifica che il dealer richiesto sia effettivamente collegato all’admin
-            dealer = db.query(User).filter(User.id == dealer_id, User.parent_id == admin_id).first()
-            if not dealer:
-                raise HTTPException(status_code=403, detail="Dealer non autorizzato")
-        else:
-            # superadmin → può vedere tutti
-            dealer = db.query(User).filter(User.id == dealer_id).first()
-            if not dealer:
-                raise HTTPException(status_code=404, detail="Dealer non trovato")
+    admin_id = get_admin_id(current_user)
+
+    # verifica che dealer richiesto sia valido
+    if dealer_id == admin_id:
+        # admin → deve vedere solo le sue offerte, cliccate sulla sua vetrina
+        query = db.query(
+            NltOfferteClick.id_offerta,
+            NltOfferte.marca,
+            NltOfferte.modello,
+            NltOfferte.versione,
+            NltOfferte.solo_privati,
+            func.count().label("totale_click")
+        ).join(NltOfferte, NltOfferteClick.id_offerta == NltOfferte.id_offerta)\
+         .filter(
+             NltOfferte.id_admin == admin_id,
+             NltOfferteClick.id_dealer == admin_id
+         )\
+         .group_by(
+             NltOfferteClick.id_offerta,
+             NltOfferte.marca,
+             NltOfferte.modello,
+             NltOfferte.versione,
+             NltOfferte.solo_privati
+         ).order_by(desc("totale_click"))
+    else:
+        # dealer assegnato all’admin
+        dealer = db.query(User).filter(User.id == dealer_id, User.parent_id == admin_id).first()
+        if not dealer:
+            raise HTTPException(status_code=403, detail="Dealer non autorizzato")
 
         query = db.query(
             NltOfferteClick.id_offerta,
@@ -284,22 +301,17 @@ def offerte_cliccate_per_dealer(
              NltOfferte.solo_privati
          ).order_by(desc("totale_click"))
 
-        risultati = query.all()
-        print(f"📊 Offerte cliccate per dealer {dealer_id}: {len(risultati)}")
+    risultati = query.all()
+    return [
+        {
+            "id_offerta": r.id_offerta,
+            "marca": r.marca,
+            "modello": r.modello,
+            "versione": r.versione,
+            "solo_privati": bool(r.solo_privati),
+            "totale_click": int(r.totale_click)
+        }
+        for r in risultati
+    ]
 
-        return [
-            {
-                "id_offerta": r.id_offerta,
-                "marca": r.marca,
-                "modello": r.modello,
-                "versione": r.versione,
-                "solo_privati": bool(r.solo_privati),
-                "totale_click": int(r.totale_click)
-            }
-            for r in risultati
-        ]
-
-    except Exception as e:
-        print("❌ Errore in /offerte-cliccate-per-dealer:", repr(e))
-        raise HTTPException(status_code=500, detail="Errore interno")
 
