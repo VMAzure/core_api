@@ -242,3 +242,64 @@ def clicks_per_dealer(
     except Exception as e:
         print("❌ Errore in /clicks-per-dealer:", repr(e))
         raise HTTPException(status_code=500, detail="Errore interno")
+
+@router.get("/offerte-cliccate-per-dealer/{dealer_id}")
+def offerte_cliccate_per_dealer(
+    dealer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        from app.auth_helpers import is_admin_user, get_admin_id
+
+        if not is_admin_user(current_user):
+            raise HTTPException(status_code=403, detail="Solo gli admin possono accedere a questa statistica")
+
+        admin_id = get_admin_id(current_user)
+        if admin_id:
+            # 🔒 Verifica che il dealer richiesto sia effettivamente collegato all’admin
+            dealer = db.query(User).filter(User.id == dealer_id, User.parent_id == admin_id).first()
+            if not dealer:
+                raise HTTPException(status_code=403, detail="Dealer non autorizzato")
+        else:
+            # superadmin → può vedere tutti
+            dealer = db.query(User).filter(User.id == dealer_id).first()
+            if not dealer:
+                raise HTTPException(status_code=404, detail="Dealer non trovato")
+
+        query = db.query(
+            NltOfferteClick.id_offerta,
+            NltOfferte.marca,
+            NltOfferte.modello,
+            NltOfferte.versione,
+            NltOfferte.solo_privati,
+            func.count().label("totale_click")
+        ).join(NltOfferte, NltOfferteClick.id_offerta == NltOfferte.id_offerta)\
+         .filter(NltOfferteClick.id_dealer == dealer_id)\
+         .group_by(
+             NltOfferteClick.id_offerta,
+             NltOfferte.marca,
+             NltOfferte.modello,
+             NltOfferte.versione,
+             NltOfferte.solo_privati
+         ).order_by(desc("totale_click"))
+
+        risultati = query.all()
+        print(f"📊 Offerte cliccate per dealer {dealer_id}: {len(risultati)}")
+
+        return [
+            {
+                "id_offerta": r.id_offerta,
+                "marca": r.marca,
+                "modello": r.modello,
+                "versione": r.versione,
+                "solo_privati": bool(r.solo_privati),
+                "totale_click": int(r.totale_click)
+            }
+            for r in risultati
+        ]
+
+    except Exception as e:
+        print("❌ Errore in /offerte-cliccate-per-dealer:", repr(e))
+        raise HTTPException(status_code=500, detail="Errore interno")
+
