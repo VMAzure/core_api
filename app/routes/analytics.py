@@ -101,9 +101,6 @@ def offerte_piu_cliccate(
     ]
 
 
-
-
-
 @router.get("/clicks-giornalieri")
 def clicks_giornalieri(
     db: Session = Depends(get_db),
@@ -189,12 +186,22 @@ def offerte_piu_cliccate_global(
         ).order_by(desc("totale_click"))
 
         risultati = query.all()
-        print(f"✅ Totale risultati offerte aggregate: {len(risultati)}")
-        return risultati
+        print(f"✅ Totale offerte aggregate: {len(risultati)}")
+
+        return [
+            {
+                "marca": r.marca,
+                "modello": r.modello,
+                "versione": r.versione,
+                "solo_privati": bool(r.solo_privati),
+                "totale_click": int(r.totale_click)
+            }
+            for r in risultati
+        ]
 
     except Exception as e:
         print("❌ Errore in /offerte-piu-cliccate-global:", repr(e))
-        raise HTTPException(status_code=500, detail="Errore interno nella statistica offerte aggregate")
+        raise HTTPException(status_code=500, detail="Errore interno")
 
 
 @router.get("/clicks-per-dealer")
@@ -222,8 +229,16 @@ def clicks_per_dealer(
 
         risultati = query.all()
         print(f"✅ Totale dealer trovati: {len(risultati)}")
-        return risultati
+
+        return [
+            {
+                "dealer_id": int(r.dealer_id),
+                "dealer_ragione_sociale": r.ragione_sociale or "—",
+                "totale_click": int(r.totale_click)
+            }
+            for r in risultati
+        ]
 
     except Exception as e:
         print("❌ Errore in /clicks-per-dealer:", repr(e))
-        raise HTTPException(status_code=500, detail="Errore interno nella statistica per dealer")
+        raise HTTPException(status_code=500, detail="Errore interno")
