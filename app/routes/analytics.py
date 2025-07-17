@@ -1,10 +1,10 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException, Request, Body, Header
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, cast, Date
 from datetime import datetime, timedelta
 
 from app.database import get_db
-from app.models import NltOfferteClick, NltOfferte, User
+from app.models import NltOfferteClick, NltOfferte, User, NltVetrinaClick, SiteAdminSettings
 from app.auth_helpers import (
     get_admin_id,
     get_dealer_id,
@@ -12,6 +12,7 @@ from app.auth_helpers import (
     get_settings_owner_id
 )
 from app.routes.nlt import get_current_user
+
 
 router = APIRouter(
     prefix="/analytics",
@@ -313,5 +314,36 @@ def offerte_cliccate_per_dealer(
         }
         for r in risultati
     ]
+
+
+
+router = APIRouter()
+
+@router.post("/click-vetrina")
+async def registra_click_vetrina(
+    dealer_slug: str = Body(...),
+    evento: str = Body(default="visita"),
+    user_agent: str = Header(default=None),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    # 1. Recupera impostazioni del dealer
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == dealer_slug).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail=f"Dealer '{dealer_slug}' non trovato.")
+    id_dealer = settings.dealer_id or settings.admin_id
+
+    # 2. Registra click vetrina
+    click = NltVetrinaClick(
+        id_dealer=id_dealer,
+        evento=evento,
+        user_agent=user_agent,
+        ip=request.client.host,
+        referrer=request.headers.get("referer")
+    )
+    db.add(click)
+    db.commit()
+
+    return {"success": True}
 
 
