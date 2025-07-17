@@ -413,5 +413,47 @@ def clicks_vetrina_giornalieri(
         for r in subq.all()
     ]
 
+@router.get("/offerte-cliccate-nella-mia-vetrina")
+def offerte_cliccate_nella_mia_vetrina(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role not in ["dealer", "dealer_team"]:
+        raise HTTPException(status_code=403, detail="Accesso consentito solo ai dealer")
+
+    dealer_id = current_user.id if current_user.role == "dealer" else current_user.parent_id
+
+    query = db.query(
+        NltOfferteClick.id_offerta,
+        NltOfferte.marca,
+        NltOfferte.modello,
+        NltOfferte.versione,
+        NltOfferte.solo_privati,
+        func.count().label("totale_click")
+    ).join(NltOfferte, NltOfferteClick.id_offerta == NltOfferte.id_offerta)\
+     .filter(NltOfferteClick.id_dealer == dealer_id)\
+     .group_by(
+        NltOfferteClick.id_offerta,
+        NltOfferte.marca,
+        NltOfferte.modello,
+        NltOfferte.versione,
+        NltOfferte.solo_privati
+     )\
+     .order_by(desc("totale_click"))
+
+    risultati = query.all()
+
+    return [
+        {
+            "id_offerta": r.id_offerta,
+            "marca": r.marca,
+            "modello": r.modello,
+            "versione": r.versione,
+            "solo_privati": bool(r.solo_privati),
+            "totale_click": int(r.totale_click)
+        }
+        for r in risultati
+    ]
+
 
 
