@@ -33,6 +33,8 @@ from fastapi.templating import Jinja2Templates
 
 from sqlalchemy.orm import joinedload
 from sqlalchemy import not_
+from sqlalchemy import select, desc
+from datetime import datetime, timedelta
 
 
 from app.auth_helpers import (
@@ -700,6 +702,8 @@ async def offerte_filtrate_nlt_pubbliche(
     segmento: Optional[str] = Query(None),
     alimentazione: Optional[str] = Query(None),
     cambio: Optional[str] = Query(None),
+    tanti_km: Optional[bool] = Query(False),
+    top: Optional[bool] = Query(False),
     db: Session = Depends(get_db)
 ):
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
@@ -767,6 +771,51 @@ async def offerte_filtrate_nlt_pubbliche(
                     func.lower(NltOfferte.cambio).like("%cvt%")
                 )
             )
+    if tanti_km:
+        offerte_query = offerte_query.join(
+            MnetDettagli, MnetDettagli.codice_motornet_uni == NltOfferte.codice_motornet
+        ).filter(
+            NltOfferte.id_player == 5,
+            NltQuotazioni.mesi_60_40.isnot(None),
+            not_(MnetDettagli.segmento_descrizione.in_([
+                "Superutilitarie",
+                "Utilitarie",
+                "SUV piccoli",
+                "Medio-inferiori"
+            ]))
+        )
+  
+        if top:
+            # Subquery dei top ID offerta cliccati dal dealer o dal suo team
+            subquery_clicks = (
+                db.query(
+                    NltOfferteClick.id_offerta,
+                    func.count(NltOfferteClick.id).label("clicks")
+                )
+                .join(NltOfferte, NltOfferte.id_offerta == NltOfferteClick.id_offerta)
+                .filter(
+                    NltOfferte.id_admin == admin_id,
+                    NltOfferteClick.clicked_at >= datetime.utcnow() - timedelta(days=30)
+                )
+                .group_by(NltOfferteClick.id_offerta)
+                .order_by(desc("clicks"))
+                .limit(20)
+                .subquery()
+            )
+
+            id_offerte_top = [row.id_offerta for row in db.execute(select(subquery_clicks.c.id_offerta)).fetchall()]
+    
+            if not id_offerte_top:
+                return []
+
+            # Aggiungi filtro sugli ID top prima di costruire la query principale
+            offerte_query = db.query(NltOfferte, NltQuotazioni).join(
+                NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
+            ).filter(
+                NltOfferte.id_offerta.in_(id_offerte_top)
+            )
+
+
 
     offerte_query = offerte_query.order_by(NltOfferte.prezzo_listino.asc())
     offerte = offerte_query.offset(offset).limit(limit).all()
@@ -777,10 +826,23 @@ async def offerte_filtrate_nlt_pubbliche(
         dealer_context = settings.dealer_id is not None
         dealer_id_for_context = settings.dealer_id if dealer_context else None
 
-        durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
-            offerta, quotazione, user, db,
-            dealer_context=dealer_context, dealer_id=dealer_id_for_context
-        )
+        if tanti_km:
+            durata_mesi = 60
+            km_inclusi = 40000
+            canone_base = quotazione.mesi_60_40
+            if not canone_base:
+                continue
+
+            durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione_custom(
+                offerta, durata_mesi, km_inclusi, canone_base, user, db,
+                dealer_context=dealer_context, dealer_id=dealer_id_for_context
+            )
+        else:
+            durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
+                offerta, quotazione, user, db,
+                dealer_context=dealer_context, dealer_id=dealer_id_for_context
+            )
+
 
         if canone is None:
             continue
