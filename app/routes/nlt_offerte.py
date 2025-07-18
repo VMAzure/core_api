@@ -698,6 +698,8 @@ async def offerte_filtrate_nlt_pubbliche(
     budget_max: Optional[float] = Query(None),
     tipo: Optional[str] = Query(None),
     segmento: Optional[str] = Query(None),
+    alimentazione: Optional[str] = Query(None),
+    cambio: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
@@ -711,7 +713,6 @@ async def offerte_filtrate_nlt_pubbliche(
 
     admin_id = user.parent_id if user.role == "dealer" and user.parent_id else user.id
 
-    # Query base
     offerte_query = db.query(NltOfferte, NltQuotazioni).join(
         NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
     ).filter(
@@ -725,26 +726,47 @@ async def offerte_filtrate_nlt_pubbliche(
         )
     )
 
-    # Join MnetDettagli se serve
-    if tipo or segmento:
-        offerte_query = offerte_query.join(
-            MnetDettagli, MnetDettagli.codice_motornet_uni == NltOfferte.codice_motornet
+    # Filtri
+    if marca:
+        offerte_query = offerte_query.filter(
+            func.lower(NltOfferte.marca) == marca.lower().strip()
         )
 
-    # Filtri opzionali
-    if marca:
-        offerte_query = offerte_query.filter(func.lower(NltOfferte.marca) == marca.lower().strip())
-
     if budget_max:
-        offerte_query = offerte_query.filter(NltOfferte.prezzo_listino <= budget_max * 60)
+        offerte_query = offerte_query.filter(
+            NltOfferte.prezzo_listino <= budget_max * 60
+        )
 
-    if tipo.lower().strip() == "privato":
-        offerte_query = offerte_query.filter(NltOfferte.solo_privati.is_(True))
-    elif tipo.lower().strip() == "business":
-        offerte_query = offerte_query.filter(NltOfferte.solo_privati.is_(False))
+    if tipo:
+        tipo_clean = tipo.lower().strip()
+        if tipo_clean == "privato":
+            offerte_query = offerte_query.filter(NltOfferte.solo_privati.is_(True))
+        elif tipo_clean == "business":
+            offerte_query = offerte_query.filter(NltOfferte.solo_privati.is_(False))
 
     if segmento:
-        offerte_query = offerte_query.filter(func.lower(MnetDettagli.segmento_descrizione) == segmento.lower().strip())
+        offerte_query = offerte_query.filter(
+            NltOfferte.segmento == segmento.upper().strip()
+        )
+
+    if alimentazione:
+        offerte_query = offerte_query.filter(
+            func.lower(NltOfferte.alimentazione) == alimentazione.lower().strip()
+        )
+
+    if cambio:
+        cambio_clean = cambio.lower().strip()
+        if cambio_clean == "manuale":
+            offerte_query = offerte_query.filter(
+                func.lower(NltOfferte.cambio).like("%manuale%")
+            )
+        elif cambio_clean == "automatico":
+            offerte_query = offerte_query.filter(
+                or_(
+                    func.lower(NltOfferte.cambio).like("%automatico%"),
+                    func.lower(NltOfferte.cambio).like("%cvt%")
+                )
+            )
 
     offerte_query = offerte_query.order_by(NltOfferte.prezzo_listino.asc())
     offerte = offerte_query.offset(offset).limit(limit).all()
@@ -799,6 +821,7 @@ async def offerte_filtrate_nlt_pubbliche(
         })
 
     return risultato
+
 
 
 
