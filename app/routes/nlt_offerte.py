@@ -704,7 +704,9 @@ async def offerte_filtrate_nlt_pubbliche(
     cambio: Optional[str] = Query(None),
     tanti_km: Optional[bool] = Query(False),
     top: Optional[bool] = Query(False),
+    search: Optional[str] = Query(None),
     db: Session = Depends(get_db)
+    
 ):
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
@@ -731,6 +733,17 @@ async def offerte_filtrate_nlt_pubbliche(
     )
 
     # Filtri
+    if search:
+    terms = search.lower().strip().split()
+    for term in terms:
+        offerte_query = offerte_query.filter(
+            or_(
+                func.lower(NltOfferte.marca).like(f"%{term}%"),
+                func.lower(NltOfferte.modello).like(f"%{term}%"),
+                func.lower(NltOfferte.versione).like(f"%{term}%")
+            )
+        )
+
     if marca:
         offerte_query = offerte_query.filter(
             func.lower(NltOfferte.marca) == marca.lower().strip()
