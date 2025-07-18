@@ -734,15 +734,15 @@ async def offerte_filtrate_nlt_pubbliche(
 
     # Filtri
     if search:
-    terms = search.lower().strip().split()
-    for term in terms:
-        offerte_query = offerte_query.filter(
-            or_(
-                func.lower(NltOfferte.marca).like(f"%{term}%"),
-                func.lower(NltOfferte.modello).like(f"%{term}%"),
-                func.lower(NltOfferte.versione).like(f"%{term}%")
+        terms = search.lower().strip().split()
+        for term in terms:
+            offerte_query = offerte_query.filter(
+                or_(
+                    func.lower(NltOfferte.marca).like(f"%{term}%"),
+                    func.lower(NltOfferte.modello).like(f"%{term}%"),
+                    func.lower(NltOfferte.versione).like(f"%{term}%")
+                )
             )
-        )
 
     if marca:
         offerte_query = offerte_query.filter(
