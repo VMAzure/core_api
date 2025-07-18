@@ -1,5 +1,7 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, Request, Query, Body
-from sqlalchemy.orm import Session, selectinload, func
+from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import func
+
 from typing import Optional, List
 from app.database import get_db
 from app.models import MnetDettagli,NltPneumatici, NltAutoSostitutiva, NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt, NltOfferteClick
