@@ -738,8 +738,10 @@ async def offerte_filtrate_nlt_pubbliche(
     if budget_max:
         offerte_query = offerte_query.filter(NltOfferte.prezzo_listino <= budget_max * 60)
 
-    if tipo:
-        offerte_query = offerte_query.filter(func.lower(MnetDettagli.tipo_descrizione) == tipo.lower().strip())
+    if tipo.lower().strip() == "privato":
+        offerte_query = offerte_query.filter(NltOfferte.solo_privati.is_(True))
+    elif tipo.lower().strip() == "business":
+        offerte_query = offerte_query.filter(NltOfferte.solo_privati.is_(False))
 
     if segmento:
         offerte_query = offerte_query.filter(func.lower(MnetDettagli.segmento_descrizione) == segmento.lower().strip())
