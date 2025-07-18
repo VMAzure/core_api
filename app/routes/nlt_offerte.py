@@ -1,5 +1,5 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, Request, Query, Body
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, selectinload, func
 from typing import Optional, List
 from app.database import get_db
 from app.models import MnetDettagli,NltPneumatici, NltAutoSostitutiva, NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt, NltOfferteClick
@@ -686,6 +686,116 @@ async def offerte_nlt_tantastrada(
         })
 
     return risultato
+
+@router.get("/offerte-nlt-pubbliche-filtrate/{slug}")
+async def offerte_filtrate_nlt_pubbliche(
+    slug: str,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, le=500),
+    marca: Optional[str] = Query(None),
+    budget_max: Optional[float] = Query(None),
+    tipo: Optional[str] = Query(None),
+    segmento: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail=f"Slug '{slug}' non trovato.")
+
+    user_id = settings.dealer_id if settings.dealer_id else settings.admin_id
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente non trovato per questo slug.")
+
+    admin_id = user.parent_id if user.role == "dealer" and user.parent_id else user.id
+
+    # Query base
+    offerte_query = db.query(NltOfferte, NltQuotazioni).join(
+        NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
+    ).filter(
+        NltOfferte.id_admin == admin_id,
+        NltOfferte.attivo.is_(True),
+        NltOfferte.prezzo_listino.isnot(None),
+        or_(
+            NltQuotazioni.mesi_36_10.isnot(None),
+            NltQuotazioni.mesi_48_10.isnot(None),
+            NltQuotazioni.mesi_48_30.isnot(None)
+        )
+    )
+
+    # Join MnetDettagli se serve
+    if tipo or segmento:
+        offerte_query = offerte_query.join(
+            MnetDettagli, MnetDettagli.codice_motornet_uni == NltOfferte.codice_motornet
+        )
+
+    # Filtri opzionali
+    if marca:
+        offerte_query = offerte_query.filter(func.lower(NltOfferte.marca) == marca.lower().strip())
+
+    if budget_max:
+        offerte_query = offerte_query.filter(NltOfferte.prezzo_listino <= budget_max * 60)
+
+    if tipo:
+        offerte_query = offerte_query.filter(func.lower(MnetDettagli.tipo_descrizione) == tipo.lower().strip())
+
+    if segmento:
+        offerte_query = offerte_query.filter(func.lower(MnetDettagli.segmento_descrizione) == segmento.lower().strip())
+
+    offerte_query = offerte_query.order_by(NltOfferte.prezzo_listino.asc())
+    offerte = offerte_query.offset(offset).limit(limit).all()
+
+    risultato = []
+
+    for offerta, quotazione in offerte:
+        dealer_context = settings.dealer_id is not None
+        dealer_id_for_context = settings.dealer_id if dealer_context else None
+
+        durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
+            offerta, quotazione, user, db,
+            dealer_context=dealer_context, dealer_id=dealer_id_for_context
+        )
+
+        if canone is None:
+            continue
+
+        dettagli = db.query(MnetDettagli).filter(
+            MnetDettagli.codice_motornet_uni == offerta.codice_motornet
+        ).first()
+
+        tipo_descrizione = dettagli.tipo_descrizione if dettagli else None
+        segmento_descrizione = dettagli.segmento_descrizione if dettagli else None
+
+        modello_db = db.query(MnetModelli).filter(
+            MnetModelli.codice_modello == offerta.codice_modello
+        ).first()
+
+        immagine_url = modello_db.default_img if modello_db and modello_db.default_img else "/default-placeholder.png"
+
+        risultato.append({
+            "id_offerta": offerta.id_offerta,
+            "immagine": immagine_url,
+            "marca": offerta.marca,
+            "modello": offerta.modello,
+            "versione": offerta.versione,
+            "cambio": offerta.cambio,
+            "alimentazione": offerta.alimentazione,
+            "segmento": offerta.segmento,
+            "segmento_descrizione": segmento_descrizione,
+            "tipo_descrizione": tipo_descrizione,
+            "canone_mensile": float(canone),
+            "prezzo_listino": float(offerta.prezzo_listino),
+            "prezzo_totale": float(offerta.prezzo_totale or offerta.prezzo_listino),
+            "slug": offerta.slug,
+            "solo_privati": offerta.solo_privati,
+            "durata_mesi": durata_mesi,
+            "km_inclusi": km_inclusi,
+            "logo_web": settings.logo_web or "",
+            "dealer_slug": dealer_slug
+        })
+
+    return risultato
+
 
 
 # Funzione separata con gestione retry (3 tentativi con 2 secondi tra tentativi)
