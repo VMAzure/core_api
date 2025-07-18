@@ -705,6 +705,8 @@ async def offerte_filtrate_nlt_pubbliche(
     tanti_km: Optional[bool] = Query(False),
     top: Optional[bool] = Query(False),
     search: Optional[str] = Query(None),
+    count_only: bool = Query(False),
+
     db: Session = Depends(get_db)
     
 ):
@@ -824,8 +826,11 @@ async def offerte_filtrate_nlt_pubbliche(
             NltOfferte.id_offerta.in_(id_offerte_top)
         )
 
+    if count_only:
+        total = offerte_query.count()
+        return {"count": total}
 
-
+    total = offerte_query.count()
     offerte_query = offerte_query.order_by(NltOfferte.prezzo_listino.asc())
     offerte = offerte_query.offset(offset).limit(limit).all()
 
@@ -891,9 +896,11 @@ async def offerte_filtrate_nlt_pubbliche(
             "dealer_slug": dealer_slug
         })
 
-    return risultato
 
-
+    return {
+        "count": total,
+        "results": risultato
+    }
 
 
 # Funzione separata con gestione retry (3 tentativi con 2 secondi tra tentativi)
