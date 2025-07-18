@@ -785,35 +785,31 @@ async def offerte_filtrate_nlt_pubbliche(
             ]))
         )
   
-        if top:
-            # Subquery dei top ID offerta cliccati dal dealer o dal suo team
-            subquery_clicks = (
-                db.query(
-                    NltOfferteClick.id_offerta,
-                    func.count(NltOfferteClick.id).label("clicks")
-                )
-                .join(NltOfferte, NltOfferte.id_offerta == NltOfferteClick.id_offerta)
-                .filter(
-                    NltOfferte.id_admin == admin_id,
-                    NltOfferteClick.clicked_at >= datetime.utcnow() - timedelta(days=30)
-                )
-                .group_by(NltOfferteClick.id_offerta)
-                .order_by(desc("clicks"))
-                .limit(20)
-                .subquery()
+    if top:
+        subquery_clicks = (
+            db.query(
+                NltOfferteClick.id_offerta,
+                func.count(NltOfferteClick.id).label("clicks")
             )
+            .join(NltOfferte, NltOfferte.id_offerta == NltOfferteClick.id_offerta)
+            .filter(
+                NltOfferte.id_admin == admin_id,
+                NltOfferteClick.clicked_at >= datetime.utcnow() - timedelta(days=30)
+            )
+            .group_by(NltOfferteClick.id_offerta)
+            .order_by(desc("clicks"))
+            .limit(10)
+            .subquery()
+        )
 
-            id_offerte_top = [row.id_offerta for row in db.execute(select(subquery_clicks.c.id_offerta)).fetchall()]
+        id_offerte_top = [row.id_offerta for row in db.execute(select(subquery_clicks.c.id_offerta)).fetchall()]
     
-            if not id_offerte_top:
-                return []
+        if not id_offerte_top:
+            return []
 
-            # Aggiungi filtro sugli ID top prima di costruire la query principale
-            offerte_query = db.query(NltOfferte, NltQuotazioni).join(
-                NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
-            ).filter(
-                NltOfferte.id_offerta.in_(id_offerte_top)
-            )
+        offerte_query = offerte_query.filter(
+            NltOfferte.id_offerta.in_(id_offerte_top)
+        )
 
 
 
