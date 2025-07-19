@@ -707,6 +707,7 @@ async def offerte_filtrate_nlt_pubbliche(
     search: Optional[str] = Query(None),
     count_only: bool = Query(False),
     rating_min: Optional[int] = Query(None, ge=1, le=5),
+    order_by: Optional[str] = Query(None, regex="^(rating_desc|prezzo_asc)$"),
     db: Session = Depends(get_db)
     
 ):
@@ -841,7 +842,14 @@ async def offerte_filtrate_nlt_pubbliche(
         return {"count": total}
 
     total = offerte_query.count()
-    offerte_query = offerte_query.order_by(NltOfferte.prezzo_listino.asc())
+
+    # ✅ Ordinamento intelligente
+    if order_by == "rating_desc":
+        offerte_query = offerte_query.order_by(NltOfferteRating.rating_convenienza.desc().nullslast())
+    else:
+        offerte_query = offerte_query.order_by(NltOfferte.prezzo_listino.asc())
+
+    offerte = offerte_query.offset(offset).limit(limit).all()
     offerte = offerte_query.offset(offset).limit(limit).all()
 
     risultato = []
