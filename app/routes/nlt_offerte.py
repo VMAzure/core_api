@@ -700,6 +700,7 @@ async def offerte_filtrate_nlt_pubbliche(
     budget_max: Optional[float] = Query(None),
     tipo: Optional[str] = Query(None),
     segmento: Optional[str] = Query(None),
+    carrozzeria: Optional[str] = Query(None),
     alimentazione: Optional[str] = Query(None),
     cambio: Optional[str] = Query(None),
     tanti_km: Optional[bool] = Query(False),
@@ -775,8 +776,17 @@ async def offerte_filtrate_nlt_pubbliche(
             offerte_query = offerte_query.filter(NltOfferte.solo_privati.is_(False))
 
     if segmento:
-        offerte_query = offerte_query.filter(
-            NltOfferte.segmento == segmento.upper().strip()
+        offerte_query = offerte_query.join(
+            MnetDettagli, MnetDettagli.codice_motornet_uni == NltOfferte.codice_motornet
+        ).filter(
+            func.upper(MnetDettagli.segmento) == segmento.upper().strip()
+        )
+
+    if carrozzeria:
+        offerte_query = offerte_query.join(
+            MnetDettagli, MnetDettagli.codice_motornet_uni == NltOfferte.codice_motornet
+        ).filter(
+            func.lower(MnetDettagli.tipo_descrizione) == carrozzeria.lower().strip()
         )
 
     if alimentazione:
