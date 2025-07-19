@@ -775,19 +775,33 @@ async def offerte_filtrate_nlt_pubbliche(
         elif tipo_clean == "business":
             offerte_query = offerte_query.filter(NltOfferte.solo_privati.is_(False))
 
-    if segmento:
+  # Serve join se uno dei filtri usa mnet_dettagli
+    if segmento or carrozzeria or tanti_km:
         offerte_query = offerte_query.join(
             MnetDettagli, MnetDettagli.codice_motornet_uni == NltOfferte.codice_motornet
-        ).filter(
+        )
+    if segmento:
+        offerte_query = offerte_query.filter(
             func.upper(MnetDettagli.segmento) == segmento.upper().strip()
         )
 
     if carrozzeria:
-        offerte_query = offerte_query.join(
-            MnetDettagli, MnetDettagli.codice_motornet_uni == NltOfferte.codice_motornet
-        ).filter(
+        offerte_query = offerte_query.filter(
             func.lower(MnetDettagli.tipo_descrizione) == carrozzeria.lower().strip()
         )
+
+    if tanti_km:
+        offerte_query = offerte_query.filter(
+            NltOfferte.id_player == 5,
+            NltQuotazioni.mesi_60_40.isnot(None),
+            not_(MnetDettagli.segmento_descrizione.in_([
+                "Superutilitarie",
+                "Utilitarie",
+                "SUV piccoli",
+                "Medio-inferiori"
+            ]))
+        )
+
 
     if alimentazione:
         offerte_query = offerte_query.filter(
@@ -807,20 +821,7 @@ async def offerte_filtrate_nlt_pubbliche(
                     func.lower(NltOfferte.cambio).like("%cvt%")
                 )
             )
-    if tanti_km:
-        offerte_query = offerte_query.join(
-            MnetDettagli, MnetDettagli.codice_motornet_uni == NltOfferte.codice_motornet
-        ).filter(
-            NltOfferte.id_player == 5,
-            NltQuotazioni.mesi_60_40.isnot(None),
-            not_(MnetDettagli.segmento_descrizione.in_([
-                "Superutilitarie",
-                "Utilitarie",
-                "SUV piccoli",
-                "Medio-inferiori"
-            ]))
-        )
-  
+    
     if top:
         subquery_clicks = (
             db.query(
