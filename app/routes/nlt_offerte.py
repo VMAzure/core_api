@@ -4,7 +4,7 @@ from sqlalchemy import func
 
 from typing import Optional, List
 from app.database import get_db
-from app.models import MnetDettagli,NltPneumatici, NltAutoSostitutiva, NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt, NltOfferteClick
+from app.models import NltOfferteRating, MnetDettagli,NltPneumatici, NltAutoSostitutiva, NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt, NltOfferteClick
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
@@ -706,7 +706,7 @@ async def offerte_filtrate_nlt_pubbliche(
     top: Optional[bool] = Query(False),
     search: Optional[str] = Query(None),
     count_only: bool = Query(False),
-
+    rating_min: Optional[int] = Query(None, ge=1, le=5),
     db: Session = Depends(get_db)
     
 ):
@@ -721,8 +721,15 @@ async def offerte_filtrate_nlt_pubbliche(
 
     admin_id = user.parent_id if user.role == "dealer" and user.parent_id else user.id
 
-    offerte_query = db.query(NltOfferte, NltQuotazioni).join(
+    # Join rating + alias rating_convenienza per accesso diretto
+    offerte_query = db.query(
+        NltOfferte,
+        NltQuotazioni,
+        NltOfferteRating.rating_convenienza.label("rating_convenienza")
+    ).join(
         NltQuotazioni, NltOfferte.id_offerta == NltQuotazioni.id_offerta
+    ).outerjoin(
+        NltOfferteRating, NltOfferte.id_offerta == NltOfferteRating.id_offerta
     ).filter(
         NltOfferte.id_admin == admin_id,
         NltOfferte.attivo.is_(True),
@@ -734,7 +741,10 @@ async def offerte_filtrate_nlt_pubbliche(
         )
     )
 
-    # Filtri
+    # Filtro rating se richiesto
+    if rating_min is not None:
+        offerte_query = offerte_query.filter(NltOfferteRating.rating_convenienza >= rating_min)
+
     if search:
         terms = search.lower().strip().split()
         search_filters = []
@@ -836,7 +846,7 @@ async def offerte_filtrate_nlt_pubbliche(
 
     risultato = []
 
-    for offerta, quotazione in offerte:
+    for offerta, quotazione, rating in offerte:
         dealer_context = settings.dealer_id is not None
         dealer_id_for_context = settings.dealer_id if dealer_context else None
 
@@ -856,7 +866,6 @@ async def offerte_filtrate_nlt_pubbliche(
                 offerta, quotazione, user, db,
                 dealer_context=dealer_context, dealer_id=dealer_id_for_context
             )
-
 
         if canone is None:
             continue
@@ -893,8 +902,10 @@ async def offerte_filtrate_nlt_pubbliche(
             "durata_mesi": durata_mesi,
             "km_inclusi": km_inclusi,
             "logo_web": settings.logo_web or "",
+            "rating_convenienza": rating if rating is not None else None,
             "dealer_slug": dealer_slug
         })
+
 
 
     return {

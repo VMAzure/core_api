@@ -936,3 +936,18 @@ class NltVetrinaClick(Base):
     clicked_at = Column(DateTime, default=func.now(), nullable=False, index=True)
 
     dealer = relationship("User", backref="vetrina_click")
+
+class NltOfferteRating(Base):
+    __tablename__ = "nlt_offerte_rating"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Integer, primary_key=True, index=True)
+    id_offerta = Column(Integer, ForeignKey("nlt_offerte.id_offerta", ondelete="CASCADE"), nullable=False, index=True)
+    costo_km = Column(Numeric(10, 4), nullable=False)
+    valore_km = Column(Numeric(10, 4), nullable=False)
+    indice_convenienza = Column(Numeric(10, 4), nullable=False)
+    rating_convenienza = Column(SmallInteger, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    offerta = relationship("NltOfferte", backref="rating")
+

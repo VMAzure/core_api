@@ -130,9 +130,25 @@ def sync_modelli_settimanale():
         logging.error(f"❌ Errore nella sync modelli: {e}")
 
 
+from app.utils.quotazioni import aggiorna_rating_convenienza
+
+def aggiorna_rating_convenienza_job():
+    logging.info("📊 Avvio aggiornamento rating convenienza...")
+    db = SessionLocal()
+    try:
+        aggiorna_rating_convenienza(db)
+        logging.info("✅ Rating convenienza aggiornato con successo.")
+    except Exception as e:
+        logging.error(f"❌ Errore durante aggiornamento rating convenienza: {e}")
+    finally:
+        db.close()
+
+
+
+
 scheduler = BackgroundScheduler(job_defaults={'coalesce': True, 'max_instances': 1})
 
-scheduler.add_job(check_and_charge_services, 'interval', minutes=100)
+scheduler.add_job(check_and_charge_services, 'interval', minutes=500)
 # Ogni lunedì alle 03:00
 scheduler.add_job(pulisci_modelli_settimanale, 'cron', day_of_week='mon', hour=3, minute=0)
 # Ogni lunedì alle 04:00
@@ -149,6 +165,7 @@ scheduler.add_job(sync_modelli_settimanale, 'cron', day_of_week='mon', hour=2, m
 #scheduler.add_job(invia_reminder_pipeline, 'cron', day_of_week='mon-fri', hour='9-17', minute='*/30')
 
 # TEST: invia ogni 3 minuti, tutti i giorni
-scheduler.add_job(invia_reminder_pipeline, 'interval', minutes=1)
+scheduler.add_job(invia_reminder_pipeline, 'interval', minutes=30)
 
-
+# Ogni notte alle 3:30
+scheduler.add_job(aggiorna_rating_convenienza_job, 'cron', hour=3, minute=30)
