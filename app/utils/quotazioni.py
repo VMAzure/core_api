@@ -111,13 +111,17 @@ def aggiorna_rating_convenienza(db: Session):
     risultati = []
 
     for offerta, quotazione in offerte_raw:
+        from types import SimpleNamespace
+        dummy_user = SimpleNamespace(role="admin", id=offerta.id_admin)
+
         durata, km, canone_finale, _ = calcola_quotazione(
             offerta, quotazione,
-            current_user="cronjob",
+            current_user=dummy_user,
             db=db,
             dealer_context=False,
             dealer_id=None
         )
+
 
         if not durata or not km or not canone_finale:
             continue
