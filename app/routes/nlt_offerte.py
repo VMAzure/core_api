@@ -1062,6 +1062,7 @@ def get_dati_nd():
 
 @router.get("/offerte-nlt-pubbliche/{slug_dealer}/{slug_offerta}")
 async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session = Depends(get_db)):
+    # Recupera settings del dealer
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug_dealer).first()
     if not settings:
         raise HTTPException(status_code=404, detail=f"Dealer '{slug_dealer}' non trovato.")
@@ -1071,36 +1072,33 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
     if not user:
         raise HTTPException(status_code=404, detail="Utente admin non trovato per questo dealer.")
 
-
+    # Recupera offerta specifica
     offerta = db.query(NltOfferte).join(User, NltOfferte.id_admin == User.id).filter(
         User.id == settings.admin_id,
         NltOfferte.slug == slug_offerta,
         NltOfferte.attivo == True
     ).first()
-
     if not offerta:
         raise HTTPException(status_code=404, detail="Offerta non trovata.")
 
-    token = get_motornet_token()
-
-    try:
-        dettagli_motornet = await fetch_motornet_details(offerta.codice_motornet, token)
-        motornet_status = "OK"
-    except HTTPException:
+    # ✅ Recupera dettagli motornet dal DB locale
+    dettagli_row = db.query(MnetDettagli).filter_by(codice_motornet_uni=offerta.codice_motornet).first()
+    if dettagli_row:
+        dettagli_motornet = {col.name: getattr(dettagli_row, col.name) for col in dettagli_row.__table__.columns}
+        motornet_status = "CACHED"
+    else:
         dettagli_motornet = get_dati_nd()
-        motornet_status = "KO"
-        logger.error(f"Motornet non raggiungibile per {offerta.codice_motornet}")
+        motornet_status = "ND"
 
-    # Recupera quotazioni
+    # Recupera quotazione associata
     quotazione = db.query(NltQuotazioni).filter(NltQuotazioni.id_offerta == offerta.id_offerta).first()
 
+    # Calcolo canone
     dealer_context = settings.dealer_id is not None
     dealer_id_for_context = settings.dealer_id if dealer_context else None
     durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
         offerta, quotazione, user, db, dealer_context=dealer_context, dealer_id=dealer_id_for_context
     )
-
-
 
     return {
         "id_offerta": offerta.id_offerta,
@@ -1120,10 +1118,10 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
         "canone_mensile": float(canone) if canone else None,
         "durata_mesi": durata_mesi,
         "km_inclusi": km_inclusi,
-        "dealer_slug": dealer_slug,  # ✅ aggiunto correttamente
-
+        "dealer_slug": dealer_slug,
         "dettagli_motornet": dettagli_motornet
     }
+
 
 @router.get("/offerte-nlt-pubbliche/tantastrada/{slug_dealer}/{slug_offerta}")
 async def offerta_nlt_tantastrada(
