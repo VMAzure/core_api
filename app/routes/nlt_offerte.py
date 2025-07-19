@@ -703,6 +703,8 @@ async def offerte_filtrate_nlt_pubbliche(
     carrozzeria: Optional[str] = Query(None),
     alimentazione: Optional[str] = Query(None),
     cambio: Optional[str] = Query(None),
+    prezzo_min: Optional[float] = Query(None),
+    prezzo_max: Optional[float] = Query(None),
     tanti_km: Optional[bool] = Query(False),
     top: Optional[bool] = Query(False),
     search: Optional[str] = Query(None),
@@ -802,6 +804,18 @@ async def offerte_filtrate_nlt_pubbliche(
             ]))
         )
 
+    if prezzo_min is not None and prezzo_max is not None:
+        offerte_query = offerte_query.filter(
+            NltOfferte.prezzo_listino.between(prezzo_min, prezzo_max)
+        )
+    elif prezzo_min is not None:
+        offerte_query = offerte_query.filter(
+            NltOfferte.prezzo_listino >= prezzo_min
+        )
+    elif prezzo_max is not None:
+        offerte_query = offerte_query.filter(
+            NltOfferte.prezzo_listino <= prezzo_max
+        )
 
     if alimentazione:
         offerte_query = offerte_query.filter(
