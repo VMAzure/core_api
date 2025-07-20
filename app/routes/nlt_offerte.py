@@ -946,6 +946,118 @@ async def offerte_filtrate_nlt_pubbliche(
         "results": risultato
     }
 
+@router.get("/offerte-nlt-pubblic/{slug_dealer}/{slug_offerta}")
+async def offerta_nlt_unificata(
+    slug_dealer: str,
+    slug_offerta: str,
+    modalita: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    # === 1. Recupera contesto dealer e utente ===
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug_dealer).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail=f"Dealer '{slug_dealer}' non trovato.")
+
+    user_id = settings.dealer_id or settings.admin_id
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente admin non trovato per questo dealer.")
+
+    # === 2. Recupera offerta ===
+    offerta = db.query(NltOfferte).join(User, NltOfferte.id_admin == User.id).filter(
+        User.id == settings.admin_id,
+        NltOfferte.slug == slug_offerta,
+        NltOfferte.attivo == True
+    ).first()
+    if not offerta:
+        raise HTTPException(status_code=404, detail="Offerta non trovata.")
+
+    # === 3. Recupera rating convenienza (se presente) ===
+    rating_row = db.query(NltOfferteRating).filter(
+        NltOfferteRating.id_offerta == offerta.id_offerta
+    ).first()
+    rating_convenienza = rating_row.rating_convenienza if rating_row else None
+
+    # === 4. Recupera dettagli motornet (solo da DB) ===
+    dettagli_row = db.query(MnetDettagli).filter_by(
+        codice_motornet_uni=offerta.codice_motornet
+    ).first()
+    dettagli_motornet = (
+        {col.name: getattr(dettagli_row, col.name) for col in dettagli_row.__table__.columns}
+        if dettagli_row else get_dati_nd()
+    )
+    motornet_status = "CACHED" if dettagli_row else "ND"
+
+    # === 5. Quotazione: standard o tantastrada ===
+    dealer_context = settings.dealer_id is not None
+    dealer_id_for_context = settings.dealer_id if dealer_context else None
+
+    if modalita == "tantastrada":
+        quotazione = db.query(NltQuotazioni).filter(
+            NltQuotazioni.id_offerta == offerta.id_offerta
+        ).first()
+
+        if not quotazione or not quotazione.mesi_60_40:
+            raise HTTPException(status_code=404, detail="Quotazione 60/40 non disponibile.")
+
+        canone_base = quotazione.mesi_60_40
+        durata = 60
+        km = 40000
+
+        _, _, canone_finale, dealer_slug = calcola_quotazione_custom(
+            offerta, durata, km, canone_base, user, db,
+            dealer_context=dealer_context, dealer_id=dealer_id_for_context
+        )
+
+        return {
+            **costruisci_offerta_base(offerta),
+            "canone_mensile": float(canone_finale),
+            "durata_mesi": durata,
+            "km_inclusi": km,
+            "dealer_slug": dealer_slug,
+            "rating_convenienza": rating_convenienza,
+            "motornet_status": motornet_status,
+            "dettagli_motornet": dettagli_motornet
+        }
+
+    # === 6. Modalità standard ===
+    quotazione = db.query(NltQuotazioni).filter(
+        NltQuotazioni.id_offerta == offerta.id_offerta
+    ).first()
+
+    durata, km, canone, dealer_slug = calcola_quotazione(
+        offerta, quotazione, user, db,
+        dealer_context=dealer_context, dealer_id=dealer_id_for_context
+    )
+
+    return {
+        **costruisci_offerta_base(offerta),
+        "canone_mensile": float(canone),
+        "durata_mesi": durata,
+        "km_inclusi": km,
+        "dealer_slug": dealer_slug,
+        "rating_convenienza": rating_convenienza,
+        "motornet_status": motornet_status,
+        "dettagli_motornet": dettagli_motornet
+    }
+
+
+def costruisci_offerta_base(offerta):
+    return {
+        "id_offerta": offerta.id_offerta,
+        "immagine": offerta.default_img,
+        "marca": offerta.marca,
+        "modello": offerta.modello,
+        "versione": offerta.versione,
+        "cambio": offerta.cambio,
+        "alimentazione": offerta.alimentazione,
+        "prezzo_listino": float(offerta.prezzo_listino or 0),
+        "prezzo_totale": float(offerta.prezzo_totale or 0),
+        "descrizione_breve": offerta.descrizione_breve,
+        "slug": offerta.slug,
+        "solo_privati": offerta.solo_privati,
+        "descrizione_ai": offerta.descrizione_ai
+    }
 
 # Funzione separata con gestione retry (3 tentativi con 2 secondi tra tentativi)
 
