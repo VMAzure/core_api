@@ -1233,7 +1233,9 @@ async def offerta_nlt_pubblica(slug_dealer: str, slug_offerta: str, db: Session 
         "durata_mesi": durata_mesi,
         "km_inclusi": km_inclusi,
         "dealer_slug": dealer_slug,
-        "dettagli_motornet": dettagli_motornet
+        "dettagli_motornet": dettagli_motornet,
+        "carrozzeria_descrizione": dettagli_motornet.get("tipo_descrizione") if dettagli_motornet else None,
+
     }
 
 
