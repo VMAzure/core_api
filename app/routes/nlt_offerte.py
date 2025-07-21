@@ -1017,7 +1017,9 @@ async def offerta_nlt_unificata(
             "dealer_slug": dealer_slug,
             "rating_convenienza": rating_convenienza,
             "motornet_status": motornet_status,
-            "dettagli_motornet": dettagli_motornet
+            "dettagli_motornet": dettagli_motornet,
+            "carrozzeria_descrizione": dettagli_motornet.get("tipo_descrizione") if dettagli_motornet else None
+
         }
 
     # === 6. Modalità standard ===
