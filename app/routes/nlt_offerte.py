@@ -956,25 +956,15 @@ async def offerta_nlt_unificata(
     modalita: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
-    print("🔍 [INIZIO] Chiamata offerta dettaglio")
-    print("🔹 Slug dealer:", slug_dealer)
-    print("🔹 Slug offerta:", slug_offerta)
-    print("🔹 Modalità:", modalita)
-
-    # === 1. Recupera contesto dealer e utente ===
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug_dealer).first()
     if not settings:
         raise HTTPException(status_code=404, detail=f"Dealer '{slug_dealer}' non trovato.")
-
-    print("✅ Settings correnti:", settings.id, settings.slug, "Dealer ID:", settings.dealer_id, "Provvigione:", settings.prov_vetrina)
 
     user_id = settings.dealer_id or settings.admin_id
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utente admin non trovato per questo dealer.")
-    print("✅ User recuperato:", user.id, user.role)
 
-    # === 2. Recupera offerta ===
     offerta = db.query(NltOfferte).join(User, NltOfferte.id_admin == User.id).filter(
         User.id == settings.admin_id,
         NltOfferte.slug == slug_offerta,
@@ -983,88 +973,53 @@ async def offerta_nlt_unificata(
     if not offerta:
         raise HTTPException(status_code=404, detail="Offerta non trovata.")
 
-    print("✅ Offerta trovata:", offerta.id_offerta, offerta.slug, "Admin ID:", offerta.id_admin)
-    print("ℹ️ Prezzo listino:", offerta.prezzo_listino, "Prezzo totale:", offerta.prezzo_totale)
-    print("ℹ️ Solo privati:", offerta.solo_privati, "ID player:", offerta.id_player)
-
-    # === 3. Recupera rating convenienza (se presente) ===
     rating_row = db.query(NltOfferteRating).filter(
         NltOfferteRating.id_offerta == offerta.id_offerta
     ).first()
     rating_convenienza = rating_row.rating_convenienza if rating_row else None
-    print("ℹ️ Rating convenienza:", rating_convenienza)
 
-    # === 4. Recupera dettagli motornet (solo da DB) ===
     dettagli_row = db.query(MnetDettagli).filter_by(
         codice_motornet_uni=offerta.codice_motornet
     ).first()
-    motornet_status = "CACHED" if dettagli_row else "ND"
-    print("ℹ️ Dettagli Motornet:", motornet_status)
-
     dettagli_motornet = (
         {col.name: getattr(dettagli_row, col.name) for col in dettagli_row.__table__.columns}
         if dettagli_row else get_dati_nd()
     )
+    motornet_status = "CACHED" if dettagli_row else "ND"
 
-    # === 5. Quotazione ===
     quotazione = db.query(NltQuotazioni).filter(
         NltQuotazioni.id_offerta == offerta.id_offerta
     ).first()
-
     if not quotazione:
         raise HTTPException(status_code=404, detail="Quotazione non disponibile.")
-
-    print("✅ Quotazione trovata per offerta:", quotazione.id_quotazione)
-    print("ℹ️ mesi_48_30:", quotazione.mesi_48_30, "mesi_36_10:", quotazione.mesi_36_10, "mesi_48_10:", quotazione.mesi_48_10)
 
     if modalita == "tantastrada":
         if not quotazione.mesi_60_40:
             raise HTTPException(status_code=404, detail="Quotazione 60/40 non disponibile.")
-
+        durata = 60
+        km = 40000
         canone_base = quotazione.mesi_60_40
-        durata_mesi = 60
-        km_inclusi = 40000
-
-        durata_mesi, km_inclusi, canone_finale, dealer_slug = calcola_quotazione_custom(
-            offerta, durata_mesi, km_inclusi, canone_base, user, db,
-            settings_corrente=settings
+        durata, km, canone_finale, dealer_slug = calcola_quotazione_custom(
+            offerta, durata, km, canone_base, user, db, settings_corrente=settings
+        )
+    else:
+        durata, km, canone_finale, dealer_slug = calcola_quotazione(
+            offerta, quotazione, user, db, settings_corrente=settings
         )
 
-        if canone_finale is None:
-            raise HTTPException(status_code=404, detail="Canone non calcolabile.")
-
-        print("🧮 [TANTASTRADA] Canone finale:", canone_finale)
-        return {
-            **costruisci_offerta_base(offerta),
-            "canone_mensile": float(canone_finale),
-            "durata_mesi": durata_mesi,
-            "km_inclusi": km_inclusi,
-            "dealer_slug": dealer_slug,
-            "rating_convenienza": rating_convenienza,
-            "motornet_status": motornet_status,
-            "dettagli_motornet": dettagli_motornet,
-            "carrozzeria_descrizione": dettagli_motornet.get("tipo_descrizione")
-        }
-
-    # === 6. Modalità standard ===
-    durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
-        offerta, quotazione, user, db,
-        settings_corrente=settings
-    )
-
-    if canone is None:
+    if canone_finale is None:
         raise HTTPException(status_code=404, detail="Canone non calcolabile.")
 
-    print("🧮 [STANDARD] Canone finale:", canone)
     return {
         **costruisci_offerta_base(offerta),
-        "canone_mensile": float(canone),
-        "durata_mesi": durata_mesi,
-        "km_inclusi": km_inclusi,
+        "canone_mensile": float(canone_finale),
+        "durata_mesi": durata,
+        "km_inclusi": km,
         "dealer_slug": dealer_slug,
         "rating_convenienza": rating_convenienza,
         "motornet_status": motornet_status,
-        "dettagli_motornet": dettagli_motornet
+        "dettagli_motornet": dettagli_motornet,
+        "carrozzeria_descrizione": dettagli_motornet.get("tipo_descrizione")
     }
 
 

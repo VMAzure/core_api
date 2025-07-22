@@ -111,48 +111,86 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_
     return durata, km, round(canone_finale, 2), slug_finale
 
 
-
-
 def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db: Session, settings_corrente: SiteAdminSettings):
+    print("🟦 [START] calcola_quotazione_custom")
+    print("🔸 Offerta ID:", offerta.id_offerta)
+    print("🔸 Slug offerta:", offerta.slug)
+    print("🔸 durata:", durata, "km:", km)
+    print("🔸 Player ID:", offerta.id_player)
+
     if not offerta or not durata or durata <= 0 or not canone_base:
+        print("❌ Dati iniziali mancanti o non validi")
         return None, None, None, None
 
     try:
         canone_base = float(canone_base)
     except (TypeError, ValueError):
+        print("❌ Errore cast canone_base")
         return None, None, None, None
 
     prezzo_grezzo = offerta.prezzo_totale or offerta.prezzo_listino
     if not prezzo_grezzo:
+        print("❌ prezzo_grezzo mancante")
         return None, None, None, None
 
     try:
         prezzo_netto = float(prezzo_grezzo) / 1.22
     except (TypeError, ValueError):
+        print("❌ Errore cast prezzo_netto")
         return None, None, None, None
 
-    # === Recupero provvigioni ===
-    settings_admin = db.query(SiteAdminSettings).filter(
-        SiteAdminSettings.admin_id == offerta.id_admin,
-        SiteAdminSettings.dealer_id.is_(None)
-    ).first()
+    print("➡️ Prezzo netto calcolato:", prezzo_netto)
 
-    prov_admin = float(settings_admin.prov_vetrina or 0) if settings_admin else 0.0
+    settings_admin = (
+        db.query(SiteAdminSettings)
+        .filter(SiteAdminSettings.admin_id == int(offerta.id_admin), SiteAdminSettings.dealer_id == None)
+        .first()
+    )
 
-    # ⚠️ Evita doppio conteggio se settings_corrente == settings_admin
+    if settings_admin:
+        db.refresh(settings_admin)
+        print("✅ settings_admin ID:", settings_admin.id)
+        print("🔎 prov_vetrina (admin):", settings_admin.prov_vetrina, type(settings_admin.prov_vetrina))
+    else:
+        print(f"❌ settings_admin NON trovato per admin_id={offerta.id_admin}")
+
+    try:
+        prov_admin = float(settings_admin.prov_vetrina)
+    except (TypeError, ValueError, AttributeError):
+        prov_admin = 0.0
+        print("⚠️ prov_admin fallback a 0.0")
+
     prov_dealer = 0.0
     if settings_corrente and settings_admin and settings_corrente.id != settings_admin.id:
-        prov_dealer = float(settings_corrente.prov_vetrina or 0)
+        try:
+            prov_dealer = float(settings_corrente.prov_vetrina or 0)
+        except (TypeError, ValueError):
+            prov_dealer = 0.0
+            print("⚠️ prov_dealer fallback a 0.0")
+    else:
+        print("ℹ️ Nessuna provvigione dealer (stesso settings o null)")
 
     slug_finale = settings_corrente.slug if settings_corrente else None
 
-    # === Blocco provvigioni per UnipolRental ===
     if offerta.id_player == 5:
+        print("🛑 Provvigioni azzerate (id_player == 5)")
         prov_admin = 0.0
         prov_dealer = 0.0
 
     incremento_totale = prezzo_netto * (prov_admin + prov_dealer) / 100.0
-    canone_finale = canone_base + (incremento_totale / durata)
+    incremento_mensile = incremento_totale / durata
+    canone_finale = canone_base + incremento_mensile
+
+    print("🧮 DEBUG FINALE (custom)")
+    print("📦 canone_base:", canone_base)
+    print("📦 prezzo_netto:", prezzo_netto)
+    print("📦 prov_admin:", prov_admin)
+    print("📦 prov_dealer:", prov_dealer)
+    print("📦 incremento_totale:", incremento_totale)
+    print("📦 incremento_mensile:", incremento_mensile)
+    print("📦 canone_finale:", canone_finale)
+    print("📤 slug_finale:", slug_finale)
+    print("✅ [END] calcola_quotazione_custom")
 
     return durata, km, round(canone_finale, 2), slug_finale
 
