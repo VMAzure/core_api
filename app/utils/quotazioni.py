@@ -3,37 +3,55 @@ from app.models import SiteAdminSettings
 from app.auth_helpers import is_dealer_user
 
 def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_corrente: SiteAdminSettings):
+    print("🟦 [START] calcola_quotazione")
+    print("🔸 Offerta ID:", offerta.id_offerta)
+    print("🔸 Slug offerta:", offerta.slug)
+    print("🔸 Prezzo listino:", offerta.prezzo_listino)
+    print("🔸 Prezzo totale:", offerta.prezzo_totale)
+    print("🔸 solo_privati:", offerta.solo_privati)
+    print("🔸 Player ID:", offerta.id_player)
+
     if not offerta or not quotazione or not offerta.prezzo_listino:
+        print("❌ Dati iniziali mancanti")
         return None, None, None, None
 
     # === Selezione canone base ===
     if offerta.solo_privati and quotazione.mesi_48_30:
         durata, km, canone_base = 48, 30000, quotazione.mesi_48_30
+        fonte = "mesi_48_30"
     elif quotazione.mesi_36_10:
         durata, km, canone_base = 36, 10000, quotazione.mesi_36_10
+        fonte = "mesi_36_10"
     elif quotazione.mesi_48_10:
         durata, km, canone_base = 48, 10000, quotazione.mesi_48_10
+        fonte = "mesi_48_10"
     else:
+        print("❌ Nessun canone base disponibile")
         return None, None, None, None
 
-    if not durata or durata <= 0:
-        return None, None, None, None
+    print(f"✅ Canone base selezionato da: {fonte}")
+    print(f"➡️ Canone base: {canone_base}, durata: {durata} mesi, km: {km}")
 
     try:
         canone_base = float(canone_base)
     except (TypeError, ValueError):
+        print("❌ Errore cast canone_base")
         return None, None, None, None
 
     prezzo_grezzo = offerta.prezzo_totale or offerta.prezzo_listino
     if not prezzo_grezzo:
+        print("❌ prezzo_grezzo mancante")
         return None, None, None, None
 
     try:
         prezzo_netto = float(prezzo_grezzo) / 1.22
     except (TypeError, ValueError):
+        print("❌ Errore cast prezzo_netto")
         return None, None, None, None
 
-    # === Recupero provvigioni admin ===
+    print("➡️ Prezzo netto calcolato:", prezzo_netto)
+
+    # === Recupero settings admin ===
     settings_admin = (
         db.query(SiteAdminSettings)
         .filter(
@@ -43,38 +61,55 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_
         .first()
     )
 
-    if not settings_admin:
-        print(f"❗ settings_admin NON trovato per admin_id={offerta.id_admin}")
+    if settings_admin:
+        db.refresh(settings_admin)
+        print("✅ settings_admin trovato → ID:", settings_admin.id)
+        print("🔎 settings_admin.prov_vetrina:", settings_admin.prov_vetrina, type(settings_admin.prov_vetrina))
     else:
-        print(f"✅ settings_admin ID={settings_admin.id} prov={settings_admin.prov_vetrina}")
+        print(f"❌ settings_admin NON trovato per admin_id={offerta.id_admin}")
 
-    prov_admin = float(settings_admin.prov_vetrina or 0) if settings_admin else 0.0
+    try:
+        prov_admin = float(settings_admin.prov_vetrina)
+    except (TypeError, ValueError, AttributeError):
+        prov_admin = 0.0
+        print("⚠️ prov_admin fallback a 0.0")
 
-    # === Evita doppio conteggio se settings_corrente == settings_admin ===
+    # === Provvigione dealer (evita doppio conteggio)
     prov_dealer = 0.0
     if settings_corrente and settings_admin and settings_corrente.id != settings_admin.id:
-        prov_dealer = float(settings_corrente.prov_vetrina or 0)
+        try:
+            prov_dealer = float(settings_corrente.prov_vetrina or 0)
+        except (TypeError, ValueError):
+            prov_dealer = 0.0
+            print("⚠️ prov_dealer fallback a 0.0")
+    else:
+        print("ℹ️ Nessuna provvigione dealer (stesso settings o null)")
 
     slug_finale = settings_corrente.slug if settings_corrente else None
 
-    # === Blocco provvigioni per UnipolRental ===
+    # === Blocco provvigioni UnipolRental
     if offerta.id_player == 5:
+        print("🛑 Provvigioni azzerate (id_player == 5)")
         prov_admin = 0.0
         prov_dealer = 0.0
 
     incremento_totale = prezzo_netto * (prov_admin + prov_dealer) / 100.0
-    canone_finale = canone_base + (incremento_totale / durata)
+    incremento_mensile = incremento_totale / durata
+    canone_finale = canone_base + incremento_mensile
 
-    print("🧮 DEBUG QUOTAZIONE")
-    print("Offerta ID:", offerta.id_offerta)
-    print("Canone base:", canone_base)
-    print("Prezzo netto:", prezzo_netto)
-    print("Provvigione admin:", prov_admin)
-    print("Provvigione dealer:", prov_dealer)
-    print("Incremento totale:", incremento_totale)
-    print("Canone finale:", canone_finale)
+    print("🧮 DEBUG FINALE")
+    print("📦 canone_base:", canone_base)
+    print("📦 prezzo_netto:", prezzo_netto)
+    print("📦 prov_admin:", prov_admin)
+    print("📦 prov_dealer:", prov_dealer)
+    print("📦 incremento_totale:", incremento_totale)
+    print("📦 incremento_mensile:", incremento_mensile)
+    print("📦 canone_finale:", canone_finale)
+    print("📤 slug_finale:", slug_finale)
+    print("✅ [END] calcola_quotazione")
 
     return durata, km, round(canone_finale, 2), slug_finale
+
 
 
 
