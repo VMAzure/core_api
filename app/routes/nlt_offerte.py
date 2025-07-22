@@ -875,7 +875,6 @@ async def offerte_filtrate_nlt_pubbliche(
         offerte_query = offerte_query.order_by(NltOfferte.prezzo_listino.asc())
 
     offerte = offerte_query.offset(offset).limit(limit).all()
-    offerte = offerte_query.offset(offset).limit(limit).all()
 
     risultato = []
 
@@ -902,6 +901,9 @@ async def offerte_filtrate_nlt_pubbliche(
 
         if canone is None:
             continue
+
+        # continua come già hai
+
 
         dettagli = db.query(MnetDettagli).filter(
             MnetDettagli.codice_motornet_uni == offerta.codice_motornet
