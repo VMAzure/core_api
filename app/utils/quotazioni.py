@@ -20,38 +20,6 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_
         return None, None, None, None
 
     canone_base = float(canone_base)
-
-    # Prezzo netto
-    prezzo_grezzo = offerta.prezzo_totale or offerta.prezzo_listino
-    prezzo_netto = float(prezzo_grezzo) / 1.22
-
-    # === Provvigioni ===
-    settings_admin = db.query(SiteAdminSettings).filter(
-        SiteAdminSettings.admin_id == offerta.id_admin,
-        SiteAdminSettings.dealer_id.is_(None)
-    ).first()
-
-    prov_admin = float(settings_admin.prov_vetrina or 0) if settings_admin else 0.0
-    prov_dealer = float(settings_corrente.prov_vetrina or 0) if settings_corrente and settings_corrente.dealer_id else 0.0
-
-    slug_finale = settings_corrente.slug if settings_corrente else None
-
-    if offerta.id_player == 5:
-        prov_admin = 0.0
-        prov_dealer = 0.0
-
-    incremento_totale = prezzo_netto * (prov_admin + prov_dealer) / 100.0
-    canone_finale = canone_base + (incremento_totale / durata)
-
-    return durata, km, round(canone_finale, 2), slug_finale
-
-def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db: Session, settings_corrente: SiteAdminSettings):
-    if not offerta or not durata or durata <= 0 or not canone_base:
-        return None, None, None, None
-
-    canone_base = float(canone_base)
-
-    # ✅ fallback sicuro su prezzo_listino
     prezzo_grezzo = offerta.prezzo_totale or offerta.prezzo_listino
     prezzo_netto = float(prezzo_grezzo) / 1.22
 
@@ -63,12 +31,11 @@ def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db
 
     prov_admin = float(settings_admin.prov_vetrina or 0) if settings_admin else 0.0
 
-    # === Provvigione dealer (se context dealer) ===
-    prov_dealer = float(settings_corrente.prov_vetrina or 0) if settings_corrente and settings_corrente.dealer_id else 0.0
+    # ✅ Anche se è admin (dealer_id = null), prendiamo da settings corrente
+    prov_dealer = float(settings_corrente.prov_vetrina or 0)
+    slug_finale = settings_corrente.slug
 
-    slug_finale = settings_corrente.slug if settings_corrente else None
-
-    # === Escludi provvigioni per UnipolRental (player_id = 5) ===
+    # Blocco provvigioni UnipolRental
     if offerta.id_player == 5:
         prov_admin = 0.0
         prov_dealer = 0.0
@@ -77,6 +44,36 @@ def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db
     canone_finale = canone_base + (incremento_totale / durata)
 
     return durata, km, round(canone_finale, 2), slug_finale
+
+
+def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db: Session, settings_corrente: SiteAdminSettings):
+    if not offerta or not durata or durata <= 0 or not canone_base:
+        return None, None, None, None
+
+    canone_base = float(canone_base)
+    prezzo_grezzo = offerta.prezzo_totale or offerta.prezzo_listino
+    prezzo_netto = float(prezzo_grezzo) / 1.22
+
+    settings_admin = db.query(SiteAdminSettings).filter(
+        SiteAdminSettings.admin_id == offerta.id_admin,
+        SiteAdminSettings.dealer_id.is_(None)
+    ).first()
+
+    prov_admin = float(settings_admin.prov_vetrina or 0) if settings_admin else 0.0
+
+    # ✅ prendi SEMPRE la provvigione attiva (anche se dealer_id è null)
+    prov_dealer = float(settings_corrente.prov_vetrina or 0)
+    slug_finale = settings_corrente.slug
+
+    if offerta.id_player == 5:
+        prov_admin = 0.0
+        prov_dealer = 0.0
+
+    incremento_totale = prezzo_netto * (prov_admin + prov_dealer) / 100.0
+    canone_finale = canone_base + (incremento_totale / durata)
+
+    return durata, km, round(canone_finale, 2), slug_finale
+
 
 
 def aggiorna_rating_convenienza(db: Session):
