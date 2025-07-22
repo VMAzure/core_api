@@ -2,7 +2,7 @@
 from app.models import SiteAdminSettings
 from app.auth_helpers import is_dealer_user
 
-def calcola_quotazione(offerta, quotazione, current_user, db: Session, dealer_context=False, dealer_id=None):
+def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_corrente: SiteAdminSettings):
     if not offerta or not quotazione or not offerta.prezzo_listino:
         return None, None, None, None
 
@@ -19,32 +19,28 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, dealer_co
     if not durata or durata <= 0:
         return None, None, None, None
 
-    canone_base = float(canone_base)
+    try:
+        canone_base = float(canone_base)
+    except (TypeError, ValueError):
+        return None, None, None, None
 
-    # Base imponibile = prezzo netto (senza IVA)
-    prezzo_netto = float(offerta.prezzo_totale) / 1.22
+    prezzo_grezzo = offerta.prezzo_totale or offerta.prezzo_listino
+    if not prezzo_grezzo:
+        return None, None, None, None
 
-    # Recupero provvigioni
+    try:
+        prezzo_netto = float(prezzo_grezzo) / 1.22
+    except (TypeError, ValueError):
+        return None, None, None, None
+
     settings_admin = db.query(SiteAdminSettings).filter(
         SiteAdminSettings.admin_id == offerta.id_admin,
         SiteAdminSettings.dealer_id.is_(None)
     ).first()
 
-    prov_admin = float(settings_admin.prov_vetrina or 0)
-    slug_finale = settings_admin.slug if settings_admin else None
-
-    prov_dealer = 0.0
-    if dealer_context or is_dealer_user(current_user):
-        dealer_id_effettivo = dealer_id or current_user.id
-        settings_dealer = db.query(SiteAdminSettings).filter(
-            SiteAdminSettings.admin_id == offerta.id_admin,
-            SiteAdminSettings.dealer_id == dealer_id_effettivo
-        ).first()
-
-        if settings_dealer:
-            prov_dealer = float(settings_dealer.prov_vetrina or 0)
-            if settings_dealer.slug:
-                slug_finale = settings_dealer.slug
+    prov_admin = float(settings_admin.prov_vetrina or 0) if settings_admin else 0.0
+    prov_dealer = float(settings_corrente.prov_vetrina or 0) if settings_corrente else 0.0
+    slug_finale = settings_corrente.slug if settings_corrente else None
 
     if offerta.id_player == 5:
         prov_admin = 0.0
@@ -56,31 +52,36 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, dealer_co
     return durata, km, round(canone_finale, 2), slug_finale
 
 
-def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db: Session, dealer_context=False, dealer_id=None):
-    canone_base = float(canone_base)
 
-    prezzo_netto = float(offerta.prezzo_listino) / 1.22
+def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db: Session, settings_corrente: SiteAdminSettings):
+    if not offerta or not durata or durata <= 0 or not canone_base:
+        return None, None, None, None
 
+    try:
+        canone_base = float(canone_base)
+    except (TypeError, ValueError):
+        return None, None, None, None
+
+    prezzo_grezzo = offerta.prezzo_totale or offerta.prezzo_listino
+    if not prezzo_grezzo:
+        return None, None, None, None
+
+    try:
+        prezzo_netto = float(prezzo_grezzo) / 1.22
+    except (TypeError, ValueError):
+        return None, None, None, None
+
+    # === Provvigione admin ===
     settings_admin = db.query(SiteAdminSettings).filter(
         SiteAdminSettings.admin_id == offerta.id_admin,
         SiteAdminSettings.dealer_id.is_(None)
     ).first()
 
-    prov_admin = float(settings_admin.prov_vetrina or 0)
-    slug_finale = settings_admin.slug if settings_admin else None
+    prov_admin = float(settings_admin.prov_vetrina or 0) if settings_admin else 0.0
+    prov_dealer = float(settings_corrente.prov_vetrina or 0) if settings_corrente else 0.0
+    slug_finale = settings_corrente.slug if settings_corrente else None
 
-    prov_dealer = 0.0
-    if dealer_context or is_dealer_user(current_user):
-        dealer_id_effettivo = dealer_id or current_user.id
-        settings_dealer = db.query(SiteAdminSettings).filter(
-            SiteAdminSettings.admin_id == offerta.id_admin,
-            SiteAdminSettings.dealer_id == dealer_id_effettivo
-        ).first()
-        if settings_dealer:
-            prov_dealer = float(settings_dealer.prov_vetrina or 0)
-            if settings_dealer.slug:
-                slug_finale = settings_dealer.slug
-
+    # UnipolRental → no provvigioni
     if offerta.id_player == 5:
         prov_admin = 0.0
         prov_dealer = 0.0
@@ -89,6 +90,7 @@ def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db
     canone_finale = canone_base + (incremento_totale / durata)
 
     return durata, km, round(canone_finale, 2), slug_finale
+
 
 def aggiorna_rating_convenienza(db: Session):
     from app.models import NltOfferte, NltQuotazioni, NltOfferteRating
