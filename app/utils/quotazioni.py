@@ -6,7 +6,7 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_
     if not offerta or not quotazione or not offerta.prezzo_listino:
         return None, None, None, None
 
-    # Selezione canone base
+    # === Selezione canone base ===
     if offerta.solo_privati and quotazione.mesi_48_30:
         durata, km, canone_base = 48, 30000, quotazione.mesi_48_30
     elif quotazione.mesi_36_10:
@@ -33,15 +33,22 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_
     except (TypeError, ValueError):
         return None, None, None, None
 
+    # === Recupero provvigioni ===
     settings_admin = db.query(SiteAdminSettings).filter(
         SiteAdminSettings.admin_id == offerta.id_admin,
         SiteAdminSettings.dealer_id.is_(None)
     ).first()
 
     prov_admin = float(settings_admin.prov_vetrina or 0) if settings_admin else 0.0
-    prov_dealer = float(settings_corrente.prov_vetrina or 0) if settings_corrente else 0.0
+
+    # ⚠️ Evita doppio conteggio se il record corrente è lo stesso dell'admin
+    prov_dealer = 0.0
+    if settings_corrente and settings_admin and settings_corrente.id != settings_admin.id:
+        prov_dealer = float(settings_corrente.prov_vetrina or 0)
+
     slug_finale = settings_corrente.slug if settings_corrente else None
 
+    # === Esclusione provvigioni per player speciali ===
     if offerta.id_player == 5:
         prov_admin = 0.0
         prov_dealer = 0.0
@@ -50,7 +57,6 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_
     canone_finale = canone_base + (incremento_totale / durata)
 
     return durata, km, round(canone_finale, 2), slug_finale
-
 
 
 def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db: Session, settings_corrente: SiteAdminSettings):
@@ -71,17 +77,22 @@ def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db
     except (TypeError, ValueError):
         return None, None, None, None
 
-    # === Provvigione admin ===
+    # === Recupero provvigioni ===
     settings_admin = db.query(SiteAdminSettings).filter(
         SiteAdminSettings.admin_id == offerta.id_admin,
         SiteAdminSettings.dealer_id.is_(None)
     ).first()
 
     prov_admin = float(settings_admin.prov_vetrina or 0) if settings_admin else 0.0
-    prov_dealer = float(settings_corrente.prov_vetrina or 0) if settings_corrente else 0.0
+
+    # ⚠️ Evita doppio conteggio se settings_corrente == settings_admin
+    prov_dealer = 0.0
+    if settings_corrente and settings_admin and settings_corrente.id != settings_admin.id:
+        prov_dealer = float(settings_corrente.prov_vetrina or 0)
+
     slug_finale = settings_corrente.slug if settings_corrente else None
 
-    # UnipolRental → no provvigioni
+    # === Blocco provvigioni per UnipolRental ===
     if offerta.id_player == 5:
         prov_admin = 0.0
         prov_dealer = 0.0

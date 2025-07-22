@@ -1046,6 +1046,13 @@ async def offerta_nlt_unificata(
         "motornet_status": motornet_status,
         "dettagli_motornet": dettagli_motornet
     }
+    print("DEBUG canone_base:", canone_base)
+    print("DEBUG prezzo_netto:", prezzo_netto)
+    print("DEBUG prov_admin:", prov_admin)
+    print("DEBUG prov_dealer:", prov_dealer)
+    print("DEBUG incremento_totale:", incremento_totale)
+    print("DEBUG canone_finale:", canone_finale)
+
 
 
 def costruisci_offerta_base(offerta):
@@ -1064,6 +1071,7 @@ def costruisci_offerta_base(offerta):
         "solo_privati": offerta.solo_privati,
         "descrizione_ai": offerta.descrizione_ai
     }
+
 
 # Funzione separata con gestione retry (3 tentativi con 2 secondi tra tentativi)
 
