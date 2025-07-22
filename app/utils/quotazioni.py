@@ -56,6 +56,10 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_
     incremento_totale = prezzo_netto * (prov_admin + prov_dealer) / 100.0
     canone_finale = canone_base + (incremento_totale / durata)
 
+    print("🔁 OFFERTA USATA:")
+    print("id_offerta:", offerta.id_offerta)
+    print("slug:", offerta.slug)
+    print("prezzo_totale:", offerta.prezzo_totale)
     print("🧮 DEBUG QUOTAZIONE")
     print("Canone base:", canone_base)
     print("Prezzo netto:", prezzo_netto)
