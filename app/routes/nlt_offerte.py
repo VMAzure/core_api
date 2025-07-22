@@ -991,57 +991,56 @@ async def offerta_nlt_unificata(
     )
     motornet_status = "CACHED" if dettagli_row else "ND"
 
-    # === 5. Quotazione: standard o tantastrada ===
-    dealer_context = settings.dealer_id is not None
-    dealer_id_for_context = settings.dealer_id if dealer_context else None
-
-    if modalita == "tantastrada":
-        quotazione = db.query(NltQuotazioni).filter(
-            NltQuotazioni.id_offerta == offerta.id_offerta
-        ).first()
-
-        if not quotazione or not quotazione.mesi_60_40:
-            raise HTTPException(status_code=404, detail="Quotazione 60/40 non disponibile.")
-
-        canone_base = quotazione.mesi_60_40
-        durata = 60
-        km = 40000
-
-        _, _, canone_finale, dealer_slug = calcola_quotazione_custom(
-            offerta, durata, km, canone_base, user, db,
-            settings_corrente=settings
-        )
-
-
-        return {
-            **costruisci_offerta_base(offerta),
-            "canone_mensile": float(canone_finale),
-            "durata_mesi": durata,
-            "km_inclusi": km,
-            "dealer_slug": dealer_slug,
-            "rating_convenienza": rating_convenienza,
-            "motornet_status": motornet_status,
-            "dettagli_motornet": dettagli_motornet,
-            "carrozzeria_descrizione": dettagli_motornet.get("tipo_descrizione") if dettagli_motornet else None
-
-        }
-
-    # === 6. Modalità standard ===
+    # === 5. Quotazione ===
     quotazione = db.query(NltQuotazioni).filter(
         NltQuotazioni.id_offerta == offerta.id_offerta
     ).first()
 
+    if not quotazione:
+        raise HTTPException(status_code=404, detail="Quotazione non disponibile.")
+
+    if modalita == "tantastrada":
+        if not quotazione.mesi_60_40:
+            raise HTTPException(status_code=404, detail="Quotazione 60/40 non disponibile.")
+
+        canone_base = quotazione.mesi_60_40
+        durata_mesi = 60
+        km_inclusi = 40000
+
+        durata_mesi, km_inclusi, canone_finale, dealer_slug = calcola_quotazione_custom(
+            offerta, durata_mesi, km_inclusi, canone_base, user, db,
+            settings_corrente=settings
+        )
+
+        if canone_finale is None:
+            raise HTTPException(status_code=404, detail="Canone non calcolabile.")
+
+        return {
+            **costruisci_offerta_base(offerta),
+            "canone_mensile": float(canone_finale),
+            "durata_mesi": durata_mesi,
+            "km_inclusi": km_inclusi,
+            "dealer_slug": dealer_slug,
+            "rating_convenienza": rating_convenienza,
+            "motornet_status": motornet_status,
+            "dettagli_motornet": dettagli_motornet,
+            "carrozzeria_descrizione": dettagli_motornet.get("tipo_descrizione")
+        }
+
+    # === 6. Modalità standard ===
     durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
         offerta, quotazione, user, db,
         settings_corrente=settings
     )
 
+    if canone is None:
+        raise HTTPException(status_code=404, detail="Canone non calcolabile.")
 
     return {
         **costruisci_offerta_base(offerta),
         "canone_mensile": float(canone),
-        "durata_mesi": durata,
-        "km_inclusi": km,
+        "durata_mesi": durata_mesi,
+        "km_inclusi": km_inclusi,
         "dealer_slug": dealer_slug,
         "rating_convenienza": rating_convenienza,
         "motornet_status": motornet_status,
