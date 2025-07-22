@@ -33,22 +33,31 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_
     except (TypeError, ValueError):
         return None, None, None, None
 
-    # === Recupero provvigioni ===
-    settings_admin = db.query(SiteAdminSettings).filter(
-        SiteAdminSettings.admin_id == offerta.id_admin,
-        SiteAdminSettings.dealer_id.is_(None)
-    ).first()
+    # === Recupero provvigioni admin ===
+    settings_admin = (
+        db.query(SiteAdminSettings)
+        .filter(
+            SiteAdminSettings.admin_id == int(offerta.id_admin),
+            SiteAdminSettings.dealer_id == None
+        )
+        .first()
+    )
+
+    if not settings_admin:
+        print(f"❗ settings_admin NON trovato per admin_id={offerta.id_admin}")
+    else:
+        print(f"✅ settings_admin ID={settings_admin.id} prov={settings_admin.prov_vetrina}")
 
     prov_admin = float(settings_admin.prov_vetrina or 0) if settings_admin else 0.0
 
-    # ⚠️ Evita doppio conteggio se il record corrente è lo stesso dell'admin
+    # === Evita doppio conteggio se settings_corrente == settings_admin ===
     prov_dealer = 0.0
     if settings_corrente and settings_admin and settings_corrente.id != settings_admin.id:
         prov_dealer = float(settings_corrente.prov_vetrina or 0)
 
     slug_finale = settings_corrente.slug if settings_corrente else None
 
-    # === Esclusione provvigioni per player speciali ===
+    # === Blocco provvigioni per UnipolRental ===
     if offerta.id_player == 5:
         prov_admin = 0.0
         prov_dealer = 0.0
@@ -56,11 +65,8 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_
     incremento_totale = prezzo_netto * (prov_admin + prov_dealer) / 100.0
     canone_finale = canone_base + (incremento_totale / durata)
 
-    print("🔁 OFFERTA USATA:")
-    print("id_offerta:", offerta.id_offerta)
-    print("slug:", offerta.slug)
-    print("prezzo_totale:", offerta.prezzo_totale)
     print("🧮 DEBUG QUOTAZIONE")
+    print("Offerta ID:", offerta.id_offerta)
     print("Canone base:", canone_base)
     print("Prezzo netto:", prezzo_netto)
     print("Provvigione admin:", prov_admin)
@@ -69,6 +75,7 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_
     print("Canone finale:", canone_finale)
 
     return durata, km, round(canone_finale, 2), slug_finale
+
 
 
 def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db: Session, settings_corrente: SiteAdminSettings):
