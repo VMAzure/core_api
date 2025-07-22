@@ -1015,6 +1015,13 @@ async def offerta_nlt_unificata(
         if canone_finale is None:
             raise HTTPException(status_code=404, detail="Canone non calcolabile.")
 
+            print("DEBUG canone_base:", canone_base)
+            print("DEBUG prezzo_netto:", prezzo_netto)
+            print("DEBUG prov_admin:", prov_admin)
+            print("DEBUG prov_dealer:", prov_dealer)
+            print("DEBUG incremento_totale:", incremento_totale)
+            print("DEBUG canone_finale:", canone_finale)
+
         return {
             **costruisci_offerta_base(offerta),
             "canone_mensile": float(canone_finale),
@@ -1046,12 +1053,7 @@ async def offerta_nlt_unificata(
         "motornet_status": motornet_status,
         "dettagli_motornet": dettagli_motornet
     }
-    print("DEBUG canone_base:", canone_base)
-    print("DEBUG prezzo_netto:", prezzo_netto)
-    print("DEBUG prov_admin:", prov_admin)
-    print("DEBUG prov_dealer:", prov_dealer)
-    print("DEBUG incremento_totale:", incremento_totale)
-    print("DEBUG canone_finale:", canone_finale)
+
 
 
 

@@ -56,6 +56,14 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_
     incremento_totale = prezzo_netto * (prov_admin + prov_dealer) / 100.0
     canone_finale = canone_base + (incremento_totale / durata)
 
+    print("🧮 DEBUG QUOTAZIONE")
+    print("Canone base:", canone_base)
+    print("Prezzo netto:", prezzo_netto)
+    print("Provvigione admin:", prov_admin)
+    print("Provvigione dealer:", prov_dealer)
+    print("Incremento totale:", incremento_totale)
+    print("Canone finale:", canone_finale)
+
     return durata, km, round(canone_finale, 2), slug_finale
 
 
