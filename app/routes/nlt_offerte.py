@@ -896,8 +896,9 @@ async def offerte_filtrate_nlt_pubbliche(
         else:
             durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
                 offerta, quotazione, user, db,
-                dealer_context=dealer_context, dealer_id=dealer_id_for_context
+                settings_corrente=settings
             )
+
 
         if canone is None:
             continue
@@ -1029,10 +1030,11 @@ async def offerta_nlt_unificata(
         NltQuotazioni.id_offerta == offerta.id_offerta
     ).first()
 
-    durata, km, canone, dealer_slug = calcola_quotazione(
+    durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
         offerta, quotazione, user, db,
-        dealer_context=dealer_context, dealer_id=dealer_id_for_context
+        settings_corrente=settings
     )
+
 
     return {
         **costruisci_offerta_base(offerta),
