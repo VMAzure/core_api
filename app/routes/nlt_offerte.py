@@ -1009,8 +1009,9 @@ async def offerta_nlt_unificata(
 
         _, _, canone_finale, dealer_slug = calcola_quotazione_custom(
             offerta, durata, km, canone_base, user, db,
-            dealer_context=dealer_context, dealer_id=dealer_id_for_context
+            settings_corrente=settings
         )
+
 
         return {
             **costruisci_offerta_base(offerta),
