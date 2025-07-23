@@ -710,7 +710,7 @@ async def offerte_filtrate_nlt_pubbliche(
     search: Optional[str] = Query(None),
     count_only: bool = Query(False),
     rating_min: Optional[int] = Query(None, ge=1, le=5),
-    order_by: Optional[str] = Query(None, regex="^(rating_desc|prezzo_asc)$"),
+    order_by: Optional[str] = Query(None, regex="^(rating_desc|prezzo_asc|marca_asc)$"),
     db: Session = Depends(get_db)
     
 ):
