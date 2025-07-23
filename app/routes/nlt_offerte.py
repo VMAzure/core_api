@@ -871,8 +871,11 @@ async def offerte_filtrate_nlt_pubbliche(
     # ✅ Ordinamento intelligente
     if order_by == "rating_desc":
         offerte_query = offerte_query.order_by(NltOfferteRating.rating_convenienza.desc().nullslast())
+    elif order_by == "marca_asc":
+        offerte_query = offerte_query.order_by(NltOfferte.marca.asc(), NltOfferte.modello.asc())
     else:
         offerte_query = offerte_query.order_by(NltOfferte.prezzo_listino.asc())
+
 
     offerte = offerte_query.offset(offset).limit(limit).all()
 
