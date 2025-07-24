@@ -136,7 +136,7 @@ app.add_middleware(
         "https://cigpdfgenerator-production.up.railway.app",
         "https://cig.up.railway.app/",
         "https://www.azcore.it",  # 👈 AGGIUNGI QUESTA RIGA
-        "https://azcore.it"       # 👈 AGGIUNGI ANCHE QUESTO SENZA WWW se usato
+        "https://azcore.it",       # 👈 AGGIUNGI ANCHE QUESTO SENZA WWW se usato
         "https://nlt.rent",
         "https://www.nlt.rent",
     ],
