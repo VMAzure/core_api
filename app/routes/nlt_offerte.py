@@ -889,13 +889,18 @@ async def offerte_filtrate_nlt_pubbliche(
             durata_mesi = 60
             km_inclusi = 40000
             canone_base = quotazione.mesi_60_40
+
             if not canone_base:
                 continue
 
-            durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione_custom(
-                offerta, durata_mesi, km_inclusi, canone_base, user, db,
-                dealer_context=dealer_context, dealer_id=dealer_id_for_context
-            )
+            try:
+                canone = round(float(canone_base), 2)
+            except (TypeError, ValueError):
+                print(f"❌ Canone_base non valido per offerta {offerta.id_offerta}: {canone_base}")
+                continue
+
+            dealer_slug = settings.slug if settings else None
+
         else:
             durata_mesi, km_inclusi, canone, dealer_slug = calcola_quotazione(
                 offerta, quotazione, user, db,
