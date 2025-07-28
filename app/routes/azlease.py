@@ -526,73 +526,85 @@ async def lista_auto_usate(
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    filtro = ""  # Default: nessun filtro
+    # 🔐 Costruzione filtri dinamici
+    filtro = ""
+    visibile_filter = ""
 
     if user.role == "superadmin":
-        filtro = ""  # nessun filtro, vede tutto
+        # Nessun filtro, vede tutto
+        pass
+
     elif is_admin_user(user):
         admin_id = get_admin_id(user)
+
         dealer_ids = db.execute(text("SELECT id FROM utenti WHERE parent_id = :admin_id"), {
             "admin_id": admin_id
         }).fetchall()
-        ids = [str(admin_id)] + [str(d.id) for d in dealer_ids]
-        filtro = f"AND i.admin_id IN ({','.join(ids)})"
+
+        tutti_id = [admin_id] + [d.id for d in dealer_ids]
+        filtro = f"AND i.admin_id IN ({','.join(str(i) for i in tutti_id)})"
+
     elif is_dealer_user(user):
-        filtro = "AND i.visibile = TRUE"
+        dealer_id = get_dealer_id(user)
+        filtro = f"AND i.dealer_id = {dealer_id} AND i.visibile = TRUE"
+
     else:
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
 
-    visibile_filter = ""
-
-    if user.role.lower() in ["superadmin", "admin", "admin_team"]:
+    # 🎯 Visibilità selezionata solo da ruoli elevati
+    if is_admin_user(user):
         if visibilita == "visibili":
             visibile_filter = "AND i.visibile = TRUE"
         elif visibilita == "non_visibili":
             visibile_filter = "AND i.visibile = FALSE"
 
+    # 📄 Query finale
     query = f"""
-                SELECT 
-                    a.id AS id_auto,
-                    a.targa,
-                    d.marca_nome AS marca,
-                    d.allestimento,
-                    a.km_certificati,
-                    a.colore,
-                    i.visibile,
-                    i.data_inserimento,
-                    a.anno_immatricolazione,
-                    u_admin.nome || ' ' || u_admin.cognome AS admin,
-                    u_dealer.nome || ' ' || u_dealer.cognome AS dealer,
-                    i.prezzo_vendita,
-                    COALESCE(SUM(dn.valore_perizia), 0) AS valore_perizia,
-                    EXISTS (
-                        SELECT 1 FROM azlease_usatoimg img WHERE img.auto_id = a.id
-                    ) AS foto,
-                    EXISTS (
-                        SELECT 1 FROM azlease_usatodanni pd WHERE pd.auto_id = a.id
-                    ) AS perizie,
-                    i.opzionato_da,
-                    i.opzionato_il,
-                    u_opz.ragione_sociale AS opzionato_da_nome,  -- ✅ ragione sociale dell'utente che ha opzionato
-                    i.venduto_da
-                FROM azlease_usatoauto a
-                JOIN azlease_usatoin i ON i.id = a.id_usatoin
-                LEFT JOIN azlease_usatoautodetails d ON d.auto_id = a.id
-                LEFT JOIN utenti u_admin ON u_admin.id = i.admin_id
-                LEFT JOIN utenti u_dealer ON u_dealer.id = i.dealer_id
-                LEFT JOIN utenti u_opz ON u_opz.id = i.opzionato_da::int
-                LEFT JOIN azlease_usatodanni dn ON dn.auto_id = a.id
-                GROUP BY 
-                    a.id, d.marca_nome, d.allestimento, a.km_certificati, a.colore, 
-                    i.visibile, i.data_inserimento, a.anno_immatricolazione, 
-                    u_admin.nome, u_admin.cognome, u_dealer.nome, u_dealer.cognome, 
-                    i.prezzo_vendita, i.opzionato_da, i.opzionato_il, u_opz.ragione_sociale, i.venduto_da
-                ORDER BY i.data_inserimento DESC
-
+        SELECT 
+            a.id AS id_auto,
+            a.targa,
+            d.marca_nome AS marca,
+            d.allestimento,
+            a.km_certificati,
+            a.colore,
+            i.visibile,
+            i.data_inserimento,
+            a.anno_immatricolazione,
+            u_admin.nome || ' ' || u_admin.cognome AS admin,
+            u_dealer.nome || ' ' || u_dealer.cognome AS dealer,
+            i.prezzo_vendita,
+            COALESCE(SUM(dn.valore_perizia), 0) AS valore_perizia,
+            EXISTS (
+                SELECT 1 FROM azlease_usatoimg img WHERE img.auto_id = a.id
+            ) AS foto,
+            EXISTS (
+                SELECT 1 FROM azlease_usatodanni pd WHERE pd.auto_id = a.id
+            ) AS perizie,
+            i.opzionato_da,
+            i.opzionato_il,
+            u_opz.ragione_sociale AS opzionato_da_nome,
+            i.venduto_da
+        FROM azlease_usatoauto a
+        JOIN azlease_usatoin i ON i.id = a.id_usatoin
+        LEFT JOIN azlease_usatoautodetails d ON d.auto_id = a.id
+        LEFT JOIN utenti u_admin ON u_admin.id = i.admin_id
+        LEFT JOIN utenti u_dealer ON u_dealer.id = i.dealer_id
+        LEFT JOIN utenti u_opz ON u_opz.id = i.opzionato_da::int
+        LEFT JOIN azlease_usatodanni dn ON dn.auto_id = a.id
+        WHERE 1=1
+        {filtro}
+        {visibile_filter}
+        GROUP BY 
+            a.id, d.marca_nome, d.allestimento, a.km_certificati, a.colore, 
+            i.visibile, i.data_inserimento, a.anno_immatricolazione, 
+            u_admin.nome, u_admin.cognome, u_dealer.nome, u_dealer.cognome, 
+            i.prezzo_vendita, i.opzionato_da, i.opzionato_il, u_opz.ragione_sociale, i.venduto_da
+        ORDER BY i.data_inserimento DESC
     """
 
     risultati = db.execute(text(query)).fetchall()
     return [dict(r._mapping) for r in risultati]
+
 
 
 @router.put("/stato-usato/{id_auto}", tags=["AZLease"])
