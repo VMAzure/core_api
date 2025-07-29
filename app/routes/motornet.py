@@ -234,7 +234,7 @@ async def get_dettagli_usato(
 
 
 
-@router_usato.get("/valutazione/{codice_motornet}/{anno_immatricolazione}/{mese_immatricolazione}", tags=["Motornet"])
+@router_usato.get("/valutazione/{codice_motornet}/{anno_immatricolazione}/{mese_immatricolazione}", tags=["Usato"])
 async def get_valutazione_auto(
     codice_motornet: str,
     anno_immatricolazione: int,
@@ -280,7 +280,7 @@ async def get_valutazione_auto(
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero della valutazione")
 
-@router_usato.get("/marche/{anno}", tags=["Motornet"])
+@router_usato.get("/marche/{anno}", tags=["Usato"])
 async def get_marche_per_anno_usato(anno: int, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """Recupera la lista delle marche per un anno specifico"""
     Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
@@ -318,7 +318,7 @@ async def get_marche_per_anno_usato(anno: int, Authorize: AuthJWT = Depends(), d
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero delle marche per l'anno specificato")
 
-@router_usato.get("/accessori/{codice_motornet}/{anno}/{mese}", tags=["Motornet"])
+@router_usato.get("/accessori/{codice_motornet}/{anno}/{mese}", tags=["Usato"])
 async def get_accessori_auto_usato(
     codice_motornet: str,
     anno: int,

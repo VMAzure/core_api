@@ -9,10 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 import os
 
-
-
-load_dotenv()  # <-- carica .env nella sessione
-
+load_dotenv()
 
 MOTORN_AUTH_URL = "https://webservice.motornet.it/auth/realms/webservices/protocol/openid-connect/token"
 DETTAGLI_URL = "https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/dettaglio"
@@ -41,6 +38,15 @@ def get_motornet_token():
             print(f"❌ Errore richiesta token (tentativo {attempt+1}): {e}")
             time.sleep(2)
     raise Exception("❌ Impossibile ottenere il token dopo 3 tentativi")
+
+def safe_bool(val):
+    return bool(val) if isinstance(val, bool) else None
+
+def safe_float(val):
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
 
 def process_codice(codice_uni):
     db = SessionLocal()
@@ -75,9 +81,6 @@ def process_codice(codice_uni):
         return
 
     try:
-        def safe_bool(val):
-            return bool(val) if isinstance(val, bool) else None
-
         db.execute(text("""
             INSERT INTO mnet_dettagli_usato (
                 codice_motornet_uni, modello, allestimento, immagine, codice_costruttore, codice_motore,
@@ -121,8 +124,8 @@ def process_codice(codice_uni):
             "immagine": modello.get("immagine"),
             "codice_costruttore": modello.get("codiceCostruttore"),
             "codice_motore": modello.get("codiceMotore"),
-            "prezzo_listino": modello.get("prezzoListino"),
-            "prezzo_accessori": modello.get("prezzoAccessori"),
+            "prezzo_listino": safe_float(modello.get("prezzoListino")),
+            "prezzo_accessori": safe_float(modello.get("prezzoAccessori")),
             "data_listino": datetime.strptime(modello.get("dataListino"), "%Y-%m-%d").date() if modello.get("dataListino") else None,
             "marca_nome": (modello.get("marca") or {}).get("nome"),
             "marca_acronimo": (modello.get("marca") or {}).get("acronimo"),
@@ -140,11 +143,11 @@ def process_codice(codice_uni):
             "cavalli_fiscali": modello.get("cavalliFiscali"),
             "hp": modello.get("hp"),
             "kw": modello.get("kw"),
-            "emissioni_co2": modello.get("emissioniCo2"),
-            "consumo_urbano": modello.get("consumoUrbano"),
-            "consumo_extraurbano": modello.get("consumoExtraurbano"),
-            "consumo_medio": modello.get("consumoMedio"),
-            "accelerazione": modello.get("accelerazione"),
+            "emissioni_co2": safe_float(modello.get("emissioniCo2")),
+            "consumo_urbano": safe_float(modello.get("consumoUrbano")),
+            "consumo_extraurbano": safe_float(modello.get("consumoExtraurbano")),
+            "consumo_medio": safe_float(modello.get("consumoMedio")),
+            "accelerazione": safe_float(modello.get("accelerazione")),
             "velocita": modello.get("velocita"),
             "descrizione_marce": modello.get("descrizioneMarce"),
             "cambio": (modello.get("cambio") or {}).get("descrizione"),
@@ -173,8 +176,8 @@ def process_codice(codice_uni):
             "ricarica_standard": safe_bool(modello.get("ricaricaStandard")),
             "ricarica_veloce": safe_bool(modello.get("ricaricaVeloce")),
             "sospensioni_pneumatiche": safe_bool(modello.get("sospPneum")),
-            "emissioni_urbe": modello.get("emissUrbe"),
-            "emissioni_extraurb": modello.get("emissExtraurb"),
+            "emissioni_urbe": safe_float(modello.get("emissUrbe")),
+            "emissioni_extraurb": safe_float(modello.get("emissExtraurb")),
             "descrizione_breve": modello.get("descrizioneBreve"),
             "peso_potenza": modello.get("pesoPotenza"),
             "volumi": modello.get("volumi"),
