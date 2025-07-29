@@ -326,9 +326,11 @@ async def get_dettagli_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: S
         raise HTTPException(status_code=403, detail="Non hai accesso a questa auto (non visibile)")
 
     # 🔎 Recupera dettagli tecnici, immagini e danni
+    # 🔎 Recupera dettagli tecnici, immagini e danni
     dettagli = db.execute(text("""
-        SELECT * FROM azlease_usatoautodetails WHERE auto_id = :auto_id
-    """), {"auto_id": auto_id}).fetchone()
+        SELECT * FROM mnet_dettagli_usato WHERE codice_motornet_uni = :codice
+    """), {"codice": auto.codice_motornet}).fetchone()
+
 
     immagini = db.execute(text("""
         SELECT foto FROM azlease_usatoimg WHERE auto_id = :auto_id
