@@ -432,8 +432,8 @@ async def lista_auto_usate(
         filtro = f"AND i.admin_id IN ({','.join(str(i) for i in tutti_id)})"
 
     elif user.role in ["dealer", "dealer_team"]:
-        dealer_id = user.id if user.parent_id is None else user.parent_id
-        filtro = f"AND i.dealer_id = {dealer_id}"
+        filtro = f"AND i.dealer_id = {user.id}"
+
 
     else:
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
