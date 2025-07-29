@@ -403,7 +403,7 @@ async def get_id_auto_anche_non_visibili(targa: str, Authorize: AuthJWT = Depend
 
 @router.get("/lista-auto", tags=["AZLease"])
 async def lista_auto_usate(
-    visibilita: Optional[str] = Query(None, description="Opzioni: visibili, non_visibili, tutte"),
+    visibilita: Optional[str] = Query(None, description="visibili | non_visibili | tutte"),
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -414,7 +414,6 @@ async def lista_auto_usate(
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    # 🔐 Costruzione filtri dinamici
     filtro = ""
     visibile_filter = ""
 
@@ -422,33 +421,30 @@ async def lista_auto_usate(
         # Nessun filtro, vede tutto
         pass
 
-    elif is_admin_user(user):
-        admin_id = get_admin_id(user)
+    elif user.role in ["admin", "admin_team"]:
+        admin_id = user.id if user.parent_id is None else user.parent_id
 
-        dealer_ids = db.execute(text("SELECT id FROM utenti WHERE parent_id = :admin_id"), {
-            "admin_id": admin_id
-        }).fetchall()
+        dealer_ids = db.execute(text("""
+            SELECT id FROM utenti WHERE parent_id = :admin_id
+        """), {"admin_id": admin_id}).fetchall()
 
-        tutti_id = [admin_id] + [d.id for d in dealer_ids]
+        tutti_id = [admin_id] + [r.id for r in dealer_ids]
         filtro = f"AND i.admin_id IN ({','.join(str(i) for i in tutti_id)})"
 
-    if visibilita == "visibili":
-        visibile_filter = "AND i.visibile = TRUE"
-    elif visibilita == "non_visibili":
-        visibile_filter = "AND i.visibile = FALSE"
-
+    elif user.role in ["dealer", "dealer_team"]:
+        dealer_id = user.id if user.parent_id is None else user.parent_id
+        filtro = f"AND i.dealer_id = {dealer_id}"
 
     else:
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
 
-    # 🎯 Visibilità selezionata da chiunque
+    # 🎯 Applica filtro visibilità se specificato
     if visibilita == "visibili":
         visibile_filter = "AND i.visibile = TRUE"
     elif visibilita == "non_visibili":
         visibile_filter = "AND i.visibile = FALSE"
+    # se visibilita == "tutte" o None → nessun filtro
 
-
-    # 📄 Query finale
     query = f"""
         SELECT 
             a.id AS id_auto,
@@ -475,7 +471,9 @@ async def lista_auto_usate(
             i.opzionato_da,
             i.opzionato_il,
             u_opz.ragione_sociale AS opzionato_da_nome,
-            i.venduto_da
+            i.venduto_da,
+            i.dealer_id,
+            i.admin_id
         FROM azlease_usatoauto a
         JOIN azlease_usatoin i ON i.id = a.id_usatoin
         LEFT JOIN mnet_dettagli_usato d ON d.codice_motornet_uni = a.codice_motornet
@@ -490,14 +488,15 @@ async def lista_auto_usate(
             a.id, d.marca_nome, d.allestimento, a.km_certificati, a.colore, 
             i.visibile, i.data_inserimento, a.anno_immatricolazione, 
             u_admin.nome, u_admin.cognome, u_dealer.nome, u_dealer.cognome, 
-            i.prezzo_vendita, i.prezzo_costo,i.opzionato_da, i.opzionato_il, u_opz.ragione_sociale, i.venduto_da, i.iva_esposta
-
+            i.prezzo_vendita, i.prezzo_costo, i.iva_esposta,
+            i.opzionato_da, i.opzionato_il, u_opz.ragione_sociale,
+            i.venduto_da, i.dealer_id, i.admin_id
         ORDER BY i.data_inserimento DESC
     """
 
-
     risultati = db.execute(text(query)).fetchall()
     return [dict(r._mapping) for r in risultati]
+
 
 
 
