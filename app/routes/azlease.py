@@ -539,13 +539,22 @@ async def aggiorna_stato_auto_usata(
     elif azione == "vendita":
         db.execute(text("""
             UPDATE azlease_usatoin
-            SET venduto_da = :user_id, venduto_il = :data
+            SET venduto_da = :user_id, venduto_il = :data, visibile = false
             WHERE id = :id_usatoin
         """), {
             "user_id": str(user.id),
             "data": now,
             "id_usatoin": id_usatoin
         })
+
+    elif azione == "rimetti_in_vendita":
+        db.execute(text("""
+            UPDATE azlease_usatoin
+            SET venduto_da = NULL, venduto_il = NULL, visibile = true
+            WHERE id = :id_usatoin
+        """), {"id_usatoin": id_usatoin})
+
+
 
     elif azione == "elimina":
         db.execute(text("""
