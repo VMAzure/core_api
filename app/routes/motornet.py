@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.routes.auth import get_current_user
 from app.database import get_db  # ✅ Import corretto per il DB
-from app.models import User, MnetModelli, MnetMarcaUsato, MnetAllestimentiUsato, MnetDettagliUsato, MnetModelloUsato
+from app.models import User, MnetModelli, MnetMarcaUsato, MnetModelloUsato
 from datetime import datetime
 import httpx
 from app.utils.modelli import pulisci_modello
