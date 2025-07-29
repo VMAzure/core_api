@@ -560,8 +560,22 @@ async def aggiorna_stato_auto_usata(
             SET visibile = true
             WHERE id = :id_usatoin
         """), {"id_usatoin": id_usatoin})
+    
+    elif azione == "modifica_prezzo":
+        nuovo_valore = payload.get("valore")
+        if not isinstance(nuovo_valore, (int, float)):
+            raise HTTPException(status_code=400, detail="Prezzo non valido")
 
-    # 🔧 AGGIUNGI QUESTO:
+        db.execute(text("""
+            UPDATE azlease_usatoin
+            SET prezzo_vendita = :valore, data_ultima_modifica = :now
+            WHERE id = :id_usatoin
+        """), {
+            "valore": nuovo_valore,
+            "id_usatoin": id_usatoin,
+            "now": now
+        })
+
     elif azione == "rimuovi_opzione":
         if user.role.lower() in ["admin", "admin_team", "superadmin"]:
             db.execute(text("""
