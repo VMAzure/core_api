@@ -572,8 +572,12 @@ async def aggiorna_stato_auto_usata(
     
     elif azione == "modifica_prezzo":
         nuovo_prezzo = payload.get("nuovo_prezzo")
-        if nuovo_prezzo is None:
-            raise HTTPException(status_code=400, detail="Prezzo mancante")
+        try:
+            nuovo_prezzo = float(nuovo_prezzo)
+            if nuovo_prezzo <= 0:
+                raise ValueError()
+        except:
+            raise HTTPException(status_code=400, detail="Prezzo non valido")
 
         db.execute(text("""
             UPDATE azlease_usatoin
@@ -583,7 +587,14 @@ async def aggiorna_stato_auto_usata(
 
 
     elif azione == "rimuovi_opzione":
-        if user.role.lower() in ["admin", "admin_team", "superadmin"]:
+        current = db.execute(text("""
+            SELECT opzionato_da FROM azlease_usatoin WHERE id = :id_usatoin
+        """), {"id_usatoin": id_usatoin}).fetchone()
+
+        if (
+            user.role.lower() in ["admin", "admin_team", "superadmin"]
+            or str(current.opzionato_da) == str(user.id)
+        ):
             db.execute(text("""
                 UPDATE azlease_usatoin
                 SET opzionato_da = NULL, opzionato_il = NULL
@@ -591,6 +602,7 @@ async def aggiorna_stato_auto_usata(
             """), {"id_usatoin": id_usatoin})
         else:
             raise HTTPException(status_code=403, detail="Non autorizzato")
+
 
     else:
         raise HTTPException(status_code=400, detail="Azione non valida")
