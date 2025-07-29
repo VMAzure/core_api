@@ -458,6 +458,7 @@ async def lista_auto_usate(
             a.anno_immatricolazione,
             u_admin.nome || ' ' || u_admin.cognome AS admin,
             u_dealer.nome || ' ' || u_dealer.cognome AS dealer,
+            i.prezzo_costo,
             i.prezzo_vendita,
             COALESCE(SUM(dn.valore_perizia), 0) AS valore_perizia,
             EXISTS (
@@ -484,7 +485,7 @@ async def lista_auto_usate(
             a.id, d.marca_nome, d.allestimento, a.km_certificati, a.colore, 
             i.visibile, i.data_inserimento, a.anno_immatricolazione, 
             u_admin.nome, u_admin.cognome, u_dealer.nome, u_dealer.cognome, 
-            i.prezzo_vendita, i.opzionato_da, i.opzionato_il, u_opz.ragione_sociale, i.venduto_da
+            i.prezzo_vendita, i.prezzo_costo,i.opzionato_da, i.opzionato_il, u_opz.ragione_sociale, i.venduto_da
         ORDER BY i.data_inserimento DESC
     """
 
