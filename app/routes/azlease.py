@@ -91,6 +91,7 @@ async def inserisci_auto_usata(
         "usatoin_id": str(usatoin_id)
     })
 
+    # 🔗 I dettagli sono già presenti nella tabella mnet_dettagli_usato
     db.commit()
 
     return {
@@ -98,6 +99,7 @@ async def inserisci_auto_usata(
         "id_auto": str(auto_id),
         "id_inserimento": str(usatoin_id)
     }
+
 
 
 @router.post("/foto-usato", tags=["AZLease"])
