@@ -402,7 +402,8 @@ async def get_id_auto_anche_non_visibili(targa: str, Authorize: AuthJWT = Depend
     return {"id_auto": result.id}
 
 @router.get("/lista-auto", tags=["AZLease"])
-async def lista_auto(
+async def lista_auto_usate(
+    visibilita: Optional[str] = Query(None, description="Opzioni: visibili, non_visibili, tutte"),
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -413,63 +414,90 @@ async def lista_auto(
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    ruolo = user.role.lower()
+    # 🔐 Costruzione filtri dinamici
+    filtro = ""
+    visibile_filter = ""
 
-    # Costruisci la query base
-    query = text("""
-        SELECT 
-            a.id AS id_auto,
-            a.targa,
-            a.marca,
-            a.allestimento,
-            a.km_certificati,
-            a.colore,
-            a.visibile,
-            a.data_inserimento,
-            a.anno_immatricolazione,
-            a.prezzo_costo,
-            a.iva_esposta,
-            a.prezzo_vendita,
-            a.valore_perizia,
-            a.foto,
-            a.perizie,
-            i.opzionato_da,
-            i.opzionato_il,
-            i.venduto_da,
-            i.venduto_il,
-            d.ragione_sociale AS dealer,
-            ad.ragione_sociale AS admin,
-            i.dealer_id,
-            i.admin_id
-        FROM azlease_usatoauto a
-        JOIN azlease_usatoin i ON a.id_usatoin = i.id
-        LEFT JOIN utenti d ON i.dealer_id = d.id
-        LEFT JOIN utenti ad ON i.admin_id = ad.id
-    """)
+    if user.role == "superadmin":
+        # Nessun filtro, vede tutto
+        pass
 
-    condizioni = []
-    params = {}
+    elif is_admin_user(user):
+        admin_id = get_admin_id(user)
 
-    if ruolo == "superadmin":
-        pass  # Nessun filtro
+        dealer_ids = db.execute(text("SELECT id FROM utenti WHERE parent_id = :admin_id"), {
+            "admin_id": admin_id
+        }).fetchall()
 
-    elif ruolo in ["admin", "admin_team"]:
-        condizioni.append("(i.admin_id = :user_id OR i.dealer_id IN (SELECT id FROM utenti WHERE parent_id = :user_id))")
-        params["user_id"] = user.id
+        tutti_id = [admin_id] + [d.id for d in dealer_ids]
+        filtro = f"AND i.admin_id IN ({','.join(str(i) for i in tutti_id)})"
 
-    elif ruolo in ["dealer", "dealer_team"]:
-        condizioni.append("i.dealer_id = :user_id")
-        params["user_id"] = user.id
+    if visibilita == "visibili":
+        visibile_filter = "AND i.visibile = TRUE"
+    elif visibilita == "non_visibili":
+        visibile_filter = "AND i.visibile = FALSE"
+
 
     else:
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
 
-    if condizioni:
-        query = text(f"{query.text} WHERE {' AND '.join(condizioni)}")
+    # 🎯 Visibilità selezionata da chiunque
+    if visibilita == "visibili":
+        visibile_filter = "AND i.visibile = TRUE"
+    elif visibilita == "non_visibili":
+        visibile_filter = "AND i.visibile = FALSE"
 
-    result = db.execute(query, params).mappings().all()
-    return [dict(row) for row in result]
 
+    # 📄 Query finale
+    query = f"""
+        SELECT 
+            a.id AS id_auto,
+            a.targa,
+            d.marca_nome AS marca,
+            d.allestimento,
+            a.km_certificati,
+            a.colore,
+            i.visibile,
+            i.data_inserimento,
+            a.anno_immatricolazione,
+            u_admin.nome || ' ' || u_admin.cognome AS admin,
+            u_dealer.nome || ' ' || u_dealer.cognome AS dealer,
+            i.prezzo_costo,
+            i.iva_esposta,
+            i.prezzo_vendita,
+            COALESCE(SUM(dn.valore_perizia), 0) AS valore_perizia,
+            EXISTS (
+                SELECT 1 FROM azlease_usatoimg img WHERE img.auto_id = a.id
+            ) AS foto,
+            EXISTS (
+                SELECT 1 FROM azlease_usatodanni pd WHERE pd.auto_id = a.id
+            ) AS perizie,
+            i.opzionato_da,
+            i.opzionato_il,
+            u_opz.ragione_sociale AS opzionato_da_nome,
+            i.venduto_da
+        FROM azlease_usatoauto a
+        JOIN azlease_usatoin i ON i.id = a.id_usatoin
+        LEFT JOIN mnet_dettagli_usato d ON d.codice_motornet_uni = a.codice_motornet
+        LEFT JOIN utenti u_admin ON u_admin.id = i.admin_id
+        LEFT JOIN utenti u_dealer ON u_dealer.id = i.dealer_id
+        LEFT JOIN utenti u_opz ON u_opz.id = i.opzionato_da::int
+        LEFT JOIN azlease_usatodanni dn ON dn.auto_id = a.id
+        WHERE 1=1
+        {filtro}
+        {visibile_filter}
+        GROUP BY 
+            a.id, d.marca_nome, d.allestimento, a.km_certificati, a.colore, 
+            i.visibile, i.data_inserimento, a.anno_immatricolazione, 
+            u_admin.nome, u_admin.cognome, u_dealer.nome, u_dealer.cognome, 
+            i.prezzo_vendita, i.prezzo_costo,i.opzionato_da, i.opzionato_il, u_opz.ragione_sociale, i.venduto_da, i.iva_esposta
+
+        ORDER BY i.data_inserimento DESC
+    """
+
+
+    risultati = db.execute(text(query)).fetchall()
+    return [dict(r._mapping) for r in risultati]
 
 
 
