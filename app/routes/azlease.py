@@ -48,7 +48,7 @@ async def inserisci_auto_usata(
             prezzo_vendita, visibile, opzionato_da, opzionato_il, venduto_da, venduto_il
         ) VALUES (
             :id, :dealer_id, :admin_id, :inserimento, :modifica, :costo,
-            :vendita, :visibile, :opzionato_da, :opzionato_il, :venduto_da, :venduto_il
+            :vendita, :visibile, :opzionato_da, :opzionato_il, :venduto_da, :venduto_il, :iva_esposta
         )
     """), {
         "id": str(usatoin_id),
@@ -62,7 +62,9 @@ async def inserisci_auto_usata(
         "opzionato_da": payload.opzionato_da,
         "opzionato_il": payload.opzionato_il,
         "venduto_da": payload.venduto_da,
-        "venduto_il": payload.venduto_il
+        "venduto_il": payload.venduto_il,
+        "iva_esposta": payload.iva_esposta if hasattr(payload, "iva_esposta") else False
+
     })
 
     auto_id = uuid.uuid4()
@@ -459,6 +461,7 @@ async def lista_auto_usate(
             u_admin.nome || ' ' || u_admin.cognome AS admin,
             u_dealer.nome || ' ' || u_dealer.cognome AS dealer,
             i.prezzo_costo,
+            i.iva_esposta,
             i.prezzo_vendita,
             COALESCE(SUM(dn.valore_perizia), 0) AS valore_perizia,
             EXISTS (
@@ -485,7 +488,8 @@ async def lista_auto_usate(
             a.id, d.marca_nome, d.allestimento, a.km_certificati, a.colore, 
             i.visibile, i.data_inserimento, a.anno_immatricolazione, 
             u_admin.nome, u_admin.cognome, u_dealer.nome, u_dealer.cognome, 
-            i.prezzo_vendita, i.prezzo_costo,i.opzionato_da, i.opzionato_il, u_opz.ragione_sociale, i.venduto_da
+            i.prezzo_vendita, i.prezzo_costo,i.opzionato_da, i.opzionato_il, u_opz.ragione_sociale, i.venduto_da, i.iva_esposta
+
         ORDER BY i.data_inserimento DESC
     """
 

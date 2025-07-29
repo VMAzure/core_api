@@ -345,6 +345,8 @@ class AZUsatoInsertRequest(BaseModel):
     venduto_da: Optional[str] = None
     venduto_il: Optional[str] = None
     visibile: Optional[bool] = True
+    iva_esposta: Optional[bool] = False
+
 
 class NltOfferte(Base):
     __tablename__ = 'nlt_offerte'
