@@ -131,7 +131,7 @@ async def get_modelli_usato(
 
 
 
-@router_usato.get("/allestimenti/{codice_marca}/{codice_modello}")
+@router_usato.get("/allestimenti/{codice_marca}/{codice_modello}", tags=["Usato"])
 async def get_allestimenti_usato(
     codice_marca: str,
     codice_modello: str,
@@ -184,7 +184,7 @@ async def get_allestimenti_usato(
         for row in result
     ]
 
-@router_usato.get("/dettagli/{codice_motornet}")
+@router_usato.get("/dettagli/{codice_motornet}", tags=["Usato"])
 async def get_dettagli_usato(
     codice_motornet: str,
     Authorize: AuthJWT = Depends(),
