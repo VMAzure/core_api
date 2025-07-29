@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.routes.auth import get_current_user
 from app.database import get_db  # ✅ Import corretto per il DB
-from app.models import User, MnetModelli
+from app.models import User, MnetModelli, MnetMarcaUsato, MnetAllestimentiUsato, MnetDettagliUsato, MnetModelloUsato
 from datetime import datetime
 import httpx
 from app.utils.modelli import pulisci_modello
@@ -68,46 +68,11 @@ def get_motornet_token():
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero del token")
 
 
-@router_usato.get("/marche", tags=["Motornet"])
-async def get_marche_usato(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    """Recupera la lista delle marche da Motornet solo per utenti autenticati"""
-    Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
-    user_email = Authorize.get_jwt_subject()
-
-    user = db.query(User).filter(User.email == user_email).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Utente non trovato")
-
-    token = get_motornet_token()  # 🔹 Otteniamo il token da Motornet
-
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
-
-    response = requests.get(MOTORN_MARCHE_URL, headers=headers)
-
-    print(f"🔍 DEBUG: Risposta Motornet Marche: {response.text}")  # 🔹 Stampa il JSON ricevuto
-
-    if response.status_code == 200:
-        data = response.json()
-
-        # Estraggo solo i dati utili
-        marche_pulite = [
-            {
-                "acronimo": marca.get("acronimo"),
-                "nome": marca.get("nome"),
-                "logo": marca.get("logo")
-            }
-            for marca in data.get("marche", [])
-        ]
-
-        return marche_pulite
-
-    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero delle marche")
-
-@router_usato.get("/modelli/{codice_marca}", tags=["Motornet"])
-async def get_modelli_usato(codice_marca: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    """Recupera la lista dei modelli per una marca specifica"""
+@router_usato.get("/marche", tags=["Usato"])
+async def get_marche_usato(
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
@@ -115,91 +80,27 @@ async def get_modelli_usato(codice_marca: str, Authorize: AuthJWT = Depends(), d
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    token = get_motornet_token()
+    marche = db.query(
+        MnetMarcaUsato.acronimo,
+        MnetMarcaUsato.nome,
+        MnetMarcaUsato.logo
+    ).order_by(MnetMarcaUsato.nome).all()
 
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
-
-    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/marca/modelli?codice_marca={codice_marca}"
-
-    response = requests.get(motornet_url, headers=headers)
-
-    print(f"🔍 DEBUG: Risposta completa di Motornet:")
-    print(response.text)
-
-    if response.status_code == 200:
-        data = response.json()
-
-        modelli_puliti = []
-        for modello in data.get("modelli", []):
-            descrizione_originale = modello["codDescModello"]["descrizione"] if modello.get("codDescModello") else None
-            descrizione_pulita = pulisci_modello(descrizione_originale) if descrizione_originale else None
-
-            print(f"🔎 Modello originale: '{descrizione_originale}' → Pulito: '{descrizione_pulita}'")
-
-            modelli_puliti.append({
-                "codice": modello["gammaModello"]["codice"] if modello.get("gammaModello") else None,
-                "descrizione": modello["gammaModello"]["descrizione"] if modello.get("gammaModello") else None,
-                "inizio_produzione": modello.get("inizioProduzione"),
-                "fine_produzione": modello.get("fineProduzione"),
-                "gruppo_storico": modello["gruppoStorico"]["descrizione"] if modello.get("gruppoStorico") else None,
-                "serie_gamma": modello["serieGamma"]["descrizione"] if modello.get("serieGamma") else None,
-                "codice_desc_modello": modello["codDescModello"]["codice"] if modello.get("codDescModello") else None,
-                "descrizione_dettagliata": descrizione_pulita
-            })
-
-        return modelli_puliti
-
-    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero dei modelli")
+    return [
+        {
+            "acronimo": row.acronimo,
+            "nome": row.nome,
+            "logo": row.logo
+        } for row in marche
+    ]
 
 
-@router_usato.get("/allestimenti/{codice_marca}/{codice_modello}", tags=["Motornet"])
-async def get_allestimenti_usato(codice_marca: str, codice_modello: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    """Recupera la lista degli allestimenti per un modello specifico"""
-    Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
-    user_email = Authorize.get_jwt_subject()
-
-    user = db.query(User).filter(User.email == user_email).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Utente non trovato")
-
-    token = get_motornet_token()  # 🔹 Otteniamo il token da Motornet prima della richiesta
-
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
-
-    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/modello/versioni?codice_modello={codice_modello}&codice_marca={codice_marca}"
-
-    response = requests.get(motornet_url, headers=headers)
-
-    print(f"🔍 DEBUG: Risposta Motornet Allestimenti: {response.text}")  # 🔹 Stampa la risposta ricevuta
-
-    if response.status_code == 200:
-        data = response.json()
-
-        # Estraggo solo i dati utili
-        allestimenti_puliti = [
-    {
-        "codice_univoco": versione.get("codiceMotornetUnivoco"),
-        "versione": versione.get("nome"),  # 🔹 Nome dell'allestimento
-        "inizio_produzione": versione.get("inizioProduzione"),  # 🔹 Data di inizio produzione
-        "fine_produzione": versione.get("fineProduzione"),  # 🔹 Data di fine produzione
-        "marca": versione["marca"]["nome"] if versione.get("marca") else None  # 🔹 Nome della marca
-    }
-    for versione in data.get("versioni", [])
-]
-
-
-        return allestimenti_puliti
-
-    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero degli allestimenti")
-
-import httpx
-
-@router_usato.get("/dettagli/{codice_motornet}", tags=["Motornet"])
-async def get_dettagli_auto_usato(codice_motornet: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+@router_usato.get("/modelli/{codice_marca}", tags=["Usato"])
+async def get_modelli_usato(
+    codice_marca: str,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
@@ -207,23 +108,129 @@ async def get_dettagli_auto_usato(codice_motornet: str, Authorize: AuthJWT = Dep
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    token = get_motornet_token()
+    modelli = db.query(MnetModelloUsato).filter(
+        MnetModelloUsato.marca_acronimo == codice_marca
+    ).order_by(MnetModelloUsato.descrizione).all()
 
-    headers = {
-        "Authorization": f"Bearer {token}"
+    return [
+        {
+            "codice": m.codice_modello,
+            "descrizione": m.descrizione,
+            "inizio_produzione": m.inizio_produzione,
+            "fine_produzione": m.fine_produzione,
+            "inizio_commercializzazione": m.inizio_commercializzazione,
+            "fine_commercializzazione": m.fine_commercializzazione,
+            "gruppo_storico": m.gruppo_storico,
+            "serie_gamma": m.serie_gamma,
+            "codice_desc_modello": m.codice_desc_modello,
+            "descrizione_dettagliata": m.descrizione_dettagliata,
+            "segmento": m.segmento,
+            "tipo": m.tipo
+        } for m in modelli
+    ]
+
+
+
+@router_usato.get("/allestimenti/{codice_marca}/{codice_modello}")
+async def get_allestimenti_usato(
+    codice_marca: str,
+    codice_modello: str,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    # ✅ Verifica autenticazione JWT
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    # ✅ Controllo utente esistente
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    # ✅ Query al database
+    query = text("""
+        SELECT 
+            codice_motornet_uni,
+            versione,
+            alimentazione,
+            cambio,
+            trazione,
+            cilindrata,
+            kw,
+            cv
+        FROM mnet_allestimenti_usato
+        WHERE acronimo_marca = :codice_marca
+          AND codice_desc_modello = :codice_modello
+        ORDER BY versione
+    """)
+
+    result = db.execute(query, {
+        "codice_marca": codice_marca,
+        "codice_modello": codice_modello
+    }).fetchall()
+
+    # ✅ Mappatura risultato
+    return [
+        {
+            "codice_univoco": row.codice_motornet_uni,
+            "versione": row.versione,
+            "alimentazione": row.alimentazione,
+            "cambio": row.cambio,
+            "trazione": row.trazione,
+            "cilindrata": row.cilindrata,
+            "kw": row.kw,
+            "cv": row.cv
+        }
+        for row in result
+    ]
+
+@router_usato.get("/dettagli/{codice_motornet}")
+async def get_dettagli_usato(
+    codice_motornet: str,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    # ✅ Autenticazione
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    # ✅ Query
+    result = db.execute(text("""
+        SELECT * FROM mnet_dettagli_usato
+        WHERE codice_motornet_uni = :codice
+    """), {"codice": codice_motornet}).mappings().fetchone()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Dettaglio non trovato")
+
+    m = dict(result)
+
+    # ✅ Wrapping compatibile con frontend
+    m["alimentazione"] = {"descrizione": m["alimentazione"]} if m.get("alimentazione") else None
+    m["cambio"] = {"descrizione": m["cambio"]} if m.get("cambio") else None
+    m["trazione"] = {"descrizione": m["trazione"]} if m.get("trazione") else None
+    m["architettura"] = {"descrizione": m["architettura"]} if m.get("architettura") else None
+
+    if m.get("segmento"):
+        m["segmento"] = {
+            "codice": m["segmento"],
+            "descrizione": m["segmento"]
+        }
+
+    if m.get("tipo"):
+        m["tipo"] = {
+            "codice": m["tipo"],
+            "descrizione": m["tipo"]
+        }
+
+    # ✅ Risposta finale
+    return {
+        "modello": m
     }
-
-    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/dettaglio?codice_motornet_uni={codice_motornet}"
-
-    async with httpx.AsyncClient() as client:
-        response = await client.get(motornet_url, headers=headers)
-
-    print(f"🔍 DEBUG: Risposta Motornet Dettagli Auto: {response.text}")
-
-    if response.status_code == 200:
-        return response.json()
-
-    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero dei dettagli del veicolo")
 
 
 

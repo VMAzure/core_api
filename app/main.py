@@ -52,6 +52,7 @@ from app.routes.whatsapp import router as whatsapp_router
 from app.routes import preview
 from app.routes.richieste_piano import router as richieste_piano_router
 from app.routes import analytics
+from app.routes import sync_allestimenti_usato, sync_dettagli_usato, sync_marche_usato, sync_modelli_usato
 
 
 # ✅ Configuriamo il logging

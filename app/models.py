@@ -947,3 +947,150 @@ class NltOfferteRating(Base):
 
     offerta = relationship("NltOfferte", backref="rating")
 
+
+class MnetMarcaUsato(Base):
+    __tablename__ = "mnet_marche_usato"
+    acronimo = Column(String, primary_key=True)
+    nome = Column(String, nullable=False)
+    logo = Column(String)
+
+
+
+
+class MnetModelloUsato(Base):
+    __tablename__ = "mnet_modelli_usato"
+
+    marca_acronimo = Column(String, primary_key=True)
+    codice_desc_modello = Column(String, primary_key=True)
+    codice_modello = Column(String)
+    descrizione = Column(String)
+    descrizione_dettagliata = Column(Text)
+    gruppo_storico = Column(String)
+    inizio_produzione = Column(Date)
+    fine_produzione = Column(Date)
+    inizio_commercializzazione = Column(Date)
+    fine_commercializzazione = Column(Date)
+    segmento = Column(String)
+    tipo = Column(String)
+    serie_gamma = Column(String)
+    created_at = Column(Date)
+
+
+
+class MnetAllestimentoUsato(Base):
+    __tablename__ = "mnet_allestimenti_usato"
+    codice_motornet_uni = Column(String, primary_key=True)
+    acronimo_marca = Column(String)
+    codice_desc_modello = Column(String, ForeignKey("mnet_modelli_usato.codice_desc_modello", ondelete="CASCADE"))
+    versione = Column(String)
+    alimentazione = Column(String)
+    cambio = Column(String)
+    trazione = Column(String)
+    cilindrata = Column(Integer)
+    kw = Column(Integer)
+    cv = Column(Integer)
+
+from sqlalchemy import Column, String, Integer, Float, Boolean, Date
+from sqlalchemy.ext.declarative import declarative_base
+
+Base = declarative_base()
+
+class MnetDettaglioUsato(Base):
+    __tablename__ = "mnet_dettagli_usato"
+
+    codice_motornet_uni = Column(String, primary_key=True)
+
+    # Identificazione e immagini
+    modello = Column(String)
+    allestimento = Column(String)
+    immagine = Column(String)
+    codice_costruttore = Column(String)
+    codice_motore = Column(String)
+    descrizione_breve = Column(String)
+
+    # Prezzi e data
+    prezzo_listino = Column(Float)
+    prezzo_accessori = Column(Float)
+    data_listino = Column(Date)
+
+    # Marca e gamma
+    marca_nome = Column(String)
+    marca_acronimo = Column(String)
+    gamma_codice = Column(String)
+    gamma_descrizione = Column(String)
+    gruppo_storico = Column(String)
+    serie_gamma = Column(String)
+    categoria = Column(String)
+    segmento = Column(String)
+    tipo = Column(String)
+
+    # Motore
+    tipo_motore = Column(String)
+    descrizione_motore = Column(String)
+    euro = Column(String)
+    cilindrata = Column(Integer)
+    cavalli_fiscali = Column(Integer)
+    hp = Column(Integer)
+    kw = Column(Integer)
+
+    # Emissioni e consumi
+    emissioni_co2 = Column(Float)
+    emissioni_urbe = Column(Float)
+    emissioni_extraurb = Column(Float)
+    consumo_urbano = Column(Float)
+    consumo_extraurbano = Column(Float)
+    consumo_medio = Column(Float)
+
+    # Prestazioni
+    accelerazione = Column(Float)
+    velocita = Column(Integer)
+    peso_potenza = Column(String)
+
+    # Cambio e trazione
+    descrizione_marce = Column(String)
+    cambio = Column(String)
+    trazione = Column(String)
+    tipo_guida = Column(String)
+
+    # Dimensioni
+    passo = Column(Integer)
+    lunghezza = Column(Integer)
+    larghezza = Column(Integer)
+    altezza = Column(Integer)
+
+    # Capacità e spazio
+    bagagliaio = Column(String)
+    portata = Column(Integer)
+    massa_p_carico = Column(String)
+
+    # Abitabilità
+    porte = Column(Integer)
+    posti = Column(Integer)
+    posti_max = Column(Integer)
+
+    # Motore e struttura
+    cilindri = Column(String)
+    valvole = Column(Integer)
+    coppia = Column(String)
+    numero_giri = Column(Integer)
+    architettura = Column(String)
+
+    # Pneumatici
+    pneumatici_anteriori = Column(String)
+    pneumatici_posteriori = Column(String)
+
+    # Peso
+    peso = Column(Integer)
+    peso_vuoto = Column(String)
+
+    # Elettrico / ibrido / ricarica
+    ricarica_standard = Column(Boolean)
+    ricarica_veloce = Column(Boolean)
+    sospensioni_pneumatiche = Column(Boolean)
+
+    # Altro
+    volumi = Column(String)
+    neo_patentati = Column(Boolean)
+    paese_prod = Column(String)
+    tipo_cons = Column(String)
+    ridotte = Column(Boolean)

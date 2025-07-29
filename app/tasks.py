@@ -10,6 +10,8 @@ from app.routes.sync_marche_completo import sync_marche
 from app.routes.sync_modelli_nuovo import sync_modelli
 from app.routes.sync_allestimenti_nuovo import sync_allestimenti
 from app.routes.invia_reminder_pipeline import invia_reminder_pipeline
+from app.utils.aggiorna_usato_settimanale import aggiorna_usato_settimanale
+
 
 
 # Configurazione dei log
@@ -169,3 +171,7 @@ scheduler.add_job(invia_reminder_pipeline, 'interval', minutes=30)
 
 # Ogni notte alle 3:30
 scheduler.add_job(aggiorna_rating_convenienza_job, 'cron', hour=3, minute=30)
+
+# Ogni martedì alle 01:00 → sync completo usato, solo se ci sono modelli
+scheduler.add_job(aggiorna_usato_settimanale, 'cron', day_of_week='tue', hour=1, minute=0)
+
