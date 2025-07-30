@@ -593,3 +593,44 @@ async def upload_hero_image(
         "status": "success",
         "hero_image_url": image_url
     }
+
+@router.post("/site-settings/servizi-image")
+async def upload_servizio_image(
+    servizio: str,
+    file: UploadFile = File(...),
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    current_user = db.query(User).filter(User.email == user_email).first()
+
+    if not current_user:
+        raise HTTPException(status_code=403, detail="Non autorizzato")
+
+    allowed_extensions = {"jpg", "jpeg", "png", "webp"}
+    file_ext = file.filename.split(".")[-1].lower()
+    if file_ext not in allowed_extensions:
+        raise HTTPException(status_code=400, detail="Formato immagine non valido!")
+
+    file_content = await file.read()
+    if len(file_content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File troppo grande! Max 5MB.")
+
+    BUCKET = "servizi"
+    owner_id = get_settings_owner_id(current_user)
+    file_name = f"{owner_id}/{servizio}_{uuid.uuid4()}.{file_ext}"
+
+    try:
+        supabase.storage.from_(BUCKET).upload(
+            file_name, file_content, {"content-type": file.content_type}
+        )
+        image_url = f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET}/{file_name}"
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore upload immagine: {str(e)}")
+
+    return {
+        "status": "success",
+        "image_url": image_url
+    }
+
