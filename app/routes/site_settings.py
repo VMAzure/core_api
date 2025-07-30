@@ -119,6 +119,10 @@ class SiteSettingsPayload(BaseModel):
     hero_image_url: str = None
     hero_title: str = None
     hero_subtitle: str = None
+    hero_video_url: str = None
+    hero_video_poster: str = None
+    servizi_dettaglio: dict = None
+
 
 
 
@@ -289,6 +293,47 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+@router.post("/site-settings/hero-video")
+async def upload_hero_video(
+    file: UploadFile = File(...),
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    current_user = db.query(User).filter(User.email == user_email).first()
+
+    if not current_user or not (is_admin_user(current_user) or is_dealer_user(current_user)):
+        raise HTTPException(status_code=403, detail="Non autorizzato")
+
+    # ✅ Verifica tipo file
+    allowed_extensions = {"mp4"}
+    file_extension = file.filename.split(".")[-1].lower()
+    if file_extension not in allowed_extensions:
+        raise HTTPException(status_code=400, detail="Sono accettati solo file .mp4")
+
+    file_content = await file.read()
+    if len(file_content) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File troppo grande (max 50MB)")
+
+    BUCKET_NAME = "hero-video"
+    owner_id = get_settings_owner_id(current_user)
+    file_name = f"{owner_id}/{uuid.uuid4()}_{file.filename}"
+
+    try:
+        supabase.storage.from_(BUCKET_NAME).upload(
+            file_name, file_content, { "content-type": file.content_type }
+        )
+        video_url = f"{SUPABASE_URL}/storage/v1/object/public/{BUCKET_NAME}/{file_name}"
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore upload: {str(e)}")
+
+    return {
+        "status": "success",
+        "hero_video_url": video_url
+    }
+
+
 @router.get("/calcola_canone/{id_offerta}")
 def calcola_canone(id_offerta: int, db: Session = Depends(get_db)):
     offerta = db.query(NltOfferte).filter(NltOfferte.id_offerta == id_offerta).first()
@@ -418,7 +463,11 @@ async def get_site_settings(
         "chi_siamo": settings.chi_siamo or "",
         "hero_image_url": settings.hero_image_url or "",
         "hero_title": settings.hero_title or "",
-        "hero_subtitle": settings.hero_subtitle or ""
+        "hero_subtitle": settings.hero_subtitle or "",
+        "hero_video_url": settings.hero_video_url or "",
+        "hero_video_poster": settings.hero_video_poster or "",
+        "servizi_dettaglio": settings.servizi_dettaglio or {},
+
 
 
     }
@@ -475,6 +524,10 @@ async def get_site_settings_public(
         "hero_image_url": settings.hero_image_url or "",
         "hero_title": settings.hero_title or "",
         "hero_subtitle": settings.hero_subtitle or "",
+        "hero_video_url": settings.hero_video_url or "",
+        "hero_video_poster": settings.hero_video_poster or "",
+        "servizi_dettaglio": settings.servizi_dettaglio or {},
+
 
 
         "agency_type": settings.prov_vetrina or 0  # ✅ aggiunto qui

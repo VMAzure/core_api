@@ -295,6 +295,11 @@ class SiteAdminSettings(Base):
     hero_title = Column(String(255), nullable=True)
     hero_subtitle = Column(String(255), nullable=True)
 
+    hero_video_url = Column(String(255), nullable=True)
+    hero_video_poster = Column(String(255), nullable=True)
+    servizi_dettaglio = Column(JSONB, nullable=True)
+
+
 
 
 class SitePages(Base):
