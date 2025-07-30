@@ -472,7 +472,7 @@ async def get_site_settings(
         "hero_video_poster": settings.hero_video_poster or "",
         "servizi_dettaglio": settings.servizi_dettaglio or {},
         "claim_hero": settings.claim_hero or "",
-        "subclaim_hero": settings.claim_hero or "",
+        "subclaim_hero": settings.subclaim_hero or "",
 
 
 
@@ -536,7 +536,7 @@ async def get_site_settings_public(
         "hero_video_poster": settings.hero_video_poster or "",
         "servizi_dettaglio": settings.servizi_dettaglio or {},
         "claim_hero": settings.claim_hero or "",
-        "subclaim_hero": settings.claim_hero or "",
+        "subclaim_hero": settings.subclaim_hero or "",
 
 
 
