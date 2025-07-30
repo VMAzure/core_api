@@ -588,21 +588,12 @@ async def aggiorna_stato_auto_usata(
 
 
     elif azione == "rimuovi_opzione":
-        current = db.execute(text("""
-            SELECT opzionato_da FROM azlease_usatoin WHERE id = :id_usatoin
-        """), {"id_usatoin": id_usatoin}).fetchone()
+        db.execute(text("""
+            UPDATE azlease_usatoin
+            SET opzionato_da = NULL, opzionato_il = NULL
+            WHERE id = :id_usatoin
+        """), {"id_usatoin": id_usatoin})
 
-        if (
-            user.role.lower() in ["admin", "admin_team", "superadmin"]
-            or str(current.opzionato_da) == str(user.id)
-        ):
-            db.execute(text("""
-                UPDATE azlease_usatoin
-                SET opzionato_da = NULL, opzionato_il = NULL
-                WHERE id = :id_usatoin
-            """), {"id_usatoin": id_usatoin})
-        else:
-            raise HTTPException(status_code=403, detail="Non autorizzato")
 
 
     else:
