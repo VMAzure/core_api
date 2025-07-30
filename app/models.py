@@ -298,6 +298,8 @@ class SiteAdminSettings(Base):
     hero_video_url = Column(String(255), nullable=True)
     hero_video_poster = Column(String(255), nullable=True)
     servizi_dettaglio = Column(JSONB, nullable=True)
+    claim_hero = Column(String, nullable=True)
+
 
 
 
