@@ -775,7 +775,7 @@ async def get_mio_team(
 
 
 
-@router.get("/users/team-pubblico/{slug}", tags=["Users"])
+@router.get("/team-pubblico/{slug}", tags=["Users"])
 def get_team_pubblico(slug: str, db: Session = Depends(get_db)):
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
