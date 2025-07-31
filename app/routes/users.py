@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import SessionLocal
-from app.models import User, TeamMemberUpdateRequest
+from app.models import User, TeamMemberUpdateRequest, SiteAdminSettings
 from app.routes.auth import get_current_user  
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
@@ -772,6 +772,59 @@ async def get_mio_team(
         "success": True,
         "colleghi": risultato
     }
+
+
+
+@router.get("/users/team-pubblico/{slug}", tags=["Users"])
+def get_team_pubblico(slug: str, db: Session = Depends(get_db)):
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail="Slug non trovato")
+
+    user_id = settings.dealer_id or settings.admin_id
+    if not user_id:
+        raise HTTPException(status_code=400, detail="ID visibile non trovato nel setting")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utente visibile non trovato")
+
+    expected_role = None
+    if user.role == "admin":
+        expected_role = "admin_team"
+    elif user.role == "dealer":
+        expected_role = "dealer_team"
+    else:
+        raise HTTPException(status_code=400, detail="Ruolo utente non supportato")
+
+    membri_team = db.query(User).filter(
+        User.parent_id == user.id,
+        User.role == expected_role
+    ).all()
+
+    risultato = [{
+        "id": u.id,
+        "nome": u.nome,
+        "cognome": u.cognome,
+        "email": u.email,
+        "cellulare": u.cellulare,
+        "logo_url": u.logo_url,
+        "role": u.role,
+        "is_dealer": False
+    } for u in membri_team]
+
+    risultato.insert(0, {
+        "id": user.id,
+        "nome": user.nome,
+        "cognome": user.cognome,
+        "email": user.email,
+        "cellulare": user.cellulare,
+        "logo_url": user.logo_url,
+        "role": user.role,
+        "is_dealer": True
+    })
+
+    return {"success": True, "team": risultato}
 
 @router.put("/team/{id_membro}", tags=["Users"])
 def update_team_member(
