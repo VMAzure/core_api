@@ -53,6 +53,7 @@ from app.routes import preview
 from app.routes.richieste_piano import router as richieste_piano_router
 from app.routes import analytics
 from app.routes import sync_allestimenti_usato, sync_dettagli_usato, sync_marche_usato, sync_modelli_usato
+from app.routes.tenant import router as tenant_router
 
 
 # ✅ Configuriamo il logging
@@ -67,6 +68,7 @@ print("✅ DEBUG (main.py) - SUPABASE_KEY:", os.getenv("SUPABASE_KEY"))
 
 # ✅ Creazione dell'istanza di FastAPI
 app = FastAPI(title="CORE API", version="1.0")
+
 
 # ✅ Avvia il cron job in un thread separato all'avvio dell'app
 
@@ -185,10 +187,7 @@ app.include_router(whatsapp_router)
 app.include_router(preview.router)
 app.include_router(richieste_piano_router)
 app.include_router(analytics.router)
-
-
-
-
+app.include_router(tenant_router)  # espone /api/tenant/resolve
 
 
 @app.get("/")

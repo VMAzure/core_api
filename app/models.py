@@ -302,7 +302,19 @@ class SiteAdminSettings(Base):
     subclaim_hero = Column(String, nullable=True)
 
 
+from sqlalchemy import Column, BigInteger, Boolean, Text, String, DateTime, func
 
+class DomainAlias(Base):
+    __tablename__ = "domain_aliases"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    domain = Column(Text, nullable=False, unique=True, index=True)   # es. 'www.scuderia76.it'
+    slug = Column(String, nullable=False, index=True)                # FK logica → site_admin_settings.slug
+    is_primary = Column(Boolean, nullable=False, default=False)
+    force_https = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
 
