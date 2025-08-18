@@ -1,11 +1,10 @@
 ﻿# app/routes/tenant.py
 from __future__ import annotations
 
-from typing import Optional
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
-from app.database import engine  # usa lo stesso engine sincrono che hai in main
+from app.database import engine
 
 router = APIRouter(prefix="/api/tenant", tags=["Tenant"])
 
@@ -17,33 +16,43 @@ class TenantResolveResponse(BaseModel):
     primary_host: str
 
 def _normalize_host_from_request(request: Request) -> str:
-    """
-    Prende l'host dalla richiesta in modo robusto dietro proxy:
-    - preferisce X-Forwarded-Host se presente
-    - altrimenti usa Host
-    - rimuove porta e spazi, forza lowercase
-    """
-    xf_host = request.headers.get("x-forwarded-host", "").strip()
-    raw_host = (xf_host or request.headers.get("host", "")).strip()
-    # se X-Forwarded-Host contiene più valori separati da virgola, prendi il primo
-    if "," in raw_host:
-        raw_host = raw_host.split(",", 1)[0].strip()
-    # rimuovi eventuale :porta
-    host_only = raw_host.split(":", 1)[0].strip().lower()
-    return host_only
+    # 1) X-Forwarded-Host (se presente), altrimenti Host
+    xf_host = (request.headers.get("x-forwarded-host") or "").strip()
+    raw_host = (xf_host or request.headers.get("host") or "").strip()
+
+    # se multipli valori (es. "a,b"), prendi il primo
+    raw_host = raw_host.split(",", 1)[0].strip()
+    # togli eventuale :porta
+    raw_host = raw_host.split(":", 1)[0].strip()
+    # togli eventuale slash finale
+    if raw_host.endswith("/"):
+        raw_host = raw_host[:-1]
+    return raw_host.lower()
 
 @router.get("/resolve", response_model=TenantResolveResponse)
 def resolve_tenant(request: Request):
-    """
-    Risolve l'host in (slug, is_primary, force_https, primary_host).
-    404 se l'host non è configurato in public.domain_aliases.
-    """
     host = _normalize_host_from_request(request)
+    print(f"[tenant.resolve] headers-keys={list(request.headers.keys())}")
+    print(f"[tenant.resolve] host_normalized='{host}'")
+
     if not host:
+        # 👇 stampa PRIMA di alzare l'errore
+        print(f"[tenant.resolve] host mancante: raw headers={dict(request.headers)}")
         raise HTTPException(status_code=400, detail="Host header mancante")
 
-    # 1) lookup host → (slug, is_primary, force_https)
     with engine.connect() as conn:
+        # INFO DB (per evitare dubbi sull'origine dati)
+        dbinfo = conn.execute(
+            text("select current_database() as db, current_user as usr, current_schema as sch")
+        ).mappings().first()
+        print(f"[tenant.resolve] DBINFO db={dbinfo['db']} user={dbinfo['usr']} schema={dbinfo['sch']}")
+
+        # piccolo sample per capire cosa vede la tabella
+        sample = conn.execute(
+            text("select domain from public.domain_aliases order by domain asc limit 5")
+        ).mappings().all()
+        print(f"[tenant.resolve] sample_domains={[r['domain'] for r in sample]}")
+
         rec = conn.execute(
             text("""
                 select slug, is_primary, force_https
@@ -54,6 +63,8 @@ def resolve_tenant(request: Request):
             {"host": host},
         ).mappings().first()
 
+        print(f"[tenant.resolve] match_found={bool(rec)} for host='{host}'")
+
         if not rec:
             raise HTTPException(status_code=404, detail="Dominio non configurato")
 
@@ -61,7 +72,6 @@ def resolve_tenant(request: Request):
         is_primary = bool(rec["is_primary"])
         force_https = bool(rec["force_https"])
 
-        # 2) trova primary_host per quello slug
         prim = conn.execute(
             text("""
                 select domain
