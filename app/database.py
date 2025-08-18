@@ -15,8 +15,16 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("❌ ERRORE: `DATABASE_URL` non è stato caricato correttamente! Verifica il file di configurazione.")
 
-# Creiamo l'engine del database
-engine = create_engine(DATABASE_URL, echo=True)
+# Echo SQL disattivato di default; attivalo solo quando serve (es. in locale)
+SQL_ECHO = os.getenv("SQL_ECHO", "false").lower() == "true"
+
+# pool_pre_ping evita connessioni zombie; echo controllato da env
+engine = create_engine(
+    DATABASE_URL,
+    echo=SQL_ECHO,
+    pool_pre_ping=True
+)
+
 
 # Definiamo Base separatamente
 Base = declarative_base()
