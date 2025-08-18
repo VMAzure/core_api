@@ -1,5 +1,4 @@
-﻿# app/routes/tenant.py
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 from fastapi import APIRouter, Request, HTTPException
@@ -23,40 +22,52 @@ class TenantResolveResponse(BaseModel):
 
 def _normalize_host(request: Request) -> str:
     """
-    Ordine:
-    1) X-Forwarded-Host (se presente)
-    2) Host
-    3) (solo se ALLOW_QUERY_HOST=true) querystring ?host=
+    Ordine di priorità:
+    1) querystring ?host= (se ALLOW_QUERY_HOST=true)
+    2) X-Tenant-Host (header custom)
+    3) X-Forwarded-Host (standard proxy)
+    4) Host
     Poi:
       - prendi solo il primo valore se virgole
       - rimuovi :porta
-      - rimuovi slash finale
-      - lower()
+      - rimuovi eventuale slash finale
+      - lowercase
     """
-    xf = request.headers.get("x-forwarded-host") or ""
-    hv = request.headers.get("host") or ""
-    qh = ""
-    if ALLOW_QUERY_HOST:
-        qh = (request.query_params.get("host") or "")
 
-    raw = (xf or hv or qh).strip()
-    # se multipli valori separati da virgola, prendi il primo
+    # 1) query param
+    qh = (request.query_params.get("host") or "").strip() if ALLOW_QUERY_HOST else ""
+
+    # 2) header custom
+    tenant_hdr = (request.headers.get("x-tenant-host") or "").strip()
+
+    # 3) x-forwarded-host
+    xf = (request.headers.get("x-forwarded-host") or "").strip()
+
+    # 4) host
+    hv = (request.headers.get("host") or "").strip()
+
+    raw = (qh or tenant_hdr or xf or hv)
+
     if "," in raw:
         raw = raw.split(",", 1)[0].strip()
-    # rimuovi porta
     if ":" in raw:
         raw = raw.split(":", 1)[0].strip()
-    # rimuovi eventuale slash finale
     if raw.endswith("/"):
         raw = raw[:-1]
+
     return raw.lower()
 
 
 @router.get("/resolve", response_model=TenantResolveResponse)
 def resolve_tenant(request: Request):
-    # DEBUG header grezzi (solo se abilitato)
+    # Debug degli header (solo se DEBUG_TENANT=true)
     if DEBUG_TENANT:
-        print(f"[tenant.resolve] raw_xfh='{request.headers.get('x-forwarded-host')}', raw_host='{request.headers.get('host')}'")
+        print(
+            f"[tenant.resolve] raw_qh='{request.query_params.get('host')}', "
+            f"raw_xth='{request.headers.get('x-tenant-host')}', "
+            f"raw_xfh='{request.headers.get('x-forwarded-host')}', "
+            f"raw_host='{request.headers.get('host')}'"
+        )
 
     host = _normalize_host(request)
 
@@ -67,12 +78,13 @@ def resolve_tenant(request: Request):
         raise HTTPException(status_code=400, detail="Host header mancante")
 
     with engine.connect() as conn:
-        # opzionale: info db
         if DEBUG_TENANT:
             dbinfo = conn.execute(
                 text("select current_database() as db, current_user as usr, current_schema as sch")
             ).mappings().first()
-            print(f"[tenant.resolve] db={dbinfo['db']} user={dbinfo['usr']} schema={dbinfo['sch']}")
+            print(
+                f"[tenant.resolve] db={dbinfo['db']} user={dbinfo['usr']} schema={dbinfo['sch']}"
+            )
 
         rec = conn.execute(
             text("""
