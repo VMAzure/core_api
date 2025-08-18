@@ -1,12 +1,16 @@
 ﻿# app/routes/tenant.py
 from __future__ import annotations
 
+import os
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 from app.database import engine
 
 router = APIRouter(prefix="/api/tenant", tags=["Tenant"])
+
+DEBUG_TENANT = os.getenv("DEBUG_TENANT", "false").lower() == "true"
+ALLOW_QUERY_HOST = os.getenv("ALLOW_QUERY_HOST", "false").lower() == "true"
 
 
 class TenantResolveResponse(BaseModel):
@@ -17,42 +21,59 @@ class TenantResolveResponse(BaseModel):
     primary_host: str
 
 
-def _normalize_host_from_request(request: Request) -> str:
+def _normalize_host(request: Request) -> str:
     """
-    Normalizza l'host in modo sicuro:
+    Ordine:
     1) X-Forwarded-Host (se presente)
-    2) altrimenti Host
-    - elimina porta (:443, :80…)
-    - prende solo il primo valore se multipli
-    - elimina eventuale slash finale
-    - forza lowercase
+    2) Host
+    3) (solo se ALLOW_QUERY_HOST=true) querystring ?host=
+    Poi:
+      - prendi solo il primo valore se virgole
+      - rimuovi :porta
+      - rimuovi slash finale
+      - lower()
     """
-    xf_host = request.headers.get("x-forwarded-host")
-    raw_host = (xf_host or request.headers.get("host") or "").strip()
+    xf = request.headers.get("x-forwarded-host") or ""
+    hv = request.headers.get("host") or ""
+    qh = ""
+    if ALLOW_QUERY_HOST:
+        qh = (request.query_params.get("host") or "")
 
-    # più valori separati da virgola -> prendi il primo
-    if "," in raw_host:
-        raw_host = raw_host.split(",", 1)[0].strip()
-
-    # togli eventuale porta
-    if ":" in raw_host:
-        raw_host = raw_host.split(":", 1)[0].strip()
-
-    # togli eventuale slash finale
-    if raw_host.endswith("/"):
-        raw_host = raw_host[:-1]
-
-    return raw_host.lower()
+    raw = (xf or hv or qh).strip()
+    # se multipli valori separati da virgola, prendi il primo
+    if "," in raw:
+        raw = raw.split(",", 1)[0].strip()
+    # rimuovi porta
+    if ":" in raw:
+        raw = raw.split(":", 1)[0].strip()
+    # rimuovi eventuale slash finale
+    if raw.endswith("/"):
+        raw = raw[:-1]
+    return raw.lower()
 
 
 @router.get("/resolve", response_model=TenantResolveResponse)
 def resolve_tenant(request: Request):
-    host = _normalize_host_from_request(request)
+    # DEBUG header grezzi (solo se abilitato)
+    if DEBUG_TENANT:
+        print(f"[tenant.resolve] raw_xfh='{request.headers.get('x-forwarded-host')}', raw_host='{request.headers.get('host')}'")
+
+    host = _normalize_host(request)
+
+    if DEBUG_TENANT:
+        print(f"[tenant.resolve] effective_host='{host}'")
 
     if not host:
         raise HTTPException(status_code=400, detail="Host header mancante")
 
     with engine.connect() as conn:
+        # opzionale: info db
+        if DEBUG_TENANT:
+            dbinfo = conn.execute(
+                text("select current_database() as db, current_user as usr, current_schema as sch")
+            ).mappings().first()
+            print(f"[tenant.resolve] db={dbinfo['db']} user={dbinfo['usr']} schema={dbinfo['sch']}")
+
         rec = conn.execute(
             text("""
                 select slug, is_primary, force_https
@@ -63,6 +84,9 @@ def resolve_tenant(request: Request):
             {"host": host},
         ).mappings().first()
 
+        if DEBUG_TENANT:
+            print(f"[tenant.resolve] match_found={bool(rec)} for host='{host}'")
+
         if not rec:
             raise HTTPException(status_code=404, detail="Dominio non configurato")
 
@@ -70,7 +94,6 @@ def resolve_tenant(request: Request):
         is_primary = bool(rec["is_primary"])
         force_https = bool(rec["force_https"])
 
-        # trova il primary_host di quello slug
         prim = conn.execute(
             text("""
                 select domain
