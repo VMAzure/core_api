@@ -220,6 +220,9 @@ async def get_preventivi_cliente(
     }
 
 
+# app/routers/preventivi.py (o dove tieni questa rotta)
+
+
 @router.get("/preventivi")
 async def get_miei_preventivi(
     current_user: User = Depends(get_current_user),
@@ -230,50 +233,83 @@ async def get_miei_preventivi(
 ):
     offset = (page - 1) * size
 
-    if is_dealer_user(current_user):
-        if current_user.shared_customers:
-            team_ids = db.query(User.id).filter(
-                (User.parent_id == current_user.parent_id) |
-                (User.id == current_user.parent_id)
-            ).all()
-
-            team_ids_list = [id for (id,) in team_ids]
-
-            query = db.query(NltPreventivi).join(Cliente).filter(
-                (NltPreventivi.creato_da.in_(team_ids_list)) |
-                (NltPreventivi.preventivo_assegnato_a == current_user.id),
-                NltPreventivi.visibile == 1
-            )
-        else:
-            query = db.query(NltPreventivi).join(Cliente).filter(
-                (NltPreventivi.creato_da == current_user.id) |
-                (NltPreventivi.preventivo_assegnato_a == current_user.id),
-                NltPreventivi.visibile == 1
-            )
-
-    elif is_admin_user(current_user):
+    # --- ADMIN ---
+    if is_admin_user(current_user):
         admin_id = get_admin_id(current_user)
-        dealer_ids = db.query(User.id).filter(User.parent_id == admin_id).all()
-        dealer_ids_list = [id for (id,) in dealer_ids]
-        dealer_ids_list.append(admin_id)
 
+        if current_user.role == "admin":
+            # Vede i suoi + il team (admin_team)
+            user_ids = db.query(User.id).filter(
+                (User.parent_id == admin_id) |
+                (User.id == admin_id)
+            ).all()
+            id_list = [id for (id,) in user_ids]
 
-        query = db.query(NltPreventivi).join(Cliente).filter(
-            NltPreventivi.creato_da.in_(dealer_ids_list),
-            NltPreventivi.visibile == 1
-        )
+            query = db.query(NltPreventivi).join(Cliente).filter(
+                ((NltPreventivi.creato_da.in_(id_list)) |
+                 (NltPreventivi.preventivo_assegnato_a.in_(id_list))),
+                NltPreventivi.visibile == 1
+            )
 
-    else:  # superadmin
-        query = db.query(NltPreventivi).join(Cliente).filter(NltPreventivi.visibile == 1)
+        elif current_user.role == "admin_team":
+            # Vede solo i suoi o quelli assegnati a sé
+            query = db.query(NltPreventivi).join(Cliente).filter(
+                ((NltPreventivi.creato_da == current_user.id) |
+                 (NltPreventivi.preventivo_assegnato_a == current_user.id)),
+                NltPreventivi.visibile == 1
+            )
 
+        elif current_user.role == "superadmin":
+            query = db.query(NltPreventivi).join(Cliente).filter(NltPreventivi.visibile == 1)
+
+        else:
+            raise Exception("Ruolo admin non riconosciuto")
+
+    # --- DEALER ---
+    elif is_dealer_user(current_user):
+        dealer_id = get_dealer_id(current_user)
+
+        if current_user.role == "dealer":
+            # Vede i suoi + il team (dealer_team)
+            user_ids = db.query(User.id).filter(
+                (User.parent_id == dealer_id) |
+                (User.id == dealer_id)
+            ).all()
+            id_list = [id for (id,) in user_ids]
+
+            query = db.query(NltPreventivi).join(Cliente).filter(
+                ((NltPreventivi.creato_da.in_(id_list)) |
+                 (NltPreventivi.preventivo_assegnato_a.in_(id_list))),
+                NltPreventivi.visibile == 1
+            )
+
+        elif current_user.role == "dealer_team":
+            # Solo propri o assegnati
+            query = db.query(NltPreventivi).join(Cliente).filter(
+                ((NltPreventivi.creato_da == current_user.id) |
+                 (NltPreventivi.preventivo_assegnato_a == current_user.id)),
+                NltPreventivi.visibile == 1
+            )
+
+        else:
+            raise Exception("Ruolo dealer non riconosciuto")
+
+    else:
+        raise Exception("Ruolo non gestito per questa rotta")
+
+    # --- FILTRO DI RICERCA ---
     if search:
-        search_term = f"%{search}%"
+        search_term = f"%{search.lower()}%"
         query = query.filter(
             (Cliente.nome.ilike(search_term)) |
             (Cliente.cognome.ilike(search_term)) |
             (Cliente.ragione_sociale.ilike(search_term))
         )
 
+    # --- TOTALE ---
+    total = query.count()
+
+    # --- PAGINAZIONE ---
     preventivi = query.order_by(NltPreventivi.created_at.desc()) \
                       .offset(offset) \
                       .limit(size) \
@@ -291,7 +327,6 @@ async def get_miei_preventivi(
         email_inviata = bool(email_evento)
         data_email = email_evento.data_evento if email_evento else None
 
-
         if cliente.tipo_cliente == "Società":
             nome_cliente = cliente.ragione_sociale or "NN"
         else:
@@ -299,7 +334,7 @@ async def get_miei_preventivi(
 
         dealer = db.query(User).filter(User.id == p.creato_da).first()
         nome_dealer = f"{dealer.nome} {dealer.cognome}".strip() if dealer else "NN"
-        # Dentro al ciclo che genera i risultati:
+
         dealer_assegnato = db.query(User).filter(User.id == p.preventivo_assegnato_a).first()
         nome_assegnato = f"{dealer_assegnato.nome} {dealer_assegnato.cognome}".strip() if dealer_assegnato else "Non assegnato"
 
@@ -319,17 +354,21 @@ async def get_miei_preventivi(
             "canone": p.canone,
             "cliente": nome_cliente,
             "preventivo_assegnato_a": p.preventivo_assegnato_a,
-            "preventivo_assegnato_nome": nome_assegnato,  # ✅ Aggiunto nome assegnato
+            "preventivo_assegnato_nome": nome_assegnato,
             "note": p.note,
             "player": p.player,
             "email_inviata": email_inviata,
             "data_email": data_email,
-            "pipeline_attiva": pipeline_attiva  # 👈 aggiunto!
-
-
+            "pipeline_attiva": pipeline_attiva
         })
 
-    return {"preventivi": risultati}
+    return {
+        "preventivi": risultati,
+        "page": page,
+        "size": size,
+        "total": total
+    }
+
 
 
 @router.put("/nascondi-preventivo/{preventivo_id}")
