@@ -1137,7 +1137,12 @@ class Notifica(Base):
     data_creazione = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # ✅ Usa lambda per evitare errori di risoluzione
-    utente = relationship(lambda: User, backref="notifiche_ricevute")
+    utente = relationship(
+        lambda: User,
+        backref="notifiche_ricevute",
+        foreign_keys=[utente_id],
+        primaryjoin="User.id == Notifica.utente_id"
+    )
     cliente = relationship(lambda: Cliente, backref="notifiche_collegate")
     tipo = relationship(lambda: NotificaType, backref="notifiche")
 
