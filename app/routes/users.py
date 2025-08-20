@@ -419,28 +419,8 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
 
     try:
         user = db.query(User).filter(User.email == user_email).first()
-
         if not user:
             raise HTTPException(status_code=404, detail="Utente non trovato")
-
-        # Dati base dell'utente loggato
-        user_data = {
-            "id": user.id,
-            "email": user.email,
-            "nome": user.nome,
-            "cognome": user.cognome,
-            "ragione_sociale": user.ragione_sociale,
-            "partita_iva": user.partita_iva,
-            "indirizzo": user.indirizzo,
-            "cap": user.cap,
-            "citta": user.citta,
-            "codice_sdi": user.codice_sdi,
-            "cellulare": user.cellulare,
-            "credit": user.credit,
-            "logo_url": user.logo_url,
-            "created_at": user.created_at.isoformat() if user.created_at else None,
-            "updated_at": user.updated_at.isoformat() if user.updated_at else None
-        }
 
         response = {
             "role": user.role,
@@ -448,62 +428,83 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
             "dealer_info": None
         }
 
+        # --- DEALER e TEAM DEALER ---
         if user.role in ["dealer", "dealer_team"]:
-            dealer_id = get_dealer_id(user)
-            dealer = db.query(User).filter(User.id == dealer_id).first()
+            dealer = user
+            if user.role == "dealer_team" and user.parent_id:
+                dealer = db.query(User).filter(User.id == user.parent_id).first()
 
-            response["dealer_info"] = {
-                "id": user.id,
-                "email": user.email,
-                "nome": user.nome,
-                "cognome": user.cognome,
-                "cellulare": user.cellulare,
-                "ragione_sociale": user.ragione_sociale or f"{user.nome} {user.cognome}"
+            if dealer:
+                response["dealer_info"] = {
+                    "id": dealer.id,
+                    "email": dealer.email,
+                    "nome": dealer.nome,
+                    "cognome": dealer.cognome,
+                    "ragione_sociale": dealer.ragione_sociale,
+                    "partita_iva": dealer.partita_iva,
+                    "indirizzo": dealer.indirizzo,
+                    "cap": dealer.cap,
+                    "citta": dealer.citta,
+                    "codice_sdi": dealer.codice_sdi,
+                    "cellulare": dealer.cellulare,
+                    "credit": dealer.credit,
+                    "logo_url": dealer.logo_url,
+                    "created_at": dealer.created_at.isoformat() if dealer.created_at else None,
+                    "updated_at": dealer.updated_at.isoformat() if dealer.updated_at else None,
+                }
 
-            }
+            # per compatibilità: includo anche admin_info = admin parent
+            admin = db.query(User).filter(User.id == dealer.parent_id).first() if dealer and dealer.parent_id else None
+            if admin:
+                response["admin_info"] = {
+                    "id": admin.id,
+                    "email": admin.email,
+                    "nome": admin.nome,
+                    "cognome": admin.cognome,
+                    "ragione_sociale": admin.ragione_sociale,
+                    "partita_iva": admin.partita_iva,
+                    "indirizzo": admin.indirizzo,
+                    "cap": admin.cap,
+                    "citta": admin.citta,
+                    "codice_sdi": admin.codice_sdi,
+                    "cellulare": admin.cellulare,
+                    "credit": admin.credit,
+                    "logo_url": admin.logo_url,
+                    "created_at": admin.created_at.isoformat() if admin.created_at else None,
+                    "updated_at": admin.updated_at.isoformat() if admin.updated_at else None,
+                }
 
-            response["admin_info"] = {
-                "id": dealer.parent.id if dealer.parent else None,
-                "email": dealer.parent.email if dealer.parent else None,
-                "nome": dealer.parent.nome if dealer.parent else None,
-                "cognome": dealer.parent.cognome if dealer.parent else None,
-                "ragione_sociale": dealer.parent.ragione_sociale if dealer.parent else None,
-                "partita_iva": dealer.parent.partita_iva if dealer.parent else None,
-                "indirizzo": dealer.parent.indirizzo if dealer.parent else None,
-                "cap": dealer.parent.cap if dealer.parent else None,
-                "citta": dealer.parent.citta if dealer.parent else None,
-                "codice_sdi": dealer.parent.codice_sdi if dealer.parent else None,
-                "cellulare": dealer.parent.cellulare if dealer.parent else None,
-                "credit": dealer.parent.credit if dealer.parent else None,
-                "logo_url": dealer.parent.logo_url if dealer.parent else None,
-                "created_at": dealer.parent.created_at.isoformat() if dealer.parent and dealer.parent.created_at else None,
-                "updated_at": dealer.parent.updated_at.isoformat() if dealer.parent and dealer.parent.updated_at else None
-            }
+        # --- ADMIN e TEAM ADMIN ---
+        elif user.role in ["admin", "admin_team", "superadmin"]:
+            admin = user
+            if user.role == "admin_team" and user.parent_id:
+                admin = db.query(User).filter(User.id == user.parent_id).first()
 
-        elif user.role in ["admin", "admin_team"]:
-            admin_id = get_admin_id(user)
-            admin = db.query(User).filter(User.id == admin_id).first()
-
-            response["admin_info"] = {
-                "id": admin.id,
-                "email": admin.email,
-                "nome": user.nome if user.role == "admin_team" else admin.nome,
-                "cognome": user.cognome if user.role == "admin_team" else admin.cognome,
-                "ragione_sociale": admin.ragione_sociale,
-                "partita_iva": admin.partita_iva,
-                "indirizzo": admin.indirizzo,
-                "cap": admin.cap,
-                "citta": admin.citta,
-                "codice_sdi": admin.codice_sdi,
-                "cellulare": user.cellulare if user.role == "admin_team" else admin.cellulare,
-                "credit": admin.credit,
-                "logo_url": admin.logo_url,
-                "created_at": admin.created_at.isoformat() if admin.created_at else None,
-                "updated_at": admin.updated_at.isoformat() if admin.updated_at else None
-            }
-
+            if admin:
+                response["admin_info"] = {
+                    "id": admin.id,
+                    "email": admin.email,
+                    "nome": admin.nome,
+                    "cognome": admin.cognome,
+                    "ragione_sociale": admin.ragione_sociale,
+                    "partita_iva": admin.partita_iva,
+                    "indirizzo": admin.indirizzo,
+                    "cap": admin.cap,
+                    "citta": admin.citta,
+                    "codice_sdi": admin.codice_sdi,
+                    "cellulare": admin.cellulare,
+                    "credit": admin.credit,
+                    "logo_url": admin.logo_url,
+                    "created_at": admin.created_at.isoformat() if admin.created_at else None,
+                    "updated_at": admin.updated_at.isoformat() if admin.updated_at else None,
+                }
 
         return response
+
+    except Exception as e:
+        print(f"❌ ERRORE DETTAGLIATO endpoint /me: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore interno dettagliato: {str(e)}")
+
 
     except Exception as e:
         print(f"❌ ERRORE DETTAGLIATO endpoint /me: {e}")
