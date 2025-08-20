@@ -1117,3 +1117,26 @@ class MnetDettaglioUsato(Base):
     paese_prod = Column(String)
     tipo_cons = Column(String)
     ridotte = Column(Boolean)
+
+    class NotificaType(Base):
+        __tablename__ = "notifiche_type"
+
+        id = Column(Integer, primary_key=True)
+        codice = Column(String, unique=True, nullable=False)
+        descrizione = Column(String, nullable=False)
+
+    class Notifica(Base):
+        __tablename__ = "notifiche"
+
+        id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+        utente_id = Column(ForeignKey("utenti.id", ondelete="CASCADE"), nullable=False)
+        cliente_id = Column(ForeignKey("clienti.id", ondelete="SET NULL"), nullable=True)
+        tipo_id = Column(ForeignKey("notifiche_type.id", ondelete="RESTRICT"), nullable=False)
+        messaggio = Column(Text, nullable=False)
+        letta = Column(Boolean, default=False, nullable=False)
+        data_creazione = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+        # Relationships
+        utente = relationship("User", backref="notifiche_ricevute")
+        cliente = relationship("Cliente", backref="notifiche_collegate")
+        tipo = relationship("NotificaType", backref="notifiche")
