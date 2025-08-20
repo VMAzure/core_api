@@ -1127,6 +1127,7 @@ class NotificaType(Base):
 
 class Notifica(Base):
     __tablename__ = "notifiche"
+    __table_args__ = {"schema": "public"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     utente_id = Column(ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False)
@@ -1136,13 +1137,14 @@ class Notifica(Base):
     letta = Column(Boolean, default=False, nullable=False)
     data_creazione = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    # ✅ Usa lambda per evitare errori di risoluzione
     utente = relationship(
         lambda: User,
         backref="notifiche_ricevute",
         foreign_keys=[utente_id],
-        primaryjoin="User.id == Notifica.utente_id"
+        primaryjoin=lambda: User.id == Notifica.utente_id
     )
+
     cliente = relationship(lambda: Cliente, backref="notifiche_collegate")
     tipo = relationship(lambda: NotificaType, backref="notifiche")
+
 
