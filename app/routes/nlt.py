@@ -588,6 +588,17 @@ async def invia_mail_preventivo(
     if not smtp_settings:
         raise HTTPException(status_code=500, detail="SMTP non configurato")
 
+    # 🔁 PATCH INIZIO: recupero corretto utente per BCC
+    bcc_user = None
+
+    if preventivo.preventivo_assegnato_a:
+        bcc_user = db.query(User).filter(User.id == preventivo.preventivo_assegnato_a).first()
+
+    if not bcc_user:
+        bcc_user = db.query(User).filter(User.id == preventivo.creato_da).first()
+
+    # 🔁 PATCH FINE
+
     # Componi il messaggio
     html_body = body.get("html_body", f"Clicca per scaricare il preventivo: {body['url_download']}")
 
@@ -595,9 +606,11 @@ async def invia_mail_preventivo(
     msg["Subject"] = f"Preventivo {preventivo.marca} {preventivo.modello}"
     msg["From"] = formataddr((smtp_settings.smtp_alias or "Preventivo Noleggio Lungo Termine", smtp_settings.smtp_user))
     msg["To"] = email_destinatario
-    dealer = db.query(User).filter(User.id == preventivo.preventivo_assegnato_a).first()
-    if dealer and dealer.email:
-        msg["Bcc"] = dealer.email
+
+    # ✅ Applica BCC se trovato
+    if bcc_user and bcc_user.email:
+        msg["Bcc"] = bcc_user.email
+
 
     # Invia mail
     try:
