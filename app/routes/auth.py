@@ -1,7 +1,7 @@
 ﻿from fastapi import APIRouter, HTTPException, Depends, status, Security
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
-from app.models import User, PurchasedServices, Services
+from app.models import User, PurchasedServices, Services, SiteAdminSettings
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -103,13 +103,12 @@ def login(
                 "admin_info": {
                     "email": user.email,
                     "logo_url": user.logo_url or "",
-                    "ragione_sociale": user.ragione_sociale or ""  # ✅ corretto!
-                }
+                    "ragione_sociale": user.ragione_sociale or ""
+                },
+                "dealer_info": None
             },
             expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         )
-
-
         return {"access_token": access_token, "token_type": "bearer"}
 
     # ADMIN
@@ -164,27 +163,41 @@ def login(
         for service in active_services
     ]
 
-    access_token = Authorize.create_access_token(
-    subject=user.email,
-    user_claims={
-        "id": user.id,
-        "role": user.role,
-        "parent_id": user.parent_id,
-        "credit": user.credit,
-        "admin_id": admin_id,
-        "dealer_id": dealer_id,
-        "active_services": active_service_infos,
-        "admin_info": {
-            "email": admin_user.email,
-            "logo_url": admin_user.logo_url or "",
-            "ragione_sociale": admin_user.ragione_sociale or ""  
-        }
-    },
-    expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-)
+    # --- Recupero logo dealer da SiteAdminSettings ---
+    dealer_logo_url = None
+    if dealer_id:
+        settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer_id).first()
+        if settings and settings.logo_web:
+            dealer_logo_url = settings.logo_web
 
+    # Creazione access token
+    access_token = Authorize.create_access_token(
+        subject=user.email,
+        user_claims={
+            "id": user.id,
+            "role": user.role,
+            "parent_id": user.parent_id,
+            "credit": user.credit,
+            "admin_id": admin_id,
+            "dealer_id": dealer_id,
+            "active_services": active_service_infos,
+            "admin_info": {
+                "email": admin_user.email,
+                "logo_url": admin_user.logo_url or "",
+                "ragione_sociale": admin_user.ragione_sociale or ""
+            },
+            "dealer_info": {
+                "id": dealer.id if dealer else None,
+                "email": dealer.email if dealer else None,
+                "logo_url": dealer_logo_url or "",
+                "ragione_sociale": dealer.ragione_sociale if dealer else None
+            }
+        },
+        expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
 
     return {"access_token": access_token, "token_type": "bearer"}
+
 
 
 
@@ -195,21 +208,19 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
     Authorize.jwt_required()
 
     current_user_email = Authorize.get_jwt_subject()
-
     user = db.query(User).filter(User.email == current_user_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato")
 
     admin_user = None
-    admin_id = None
     dealer = None
+    admin_id = None
     dealer_id = None
 
     if user.role == "superadmin":
         admin_user = user
         admin_id = None
         dealer_id = None
-
         active_services = db.query(Services).filter(Services.page_url.isnot(None)).all()
 
     elif user.role == "admin":
@@ -235,6 +246,7 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
     else:
         raise HTTPException(status_code=400, detail="Ruolo utente non valido o relazioni mancanti")
 
+    # Recupero servizi attivi
     if user.role != "superadmin":
         active_services = db.query(Services).join(
             PurchasedServices, PurchasedServices.service_id == Services.id
@@ -248,6 +260,14 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
         for service in active_services
     ]
 
+    # --- Recupero logo dealer da SiteAdminSettings ---
+    dealer_logo_url = None
+    if dealer_id:
+        settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer_id).first()
+        if settings and settings.logo_web:
+            dealer_logo_url = settings.logo_web
+
+    # Creazione nuovo token
     new_token = Authorize.create_access_token(
         subject=current_user_email,
         user_claims={
@@ -260,13 +280,21 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
             "active_services": active_service_infos,
             "admin_info": {
                 "email": admin_user.email if admin_user else None,
-                "logo_url": admin_user.logo_url if admin_user and admin_user.logo_url else ""
+                "logo_url": admin_user.logo_url if admin_user and admin_user.logo_url else "",
+                "ragione_sociale": admin_user.ragione_sociale if admin_user else None
+            },
+            "dealer_info": {
+                "id": dealer.id if dealer else None,
+                "email": dealer.email if dealer else None,
+                "logo_url": dealer_logo_url or "",
+                "ragione_sociale": dealer.ragione_sociale if dealer else None
             }
         },
         expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
     return {"access_token": new_token}
+
 
 from pydantic import BaseModel
 from fastapi import BackgroundTasks, Depends, APIRouter, HTTPException
