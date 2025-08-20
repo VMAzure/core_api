@@ -662,6 +662,8 @@ async def invia_mail_preventivo(
                 except Exception as e:
                     # Non bloccare il flusso email se fallisce il log
                     print(f"⚠️ Inserimento notifica DB fallito: {e}")
+                    db.rollback()  # <--- aggiungi questo
+
 
         # 4.4 Timeline + pipeline log
         responsabile_id = preventivo.preventivo_assegnato_a or preventivo.creato_da

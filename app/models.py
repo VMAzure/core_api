@@ -1014,9 +1014,7 @@ class MnetAllestimentoUsato(Base):
     cv = Column(Integer)
 
 from sqlalchemy import Column, String, Integer, Float, Boolean, Date
-from sqlalchemy.ext.declarative import declarative_base
 
-Base = declarative_base()
 
 class MnetDettaglioUsato(Base):
     __tablename__ = "mnet_dettagli_usato"
@@ -1120,6 +1118,8 @@ class MnetDettaglioUsato(Base):
 
 class NotificaType(Base):
     __tablename__ = "notifiche_type"
+    __table_args__ = {"schema": "public"}
+
 
     id = Column(Integer, primary_key=True)
     codice = Column(String, unique=True, nullable=False)
