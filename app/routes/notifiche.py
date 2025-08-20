@@ -3,7 +3,7 @@ from pydantic import BaseModel, EmailStr
 from typing import List, Optional, Union
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import User, SiteAdminSettings, NotificaType, Notifica
+from app.models import User, Cliente, SiteAdminSettings, NotificaType, Notifica
 from app.utils.email import get_smtp_settings
 from email.mime.text import MIMEText
 from email.utils import formataddr
