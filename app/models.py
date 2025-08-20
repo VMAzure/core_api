@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 # Configurazione hashing password
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-Base.metadata.clear()
+# Base.metadata.clear()
 
 
 class Services(Base):
