@@ -12,80 +12,138 @@ from app.routes.sync_allestimenti_nuovo import sync_allestimenti
 from app.routes.invia_reminder_pipeline import invia_reminder_pipeline
 from app.utils.aggiorna_usato_settimanale import aggiorna_usato_settimanale
 
+from app.utils.notifications import inserisci_notifica
+from app.utils.email import get_smtp_settings
+from sqlalchemy.orm import joinedload
+import smtplib
+from email.mime.text import MIMEText
+from email.utils import formataddr
 
 
 # Configurazione dei log
 logging.basicConfig(filename="cron_job.log", level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
+def calcola_prossima_scadenza(current: datetime, cycle: str) -> datetime:
+    return {
+        "monthly": current + timedelta(days=30),
+        "quarterly": current + timedelta(days=90),
+        "semiannual": current + timedelta(days=182),
+        "annual": current + timedelta(days=365)
+    }.get(cycle, current + timedelta(days=30))
+
 def check_and_charge_services():
-    logging.info("🚀 CRON JOB ESEGUITO (APScheduler)")
+    logging.info("🚀 CRONJOB: check_and_charge_services avviato")
     db = SessionLocal()
+    now = datetime.utcnow()
 
-    setting = db.execute(text("SELECT service_duration_minutes FROM settings")).fetchone()
-    default_duration = setting.service_duration_minutes if setting else 43200  # 30 giorni
+    soglie_avviso = {
+        "monthly": [10, 2],
+        "quarterly": [10, 2],
+        "semiannual": [30, 5],
+        "annual": [30, 5]
+    }
 
-    purchased_services = db.query(PurchasedServices).all()
+    try:
+        servizi_attivi = db.query(PurchasedServices).options(
+            joinedload(PurchasedServices.service),
+            joinedload(PurchasedServices.dealer)
+        ).filter(
+            PurchasedServices.status == "attivo",
+            PurchasedServices.billing_cycle.isnot(None),
+            PurchasedServices.next_renewal_at.isnot(None),
+            PurchasedServices.dealer_id.isnot(None)
+        ).all()
 
-    for purchased in purchased_services:
-        service = db.query(Services).filter(Services.id == purchased.service_id).first()
-        admin = db.query(User).filter(User.id == purchased.admin_id).first()
+        for ps in servizi_attivi:
+            service = ps.service
+            dealer = ps.dealer
+            billing_cycle = ps.billing_cycle
+            giorni_mancanti = (ps.next_renewal_at.date() - now.date()).days
 
-        if not service or not admin:
-            continue
+            # 🔔 Avvisi pre-scadenza
+            if giorni_mancanti in soglie_avviso.get(billing_cycle, []):
+                admin_id = dealer.parent_id
+                smtp = get_smtp_settings(admin_id, db)
 
-        expiration_time = purchased.activated_at + timedelta(minutes=default_duration)
+                if smtp:
+                    html = f"<p>Il tuo servizio <strong>{service.name}</strong> scadrà tra {giorni_mancanti} giorni.</p><p>Controlla il credito disponibile per evitare la sospensione automatica.</p>"
+                    msg = MIMEText(html, "html", "utf-8")
+                    msg["Subject"] = f"🔔 Servizio '{service.name}' in scadenza"
+                    msg["From"] = formataddr((smtp.smtp_alias or "AZ Core", smtp.smtp_user))
+                    msg["To"] = dealer.email
 
-        if datetime.utcnow() >= expiration_time:
-            if admin.credit >= service.price:
-                admin.credit -= service.price
-                purchased.activated_at = datetime.utcnow()
-                db.execute(
-                    text("INSERT INTO logs (admin_email, event_type, message) VALUES (:email, :event, :msg)"),
-                    {"email": admin.email, "event": "rinnovo", "msg": f"Servizio {service.name} rinnovato"}
+                    try:
+                        server = smtplib.SMTP_SSL(smtp.smtp_host, smtp.smtp_port) if smtp.use_ssl else smtplib.SMTP(smtp.smtp_host, smtp.smtp_port)
+                        if not smtp.use_ssl:
+                            server.starttls()
+                        server.login(smtp.smtp_user, smtp.smtp_password)
+                        server.send_message(msg)
+                        server.quit()
+                        logging.info(f"📧 Avviso inviato a {dealer.email} per {service.name}")
+                    except Exception as e:
+                        logging.error(f"❌ Errore invio email avviso a {dealer.email}: {e}")
+
+                # 🔔 Scrivi notifica
+                inserisci_notifica(
+                    db, utente_id=dealer.id,
+                    tipo_codice="scadenza_servizio",
+                    messaggio=f"Il servizio '{service.name}' scadrà tra {giorni_mancanti} giorni."
                 )
-                db.commit()
-                logging.info(f"✅ Servizio {service.name} rinnovato per {admin.email}")
-            else:
-                purchased.status = "sospeso"
-                db.execute(
-                    text("INSERT INTO logs (admin_email, event_type, message) VALUES (:email, :event, :msg)"),
-                    {"email": admin.email, "event": "sospensione", "msg": f"Servizio {service.name} sospeso"}
-                )
-                db.commit()
-                logging.warning(f"⚠️ Servizio {service.name} sospeso per credito insufficiente ({admin.email})")
 
-        # 🔁 Controllo scadenza opzioni auto usate
-    durata_opzione = timedelta(hours=168)  # ⏳ durata opzione in ore
+            # 🔁 Rinnovo
+            if now >= ps.next_renewal_at:
+                price = {
+                    "monthly": service.monthly_price,
+                    "quarterly": service.quarterly_price,
+                    "semiannual": service.semiannual_price,
+                    "annual": service.annual_price
+                }.get(billing_cycle, 0)
 
-    auto_opzionate = db.execute(text("""
-        SELECT id, opzionato_da, opzionato_il FROM azlease_usatoin
-        WHERE opzionato_da IS NOT NULL AND opzionato_il IS NOT NULL AND visibile = true
-    """)).fetchall()
+                if dealer.credit >= price:
+                    dealer.credit -= price
+                    ps.activated_at = now
+                    ps.next_renewal_at = calcola_prossima_scadenza(now, billing_cycle)
+                    db.commit()
+                    logging.info(f"✅ Servizio rinnovato: {service.name} per {dealer.email}")
+                else:
+                    ps.status = "sospeso"
+                    db.commit()
 
-    for auto in auto_opzionate:
-        scadenza = auto.opzionato_il + durata_opzione
+                    # ❌ Email sospensione
+                    admin_id = dealer.parent_id
+                    smtp = get_smtp_settings(admin_id, db)
 
-        if datetime.utcnow() >= scadenza:
-            db.execute(text("""
-                UPDATE azlease_usatoin
-                SET opzionato_da = NULL, opzionato_il = NULL
-                WHERE id = :id
-            """), {"id": auto.id})
+                    if smtp:
+                        html = f"<p>Il servizio <strong>{service.name}</strong> è stato sospeso per credito insufficiente.</p><p>Puoi riattivarlo dallo Store dopo aver ricaricato il credito.</p>"
+                        msg = MIMEText(html, "html", "utf-8")
+                        msg["Subject"] = f"❌ Servizio '{service.name}' sospeso"
+                        msg["From"] = formataddr((smtp.smtp_alias or "AZ Core", smtp.smtp_user))
+                        msg["To"] = dealer.email
 
-            db.execute(text("""
-                INSERT INTO logs (admin_email, event_type, message)
-                VALUES (:email, :event, :msg)
-            """), {
-                "email": "sistema",  # o eventualmente un lookup su opzionato_da
-                "event": "scadenza_opzione",
-                "msg": f"Opzione scaduta automaticamente per auto ID {auto.id}"
-            })
+                        try:
+                            server = smtplib.SMTP_SSL(smtp.smtp_host, smtp.smtp_port) if smtp.use_ssl else smtplib.SMTP(smtp.smtp_host, smtp.smtp_port)
+                            if not smtp.use_ssl:
+                                server.starttls()
+                            server.login(smtp.smtp_user, smtp.smtp_password)
+                            server.send_message(msg)
+                            server.quit()
+                            logging.info(f"📧 Email sospensione a {dealer.email} per {service.name}")
+                        except Exception as e:
+                            logging.error(f"❌ Errore invio email sospensione a {dealer.email}: {e}")
 
-            db.commit()
-            logging.info(f"⏳ Opzione scaduta per auto ID {auto.id}")
+                    # 🛑 Scrivi notifica sospensione
+                    inserisci_notifica(
+                        db, utente_id=dealer.id,
+                        tipo_codice="sospensione_servizio",
+                        messaggio=f"Il servizio '{service.name}' è stato sospeso per credito insufficiente."
+                    )
 
+    except Exception as e:
+        db.rollback()
+        logging.error(f"❌ Errore cronjob servizi: {e}")
+    finally:
+        db.close()
 
-    db.close()
 
 def pulisci_modelli_settimanale():
     logging.info("🧹 Avvio pulizia settimanale modelli...")
@@ -150,7 +208,8 @@ def aggiorna_rating_convenienza_job():
 
 scheduler = BackgroundScheduler(job_defaults={'coalesce': True, 'max_instances': 1})
 
-scheduler.add_job(check_and_charge_services, 'interval', minutes=500)
+# Ogni mattina alle 05:00
+scheduler.add_job(check_and_charge_services, 'cron', hour=5, minute=0)
 # Ogni lunedì alle 03:00
 scheduler.add_job(pulisci_modelli_settimanale, 'cron', day_of_week='mon', hour=3, minute=0)
 # Ogni lunedì alle 04:00

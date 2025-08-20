@@ -4,6 +4,8 @@ from app.database import SessionLocal
 from app.models import User
 from fastapi_jwt_auth import AuthJWT  # ✅ Importiamo AuthJWT
 from pydantic import BaseModel
+from app.auth_helpers import get_dealer_id
+
 
 router = APIRouter()
 
@@ -25,63 +27,56 @@ from app.auth_helpers import get_admin_id
 
 @router.post("/assign-credit")
 def assign_credit(request: CreditAssignRequest, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    """
+    Ricarica credito manualmente sull’admin. Solo l’admin è autorizzato.
+    """
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
     user = db.query(User).filter(User.email == user_email).first()
-    if not user or user.role != "superadmin":
-        raise HTTPException(status_code=403, detail="Accesso negato")
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=403, detail="Accesso negato: solo l'admin può assegnare credito.")
 
-    # Trova l'utente a cui vogliamo assegnare (potrebbe essere admin_team)
-    target_user = db.query(User).filter(User.email == request.admin_email).first()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="Utente non trovato")
-
-    # Recupera l'admin effettivo
-    admin_id = get_admin_id(target_user)
-    admin = db.query(User).filter(User.id == admin_id, User.role == "admin").first()
+    # Carica se stesso
+    admin = db.query(User).filter(User.email == request.admin_email, User.role == "admin").first()
     if not admin:
-        raise HTTPException(status_code=404, detail="Admin principale non trovato")
+        raise HTTPException(status_code=404, detail="Admin non trovato")
 
     admin.credit += request.amount
     db.commit()
     db.refresh(admin)
 
-    return {"message": f"Credito assegnato con successo. Nuovo saldo: {admin.credit}"}
+    return {"message": f"Credito assegnato. Nuovo saldo: {admin.credit}"}
 
-    
+
 @router.post("/use-credit")
-def use_credit(amount: float, target_email: str = None, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+def use_credit(amount: float, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    """
+    Scarica credito al dealer loggato. Usato da cronjob o azioni automatiche.
+    """
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
-    requesting_user = db.query(User).filter(User.email == user_email).first()
-    if not requesting_user:
-        raise HTTPException(status_code=404, detail="Utente autenticato non trovato")
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user or user.role not in ["dealer", "dealer_team"]:
+        raise HTTPException(status_code=403, detail="Accesso negato: solo il dealer può utilizzare credito.")
 
-    # Se superadmin, può specificare a chi scalare credito
-    if requesting_user.role == "superadmin" and target_email:
-        target_user = db.query(User).filter(User.email == target_email).first()
-        if not target_user:
-            raise HTTPException(status_code=404, detail="Utente target non trovato")
-    else:
-        # Altri ruoli: il credito va sempre scalato all'admin principale
-        admin_id = get_admin_id(requesting_user)
-        target_user = db.query(User).filter(User.id == admin_id, User.role == "admin").first()
+    dealer_id = get_dealer_id(user)
+    dealer = db.query(User).filter(User.id == dealer_id, User.role == "dealer").first()
+    if not dealer:
+        raise HTTPException(status_code=404, detail="Dealer principale non trovato")
 
-        if not target_user:
-            raise HTTPException(status_code=404, detail="Admin principale non trovato")
-
-    if target_user.credit < amount:
+    if dealer.credit < amount:
         raise HTTPException(status_code=400, detail="Credito insufficiente")
 
-    target_user.credit -= amount
+    dealer.credit -= amount
     db.commit()
-    db.refresh(target_user)
+    db.refresh(dealer)
 
     return {
-        "message": f"Credito scalato: {amount}. Nuovo saldo: {target_user.credit}",
-        "user": target_user.email
+        "message": f"Credito scalato: {amount}. Nuovo saldo: {dealer.credit}",
+        "dealer": dealer.email
     }
+
 
 

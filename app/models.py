@@ -31,6 +31,12 @@ class Services(Base):
     open_in_new_tab = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    # Costi
+    activation_fee = Column(Float, default=0.0)  # costo una tantum
+    monthly_price = Column(Float, default=0.0)
+    quarterly_price = Column(Float, default=0.0)
+    semiannual_price = Column(Float, default=0.0)
+    annual_price = Column(Float, default=0.0)
 
     # ✅ RIMOSSO il `back_populates="purchased_services"`
 
@@ -88,13 +94,22 @@ class PurchasedServices(Base):
     __table_args__ = {"schema": "public"}
 
     id = Column(Integer, primary_key=True, index=True)
-    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=False)
+    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
+    dealer_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
+
     service_id = Column(Integer, ForeignKey("public.services.id"), nullable=False)
     status = Column(String, default="attivo")
     activated_at = Column(DateTime, default=func.now())
 
-    admin = relationship("User", backref="purchased_services")  
-    service = relationship("Services", backref="purchased_services")  # ✅ Modificato da back_populates a backref
+    admin = relationship("User", foreign_keys=[admin_id])
+    dealer = relationship("User", foreign_keys=[dealer_id])
+    service = relationship("Services", backref="purchased_services")
+
+    billing_cycle = Column(String, nullable=True)  # 'monthly', etc.
+    next_renewal_at = Column(DateTime, nullable=True)
+
+
+
 
 class CreditTransaction(Base):
     __tablename__ = "credit_transactions"
