@@ -1144,7 +1144,18 @@ class Notifica(Base):
         primaryjoin=lambda: User.id == Notifica.utente_id
     )
 
-    cliente = relationship(lambda: Cliente, backref="notifiche_collegate")
-    tipo = relationship(lambda: NotificaType, backref="notifiche")
+    cliente = relationship(
+        lambda: Cliente,
+        backref="notifiche_collegate",
+        foreign_keys=[cliente_id],
+        primaryjoin=lambda: Cliente.id == Notifica.cliente_id
+    )
+
+    tipo = relationship(
+        lambda: NotificaType,
+        backref="notifiche",
+        foreign_keys=[tipo_id],
+        primaryjoin=lambda: NotificaType.id == Notifica.tipo_id
+    )
 
 
