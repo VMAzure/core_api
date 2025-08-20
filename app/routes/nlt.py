@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Security, Query, Request
+﻿from fastapi import APIRouter, Depends, Body, UploadFile, File, Form, HTTPException, Security, Query, Request
 
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session, joinedload
@@ -552,14 +552,17 @@ async def download_preventivo(token: str, db: Session = Depends(get_db)):
 
     return RedirectResponse(preventivo.file_url)
 
+from app.auth_helpers import get_settings_owner_id  # <-- aggiungi
+from app.utils.notifications import inserisci_notifica  # <-- aggiungi
+
 @router.post("/preventivi/{preventivo_id}/invia-mail")
 async def invia_mail_preventivo(
     preventivo_id: UUID,
-    body: dict,
+    body: dict = Body(...),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
-
+    # 1) Caricamento entità
     preventivo = db.query(NltPreventivi).filter(NltPreventivi.id == preventivo_id).first()
     if not preventivo:
         raise HTTPException(status_code=404, detail="Preventivo non trovato")
@@ -570,34 +573,31 @@ async def invia_mail_preventivo(
 
     email_destinatario = cliente.email
 
-    # recupera SMTP (admin)
+    # 2) SMTP mittente (sempre l'owner admin dello scope corrente)
     if current_user:
-        user_id = current_user.parent_id or current_user.id
+        owner_smtp_id = current_user.parent_id or current_user.id
     else:
         creatore = db.query(User).filter(User.id == preventivo.creato_da).first()
         if not creatore:
             raise HTTPException(status_code=404, detail="Creatore preventivo non trovato")
-        user_id = creatore.parent_id or creatore.id
+        owner_smtp_id = creatore.parent_id or creatore.id
 
-    smtp_settings = get_smtp_settings(user_id, db)
-
+    smtp_settings = get_smtp_settings(owner_smtp_id, db)
     if not smtp_settings:
         raise HTTPException(status_code=500, detail="SMTP non configurato")
 
-
-
-    # Componi il messaggio
-    html_body = body.get("html_body", f"Clicca per scaricare il preventivo: {body['url_download']}")
+    # 3) Composizione email cliente
+    url_download = body.get("url_download")
+    html_body = body.get("html_body") or (f"Clicca per scaricare il preventivo: {url_download}" if url_download else "Preventivo disponibile.")
 
     msg = MIMEText(html_body, "html", "utf-8")
     msg["Subject"] = f"Preventivo {preventivo.marca} {preventivo.modello}"
     msg["From"] = formataddr((smtp_settings.smtp_alias or "Preventivo Noleggio Lungo Termine", smtp_settings.smtp_user))
     msg["To"] = email_destinatario
 
-  
-
-    # Invia mail
+    # 4) Invio email al cliente + notifica dealer/admin + timeline/log
     try:
+        # 4.1 Invio al cliente
         if smtp_settings.use_ssl:
             server = smtplib.SMTP_SSL(smtp_settings.smtp_host, smtp_settings.smtp_port)
         else:
@@ -609,41 +609,61 @@ async def invia_mail_preventivo(
         server.quit()
         print("✅ Email inviata correttamente a", email_destinatario)
 
-        # 🔁 Invia notifica dedicata al dealer/admin
-        dealer = db.query(User).filter(User.id == preventivo.preventivo_assegnato_a or preventivo.creato_da).first()
-        admin_id = dealer.parent_id if dealer.role == "dealer" else dealer.id
-        dealer_smtp = get_smtp_settings(admin_id, db)
+        # 4.2 Invio notifica dedicata al dealer/admin (NO BCC)
+        #     - destinatario: assegnatario se presente, altrimenti creatore
+        dealer_user = db.query(User).filter(
+            User.id == (preventivo.preventivo_assegnato_a or preventivo.creato_da)
+        ).first()
 
-        if dealer and dealer.email and dealer_smtp:
-            html_notify = f"""
-            <h3>📄 Nuovo preventivo richiesto</h3>
-            <p><strong>Cliente:</strong> {cliente.nome} {cliente.cognome}<br>
-            <strong>Email:</strong> {cliente.email}<br>
-            <strong>Telefono:</strong> {cliente.telefono or '—'}<br>
-            <strong>Auto:</strong> {preventivo.marca} {preventivo.modello}<br>
-            <a href="{body['url_download']}">📎 Visualizza il preventivo</a></p>
-            """
+        if dealer_user and dealer_user.email:
+            # SMTP dell'owner (admin) per il dealer/admin (gestisce dealer/dealer_team/admin/admin_team)
+            dealer_owner_id = get_settings_owner_id(dealer_user)
+            dealer_smtp = get_smtp_settings(dealer_owner_id, db)
 
-            msg_notify = MIMEText(html_notify, "html", "utf-8")
-            msg_notify["Subject"] = f"📩 Preventivo richiesto da {cliente.nome} {cliente.cognome}"
-            msg_notify["From"] = formataddr((dealer_smtp.smtp_alias or "Preventivi Web", dealer_smtp.smtp_user))
-            msg_notify["To"] = dealer.email
+            if dealer_smtp:
+                html_notify = f"""
+                <h3>📄 Nuovo preventivo richiesto</h3>
+                <p><strong>Cliente:</strong> {cliente.nome} {cliente.cognome}<br>
+                <strong>Email:</strong> {cliente.email}<br>
+                <strong>Telefono:</strong> {cliente.telefono or '—'}<br>
+                <strong>Auto:</strong> {preventivo.marca} {preventivo.modello}<br>
+                {f'<a href=\"{url_download}\">📎 Visualizza il preventivo</a>' if url_download else ''}
+                </p>
+                """
 
-            try:
-                if dealer_smtp.use_ssl:
-                    server_notify = smtplib.SMTP_SSL(dealer_smtp.smtp_host, dealer_smtp.smtp_port)
-                else:
-                    server_notify = smtplib.SMTP(dealer_smtp.smtp_host, dealer_smtp.smtp_port)
-                    server_notify.starttls()
+                msg_notify = MIMEText(html_notify, "html", "utf-8")
+                msg_notify["Subject"] = f"📩 Preventivo richiesto da {cliente.nome} {cliente.cognome}"
+                msg_notify["From"] = formataddr((dealer_smtp.smtp_alias or "Preventivi Web", dealer_smtp.smtp_user))
+                msg_notify["To"] = dealer_user.email
 
-                server_notify.login(dealer_smtp.smtp_user, dealer_smtp.smtp_password)
-                server_notify.send_message(msg_notify)
-                server_notify.quit()
-                print(f"📧 Notifica dealer inviata a {dealer.email}")
-            except Exception as e:
-                print(f"❌ Errore invio notifica dealer: {e}")
+                try:
+                    if dealer_smtp.use_ssl:
+                        server_notify = smtplib.SMTP_SSL(dealer_smtp.smtp_host, dealer_smtp.smtp_port)
+                    else:
+                        server_notify = smtplib.SMTP(dealer_smtp.smtp_host, dealer_smtp.smtp_port)
+                        server_notify.starttls()
 
-        # Registra evento in timeline
+                    server_notify.login(dealer_smtp.smtp_user, dealer_smtp.smtp_password)
+                    server_notify.send_message(msg_notify)
+                    server_notify.quit()
+                    print(f"📧 Notifica dealer inviata a {dealer_user.email}")
+                except Exception as e:
+                    print(f"❌ Errore invio notifica dealer: {e}")
+
+                # 4.3 Persisti la notifica nel DB (CRM) – tipo: preventivo_richiesto
+                try:
+                    inserisci_notifica(
+                        db=db,
+                        utente_id=dealer_user.id,          # destinatario (dealer/admin)
+                        cliente_id=cliente.id,             # lead coinvolto
+                        tipo_codice="preventivo_richiesto",
+                        messaggio=f"{cliente.nome} {cliente.cognome} ha richiesto un preventivo per {preventivo.marca} {preventivo.modello}."
+                    )
+                except Exception as e:
+                    # Non bloccare il flusso email se fallisce il log
+                    print(f"⚠️ Inserimento notifica DB fallito: {e}")
+
+        # 4.4 Timeline + pipeline log
         responsabile_id = preventivo.preventivo_assegnato_a or preventivo.creato_da
 
         evento = NltPreventiviTimeline(
@@ -653,13 +673,10 @@ async def invia_mail_preventivo(
             data_evento=datetime.utcnow(),
             utente_id=responsabile_id
         )
-
         db.add(evento)
         db.commit()
 
-        # 🔁 Se esiste una pipeline collegata, logga anche lì
         pipeline = db.query(NltPipeline).filter(NltPipeline.preventivo_id == preventivo.id).first()
-
         if pipeline:
             log_pipeline = NltPipelineLog(
                 pipeline_id=pipeline.id,
@@ -678,6 +695,7 @@ async def invia_mail_preventivo(
     except Exception as e:
         print("❌ Errore generico invio email:", e)
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.get("/preventivi/cliente-token/{token}")

@@ -9,7 +9,6 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 from app.utils.notifications import inserisci_notifica
 from uuid import UUID
-
 from app.auth_helpers import is_admin_user, get_admin_id
 from fastapi_jwt_auth import AuthJWT
 import smtplib
