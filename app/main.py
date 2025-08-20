@@ -54,6 +54,8 @@ from app.routes.richieste_piano import router as richieste_piano_router
 from app.routes import analytics
 from app.routes import sync_allestimenti_usato, sync_dettagli_usato, sync_marche_usato, sync_modelli_usato
 from app.routes.tenant import router as tenant_router
+from app.routes.notifiche import router as notifiche_router
+
 
 
 # ✅ Configuriamo il logging
@@ -188,6 +190,8 @@ app.include_router(preview.router)
 app.include_router(richieste_piano_router)
 app.include_router(analytics.router)
 app.include_router(tenant_router)  # espone /api/tenant/resolve
+app.include_router(notifiche_router)
+
 
 
 @app.get("/")
