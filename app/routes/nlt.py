@@ -627,7 +627,7 @@ async def invia_mail_preventivo(
                 <strong>Email:</strong> {cliente.email}<br>
                 <strong>Telefono:</strong> {cliente.telefono or '—'}<br>
                 <strong>Auto:</strong> {preventivo.marca} {preventivo.modello}<br>
-                {f'<a href=\"{url_download}\">📎 Visualizza il preventivo</a>' if url_download else ''}
+                {f'<a href="{url_download}">📎 Visualizza il preventivo</a>' if url_download else ''}
                 </p>
                 """
 
