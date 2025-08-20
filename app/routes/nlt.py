@@ -552,10 +552,6 @@ async def download_preventivo(token: str, db: Session = Depends(get_db)):
 
     return RedirectResponse(preventivo.file_url)
 
-
-
-
-
 @router.post("/preventivi/{preventivo_id}/invia-mail")
 async def invia_mail_preventivo(
     preventivo_id: UUID,
@@ -588,16 +584,7 @@ async def invia_mail_preventivo(
     if not smtp_settings:
         raise HTTPException(status_code=500, detail="SMTP non configurato")
 
-    # 🔁 PATCH INIZIO: recupero corretto utente per BCC
-    bcc_user = None
 
-    if preventivo.preventivo_assegnato_a:
-        bcc_user = db.query(User).filter(User.id == preventivo.preventivo_assegnato_a).first()
-
-    if not bcc_user:
-        bcc_user = db.query(User).filter(User.id == preventivo.creato_da).first()
-
-    # 🔁 PATCH FINE
 
     # Componi il messaggio
     html_body = body.get("html_body", f"Clicca per scaricare il preventivo: {body['url_download']}")
@@ -607,10 +594,7 @@ async def invia_mail_preventivo(
     msg["From"] = formataddr((smtp_settings.smtp_alias or "Preventivo Noleggio Lungo Termine", smtp_settings.smtp_user))
     msg["To"] = email_destinatario
 
-    # ✅ Applica BCC se trovato
-    if bcc_user and bcc_user.email:
-        msg["Bcc"] = bcc_user.email
-
+  
 
     # Invia mail
     try:
@@ -624,6 +608,40 @@ async def invia_mail_preventivo(
         server.send_message(msg)
         server.quit()
         print("✅ Email inviata correttamente a", email_destinatario)
+
+        # 🔁 Invia notifica dedicata al dealer/admin
+        dealer = db.query(User).filter(User.id == preventivo.preventivo_assegnato_a or preventivo.creato_da).first()
+        admin_id = dealer.parent_id if dealer.role == "dealer" else dealer.id
+        dealer_smtp = get_smtp_settings(admin_id, db)
+
+        if dealer and dealer.email and dealer_smtp:
+            html_notify = f"""
+            <h3>📄 Nuovo preventivo richiesto</h3>
+            <p><strong>Cliente:</strong> {cliente.nome} {cliente.cognome}<br>
+            <strong>Email:</strong> {cliente.email}<br>
+            <strong>Telefono:</strong> {cliente.telefono or '—'}<br>
+            <strong>Auto:</strong> {preventivo.marca} {preventivo.modello}<br>
+            <a href="{body['url_download']}">📎 Visualizza il preventivo</a></p>
+            """
+
+            msg_notify = MIMEText(html_notify, "html", "utf-8")
+            msg_notify["Subject"] = f"📩 Preventivo richiesto da {cliente.nome} {cliente.cognome}"
+            msg_notify["From"] = formataddr((dealer_smtp.smtp_alias or "Preventivi Web", dealer_smtp.smtp_user))
+            msg_notify["To"] = dealer.email
+
+            try:
+                if dealer_smtp.use_ssl:
+                    server_notify = smtplib.SMTP_SSL(dealer_smtp.smtp_host, dealer_smtp.smtp_port)
+                else:
+                    server_notify = smtplib.SMTP(dealer_smtp.smtp_host, dealer_smtp.smtp_port)
+                    server_notify.starttls()
+
+                server_notify.login(dealer_smtp.smtp_user, dealer_smtp.smtp_password)
+                server_notify.send_message(msg_notify)
+                server_notify.quit()
+                print(f"📧 Notifica dealer inviata a {dealer.email}")
+            except Exception as e:
+                print(f"❌ Errore invio notifica dealer: {e}")
 
         # Registra evento in timeline
         responsabile_id = preventivo.preventivo_assegnato_a or preventivo.creato_da
