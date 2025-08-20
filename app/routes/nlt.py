@@ -239,17 +239,20 @@ async def get_miei_preventivi(
 
         if current_user.role == "admin":
             # Vede i suoi + il team (admin_team)
-            user_ids = db.query(User.id).filter(
-                (User.parent_id == admin_id) |
-                (User.id == admin_id)
+            admin_team_ids = db.query(User.id).filter(
+                User.parent_id == admin_id,
+                User.role == "admin_team"
             ).all()
-            id_list = [id for (id,) in user_ids]
+
+            id_list = [id for (id,) in admin_team_ids]
+            id_list.append(admin_id)  # ✅ mantiene solo admin + admin_team, NON i dealer
 
             query = db.query(NltPreventivi).join(Cliente).filter(
                 ((NltPreventivi.creato_da.in_(id_list)) |
                  (NltPreventivi.preventivo_assegnato_a.in_(id_list))),
                 NltPreventivi.visibile == 1
             )
+
 
         elif current_user.role == "admin_team":
             # Vede solo i suoi o quelli assegnati a sé
@@ -270,18 +273,20 @@ async def get_miei_preventivi(
         dealer_id = get_dealer_id(current_user)
 
         if current_user.role == "dealer":
-            # Vede i suoi + il team (dealer_team)
-            user_ids = db.query(User.id).filter(
-                (User.parent_id == dealer_id) |
-                (User.id == dealer_id)
+            dealer_team_ids = db.query(User.id).filter(
+                User.parent_id == dealer_id,
+                User.role == "dealer_team"
             ).all()
-            id_list = [id for (id,) in user_ids]
+
+            id_list = [id for (id,) in dealer_team_ids]
+            id_list.append(dealer_id)
 
             query = db.query(NltPreventivi).join(Cliente).filter(
                 ((NltPreventivi.creato_da.in_(id_list)) |
                  (NltPreventivi.preventivo_assegnato_a.in_(id_list))),
                 NltPreventivi.visibile == 1
             )
+
 
         elif current_user.role == "dealer_team":
             # Solo propri o assegnati
