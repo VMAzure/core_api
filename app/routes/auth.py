@@ -185,6 +185,7 @@ def login(
             "credit": user.credit,
             "admin_id": admin_id,
             "dealer_id": dealer_id,
+            "slug": slug,
             "active_services": active_service_infos,
             "admin_info": {
                 "email": admin_user.email,
@@ -294,6 +295,7 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
             },
             "dealer_info": {
                 "id": dealer.id if dealer else None,
+                "slug": slug,
                 "email": dealer.email if dealer else None,
                 "logo_url": dealer_logo_url or "",
                 "ragione_sociale": dealer.ragione_sociale if dealer else None
