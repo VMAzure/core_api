@@ -22,23 +22,25 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 class Services(Base):
     __tablename__ = "services"
     __table_args__ = {"schema": "public"}
+
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, index=True)
-    description = Column(Text, nullable=True)
-    price = Column(Float, nullable=False)
-    image_url = Column(Text, nullable=True)
-    page_url = Column(String, nullable=True)  # ✅ Aggiunto il campo per la pagina del servizio
+    name = Column(String)
+    description = Column(String)
+    image_url = Column(String)
+    page_url = Column(String)
     open_in_new_tab = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    # Costi
-    activation_fee = Column(Float, default=0.0)  # costo una tantum
+
+    # Costi per ciclo ricorrente
+    activation_fee = Column(Float, default=0.0)
     monthly_price = Column(Float, default=0.0)
     quarterly_price = Column(Float, default=0.0)
     semiannual_price = Column(Float, default=0.0)
     annual_price = Column(Float, default=0.0)
 
-    # ✅ RIMOSSO il `back_populates="purchased_services"`
+    # Nuovi campi per pay-per-use
+    is_pay_per_use = Column(Boolean, default=False)
+    pay_per_use_price = Column(Float, default=0.0)
+
 
 class User(Base):
     __tablename__ = "utenti"
@@ -113,13 +115,23 @@ class PurchasedServices(Base):
 
 class CreditTransaction(Base):
     __tablename__ = "credit_transactions"
-    __table_args__ = {"schema": "public"}  # ✅ Aggiunto
+    __table_args__ = {"schema": "public"}
 
     id = Column(Integer, primary_key=True, index=True)
-    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=False)  # ✅ Modificato
+    
+    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)  # ✅ ora può essere NULL
+    dealer_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)  # ✅ aggiunto per uso dealer
+    
     amount = Column(Float, nullable=False)
-    transaction_type = Column(String, nullable=False)
+    transaction_type = Column(String, nullable=False)  # es: 'ADD', 'USE', 'FREE'
     created_at = Column(DateTime, default=func.now())
+
+    note = Column(String, nullable=True)  # ✅ commento opzionale
+
+    # 🔄 Relazioni (opzionali)
+    admin = relationship("User", foreign_keys=[admin_id], backref="credit_transactions_admin")
+    dealer = relationship("User", foreign_keys=[dealer_id], backref="credit_transactions_dealer")
+
 
 # ✅ Modello AssignedServices
 class AssignedServices(Base):

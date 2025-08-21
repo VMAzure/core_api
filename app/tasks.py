@@ -44,14 +44,15 @@ def check_and_charge_services():
     }
 
     try:
-        servizi_attivi = db.query(PurchasedServices).options(
+        servizi_attivi = db.query(PurchasedServices).join(Services).options(
             joinedload(PurchasedServices.service),
             joinedload(PurchasedServices.dealer)
         ).filter(
             PurchasedServices.status == "attivo",
             PurchasedServices.billing_cycle.isnot(None),
             PurchasedServices.next_renewal_at.isnot(None),
-            PurchasedServices.dealer_id.isnot(None)
+            PurchasedServices.dealer_id.isnot(None),
+            Services.is_pay_per_use == False   # ⬅️ ESCLUDE i pay-per-use
         ).all()
 
         for ps in servizi_attivi:
