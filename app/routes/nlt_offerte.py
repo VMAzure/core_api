@@ -971,6 +971,26 @@ async def offerte_filtrate_nlt_pubbliche(
             "dealer_slug": dealer_slug
         })
 
+    # ✅ Modalità DEMO per dealer senza servizio attivo
+    if settings.dealer_id:
+        servizio = db.query(Services).filter_by(slug="vetrina-nlt").first()
+
+        if servizio:
+            attivo = db.query(PurchasedServices).filter_by(
+                dealer_id=settings.dealer_id,
+                service_id=servizio.id,
+                status="attivo"
+            ).first() is not None
+
+            if not attivo:
+                print(f"🔍 Modalità DEMO attiva per dealer '{settings.slug}'")
+                for offerta in risultato:
+                    offerta["immagine"] = "/default-placeholder.png"
+                    offerta["canone_mensile"] = 999.0
+                    offerta["durata_mesi"] = 99
+                    offerta["km_inclusi"] = 99000
+                    offerta["logo_web"] = "/default-logo.png"
+                    offerta["demo"] = True
 
 
     return {
