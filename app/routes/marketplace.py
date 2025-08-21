@@ -55,7 +55,6 @@ def get_db():
 class ServiceCreate(BaseModel):
     name: str
     description: str
-    price: float
 
 class AssignServiceRequest(BaseModel):
     admin_email: str = None
@@ -65,7 +64,7 @@ class AssignServiceRequest(BaseModel):
 async def add_service(
     name: str = Form(...),
     description: str = Form(...),
-    price: float = Form(...),  # facoltativo: manteniamo per retrocompatibilità (es. prezzo “base”)
+    # price: float = Form(...),   facoltativo: manteniamo per retrocompatibilità (es. prezzo “base”)
     file: UploadFile = File(...),
     page_url: str = Form(...),
     open_in_new_tab: bool = Form(True),
@@ -100,7 +99,7 @@ async def add_service(
         "quarterly_price": quarterly_price,
         "semiannual_price": semiannual_price,
         "annual_price": annual_price,
-        "price": price
+        # "price": price
     }
     for k, v in prices.items():
         if v is None:
@@ -134,7 +133,7 @@ async def add_service(
         new_service = Services(
             name=name,
             description=description,
-            price=price,  # per retrocompatibilità
+            #price=price,   per retrocompatibilità
             image_url=image_url,
             page_url=page_url,
             open_in_new_tab=open_in_new_tab,
@@ -192,7 +191,6 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
             "id": s.id,
             "name": s.name,
             "description": s.description,
-            "price": s.price,
             "image_url": s.image_url,
             "page_url": s.page_url or "#",
             "open_in_new_tab": s.open_in_new_tab,
@@ -201,8 +199,11 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
             "monthly_price": s.monthly_price,
             "quarterly_price": s.quarterly_price,
             "semiannual_price": s.semiannual_price,
-            "annual_price": s.annual_price
+            "annual_price": s.annual_price,
+            "is_pay_per_use": s.is_pay_per_use,
+            "pay_per_use_price": s.pay_per_use_price
         } for s in services]
+
 
 
     # === DEALER / DEALER_TEAM ===
@@ -226,7 +227,7 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
             "id": s.id,
             "name": s.name,
             "description": s.description,
-            "price": s.price,
+            #"price": s.price,
             "image_url": s.image_url,
             "page_url": s.page_url or "#",
             "open_in_new_tab": s.open_in_new_tab,
@@ -235,7 +236,9 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
             "monthly_price": s.monthly_price,
             "quarterly_price": s.quarterly_price,
             "semiannual_price": s.semiannual_price,
-            "annual_price": s.annual_price
+                "annual_price": s.annual_price,
+            "is_pay_per_use": s.is_pay_per_use,
+            "pay_per_use_price": s.pay_per_use_price
         })
 
 

@@ -30,16 +30,20 @@ class Services(Base):
     page_url = Column(String)
     open_in_new_tab = Column(Boolean, default=True)
 
-    # Costi per ciclo ricorrente
-    activation_fee = Column(Float, default=0.0)
-    monthly_price = Column(Float, default=0.0)
-    quarterly_price = Column(Float, default=0.0)
-    semiannual_price = Column(Float, default=0.0)
-    annual_price = Column(Float, default=0.0)
+    # Costi ricorrenti
+    activation_fee = Column(Float, nullable=True, default=0.0)
+    monthly_price = Column(Float, nullable=True, default=0.0)
+    quarterly_price = Column(Float, nullable=True, default=0.0)
+    semiannual_price = Column(Float, nullable=True, default=0.0)
+    annual_price = Column(Float, nullable=True, default=0.0)
 
-    # Nuovi campi per pay-per-use
+    # Pay-per-use
     is_pay_per_use = Column(Boolean, default=False)
-    pay_per_use_price = Column(Float, default=0.0)
+    pay_per_use_price = Column(Float, nullable=True, default=0.0)
+
+    # Tracking
+    created_at = Column(DateTime, default=func.now())
+
 
 
 class User(Base):
