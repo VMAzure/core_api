@@ -117,6 +117,7 @@ def login(
         admin_id = user.id
         dealer = None
         dealer_id = None
+        active_services = db.query(Services).all()  # ✅ override completo
 
     # ADMIN_TEAM
     elif user.role == "admin_team" and user.parent_id:
@@ -126,6 +127,8 @@ def login(
         admin_id = admin_user.id
         dealer = None
         dealer_id = None
+        active_services = db.query(Services).all()  # ✅ override completo
+
 
     # DEALER
     elif user.role == "dealer":
@@ -232,10 +235,14 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
     elif user.role == "admin":
         admin_user = user
         admin_id = user.id
+        active_services = db.query(Services).all()  # ✅ override
+
 
     elif user.role == "admin_team" and user.parent_id:
         admin_user = db.query(User).filter(User.id == user.parent_id).first()
         admin_id = admin_user.id if admin_user else None
+        active_services = db.query(Services).all()  # ✅ override completo
+
 
     elif user.role == "dealer":
         dealer = user
