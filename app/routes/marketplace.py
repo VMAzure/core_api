@@ -64,50 +64,48 @@ class AssignServiceRequest(BaseModel):
 async def add_service(
     name: str = Form(...),
     description: str = Form(...),
-    # price: float = Form(...),   facoltativo: manteniamo per retrocompatibilità (es. prezzo “base”)
     file: UploadFile = File(...),
     page_url: str = Form(...),
     open_in_new_tab: bool = Form(True),
 
-    # ✅ NUOVI CAMPI PREZZI
+    # Ricorrenti
     activation_fee: float = Form(0.0),
     monthly_price: float = Form(0.0),
     quarterly_price: float = Form(0.0),
     semiannual_price: float = Form(0.0),
     annual_price: float = Form(0.0),
 
+    # PXU (⚠️ arriva sempre come stringa)
+    is_pay_per_use: str = Form("false"),
+    pay_per_use_price: float = Form(0.0),
+
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
     """
-    Crea un nuovo servizio (solo ADMIN), con immagine su Supabase e piani di costo:
-    - activation_fee (una tantum)
-    - monthly_price / quarterly_price / semiannual_price / annual_price
+    Crea un nuovo servizio:
+    - Ricorrente: include billing cycle + attivazione
+    - PXU: solo pay_per_use_price
     """
     Authorize.jwt_required()
     user_id = Authorize.get_jwt_subject()
     user = db.query(User).filter(User.email == user_id).first()
 
-    # ✅ Permesso: solo admin
     if not user or user.role != "admin":
         raise HTTPException(status_code=403, detail="Accesso negato: solo l'admin può creare servizi.")
 
-    # ✅ Validazioni prezzi
-    prices = {
+    # Validazioni
+    for k, v in {
         "activation_fee": activation_fee,
         "monthly_price": monthly_price,
         "quarterly_price": quarterly_price,
         "semiannual_price": semiannual_price,
         "annual_price": annual_price,
-        # "price": price
-    }
-    for k, v in prices.items():
-        if v is None:
-            continue
+        "pay_per_use_price": pay_per_use_price
+    }.items():
         if v < 0:
             raise HTTPException(status_code=422, detail=f"Il campo '{k}' non può essere negativo.")
 
-    # ✅ Validazione file
     allowed_extensions = {"png", "jpg", "jpeg", "webp"}
     file_extension = file.filename.split(".")[-1].lower()
     if file_extension not in allowed_extensions:
@@ -117,7 +115,6 @@ async def add_service(
     if len(file_content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File troppo grande! Max 5MB.")
 
-    # ✅ Upload Supabase
     try:
         file_name = f"services/{uuid.uuid4()}_{file.filename}"
         supabase.storage.from_("services").upload(
@@ -128,22 +125,21 @@ async def add_service(
         logger.error(f"Upload Supabase fallito: {e}")
         raise HTTPException(status_code=500, detail="Errore upload immagine su storage.")
 
-    # ✅ Persistenza DB
     try:
         new_service = Services(
             name=name,
             description=description,
-            #price=price,   per retrocompatibilità
             image_url=image_url,
             page_url=page_url,
             open_in_new_tab=open_in_new_tab,
-
-            # nuovi campi prezzi
             activation_fee=activation_fee,
             monthly_price=monthly_price,
             quarterly_price=quarterly_price,
             semiannual_price=semiannual_price,
-            annual_price=annual_price
+            annual_price=annual_price,
+            is_pay_per_use=is_pay_per_use.lower() == "true",
+            pay_per_use_price=pay_per_use_price,
+            price=0  # legacy compat
         )
         db.add(new_service)
         db.commit()
@@ -161,9 +157,10 @@ async def add_service(
         "monthly_price": new_service.monthly_price,
         "quarterly_price": new_service.quarterly_price,
         "semiannual_price": new_service.semiannual_price,
-        "annual_price": new_service.annual_price
+        "annual_price": new_service.annual_price,
+        "is_pay_per_use": new_service.is_pay_per_use,
+        "pay_per_use_price": new_service.pay_per_use_price
     }
-
 
 
 @marketplace_router.get("/service-list", response_model=list)
