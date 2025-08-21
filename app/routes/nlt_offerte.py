@@ -1055,6 +1055,42 @@ async def offerta_nlt_unificata(
     if canone_finale is None:
         raise HTTPException(status_code=404, detail="Canone non calcolabile.")
 
+    # ✅ DEMO MODE per dealer senza servizio attivo
+    if settings.dealer_id:
+        attivo = db.query(PurchasedServices).join(Services).filter(
+            PurchasedServices.dealer_id == settings.dealer_id,
+            PurchasedServices.status == "attivo",
+            Services.name == "Vetrina NLT"
+        ).first() is not None
+
+        if not attivo:
+            print(f"🔍 Modalità DEMO per dealer '{settings.slug}'")
+
+            return {
+                "id_offerta": 0,
+                "immagine": "/default-placeholder.png",
+                "marca": offerta.marca,
+                "modello": offerta.modello,
+                "versione": offerta.versione,
+                "cambio": offerta.cambio,
+                "alimentazione": offerta.alimentazione,
+                "prezzo_listino": float(offerta.prezzo_listino or 0),
+                "prezzo_totale": float(offerta.prezzo_totale or 0),
+                "descrizione_breve": offerta.descrizione_breve,
+                "slug": offerta.slug,
+                "solo_privati": offerta.solo_privati,
+                "descrizione_ai": offerta.descrizione_ai,
+                "motornet_status": "DEMO",
+                "canone_mensile": 299.0,
+                "durata_mesi": 36,
+                "km_inclusi": 45000,
+                "dealer_slug": settings.slug,
+                "dettagli_motornet": get_dati_nd(),
+                "carrozzeria_descrizione": "Demo",
+                "demo": True,
+                "logo_web": "/default-logo.png"
+            }
+
     return {
         **costruisci_offerta_base(offerta),
         "canone_mensile": float(canone_finale),
