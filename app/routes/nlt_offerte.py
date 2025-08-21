@@ -4,7 +4,7 @@ from sqlalchemy import func
 
 from typing import Optional, List
 from app.database import get_db
-from app.models import NltOfferteRating, MnetDettagli,NltPneumatici, NltAutoSostitutiva, NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt, NltOfferteClick
+from app.models import Services, PurchasedServices, NltOfferteRating, MnetDettagli,NltPneumatici, NltAutoSostitutiva, NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt, NltOfferteClick
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
@@ -594,6 +594,27 @@ async def offerte_nlt_pubbliche(
             "logo_web": settings.logo_web or "",
             "dealer_slug": dealer_slug
         })
+
+    # ✅ DEMO MODE solo se è un dealer (non admin)
+    if settings.dealer_id:
+        servizio = db.query(Services).filter_by(slug="vetrina-nlt").first()
+
+        if servizio:
+            attivo = db.query(PurchasedServices).filter_by(
+                dealer_id=settings.dealer_id,
+                service_id=servizio.id,
+                status="attivo"
+            ).first() is not None
+
+            if not attivo:
+                for offerta in risultato:
+                    offerta["immagine"] = "/default-placeholder.png"
+                    offerta["canone_mensile"] = 299.0
+                    offerta["durata_mesi"] = 99
+                    offerta["km_inclusi"] = 99000
+                    offerta["logo_web"] = "/default-logo.png"
+                    offerta["demo"] = True  
+    
 
     return risultato
 
