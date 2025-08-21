@@ -420,7 +420,7 @@ def use_pay_per_use_service(
 
     # Risposta con page_url firmata
     token = Authorize.get_raw_jwt()
-    token_str = Authorize.get_token()
+    token_str = request.headers.get("Authorization", "").replace("Bearer ", "")
     final_url = f"{service.page_url}?token={token_str}"
 
     return {
