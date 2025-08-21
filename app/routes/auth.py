@@ -174,16 +174,23 @@ def login(
     ]
 
         # --- Recupero logo dealer da SiteAdminSettings ---
-    dealer_logo_url = None
     slug = None
+    dealer_logo_url = None
+
     if dealer_id:
-        settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer_id).first()
+        settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.dealer_id == dealer_id
+        ).first()
     elif admin_id:
-        settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == admin_id).first()
+        settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.admin_id == admin_id,
+            SiteAdminSettings.dealer_id.is_(None)  # ✅ seleziona solo lo slug dell'admin principale
+        ).first()
 
     if settings:
         dealer_logo_url = settings.logo_web
         slug = settings.slug
+
 
 
     # Creazione access token
@@ -285,16 +292,23 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
     ]
 
         # --- Recupero logo dealer da SiteAdminSettings ---
-    dealer_logo_url = None
     slug = None
+    dealer_logo_url = None
+
     if dealer_id:
-        settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer_id).first()
+        settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.dealer_id == dealer_id
+        ).first()
     elif admin_id:
-        settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == admin_id).first()
+        settings = db.query(SiteAdminSettings).filter(
+            SiteAdminSettings.admin_id == admin_id,
+            SiteAdminSettings.dealer_id.is_(None)  # ✅ seleziona solo lo slug dell'admin principale
+        ).first()
 
     if settings:
         dealer_logo_url = settings.logo_web
         slug = settings.slug
+
 
 
     # Creazione nuovo token
