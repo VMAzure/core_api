@@ -166,12 +166,14 @@ def login(
         for service in active_services
     ]
 
-    # --- Recupero logo dealer da SiteAdminSettings ---
+        # --- Recupero logo dealer da SiteAdminSettings ---
     dealer_logo_url = None
+    slug = None
     if dealer_id:
         settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer_id).first()
-        if settings and settings.logo_web:
+        if settings:
             dealer_logo_url = settings.logo_web
+            slug = settings.slug  # ✅ aggiunto
 
     # Creazione access token
     access_token = Authorize.create_access_token(
@@ -265,12 +267,14 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
         for service in active_services
     ]
 
-    # --- Recupero logo dealer da SiteAdminSettings ---
+        # --- Recupero logo dealer da SiteAdminSettings ---
     dealer_logo_url = None
+    slug = None
     if dealer_id:
         settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer_id).first()
-        if settings and settings.logo_web:
+        if settings:
             dealer_logo_url = settings.logo_web
+            slug = settings.slug  # ✅ aggiunto
 
     # Creazione nuovo token
     new_token = Authorize.create_access_token(
