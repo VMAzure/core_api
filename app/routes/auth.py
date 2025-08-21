@@ -151,12 +151,15 @@ def login(
         raise HTTPException(status_code=400, detail="Ruolo utente non valido o relazioni mancanti")
 
     # Recupera servizi attivi dell’admin
+    # Recupera servizi attivi per admin o dealer
     active_services = db.query(Services).join(
         PurchasedServices, PurchasedServices.service_id == Services.id
     ).filter(
-        PurchasedServices.admin_id == admin_id,
-        PurchasedServices.status == "active"
+        PurchasedServices.status == "attivo",
+        (PurchasedServices.admin_id == admin_id) | (PurchasedServices.dealer_id == dealer_id)
     ).all()
+
+
 
     active_service_infos = [
         {"name": service.name, "page_url": service.page_url or "#"}
@@ -248,12 +251,14 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
 
     # Recupero servizi attivi
     if user.role != "superadmin":
+        # Recupera servizi attivi per admin o dealer
         active_services = db.query(Services).join(
             PurchasedServices, PurchasedServices.service_id == Services.id
         ).filter(
-            PurchasedServices.admin_id == admin_id,
-            PurchasedServices.status == "active"
+            PurchasedServices.status == "attivo",
+            (PurchasedServices.admin_id == admin_id) | (PurchasedServices.dealer_id == dealer_id)
         ).all()
+
 
     active_service_infos = [
         {"name": service.name, "page_url": service.page_url or "#"}
