@@ -368,3 +368,62 @@ async def purchase_service(
         db.rollback()
         logger.error(f"❌ Errore acquisto servizio: {e}")
         raise HTTPException(status_code=500, detail="Errore durante l'acquisto del servizio.")
+
+
+class UseServiceRequest(BaseModel):
+    service_id: int
+
+
+@marketplace_router.post("/use-service")
+def use_pay_per_use_service(
+    payload: UseServiceRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user or not is_dealer_user(user):
+        raise HTTPException(status_code=403, detail="Accesso riservato ai dealer.")
+
+    dealer_id = get_dealer_id(user)
+
+    service = db.query(Services).filter(Services.id == payload.service_id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Servizio non trovato.")
+
+    if not service.is_pay_per_use:
+        raise HTTPException(status_code=400, detail="Questo servizio non è pay-per-use.")
+
+    costo = service.pay_per_use_price or 0.0
+    if user.credit < costo:
+        raise HTTPException(status_code=402, detail="Credito insufficiente.")
+
+    # Scala il credito
+    user.credit -= costo
+
+    # Registra la transazione
+    transazione = CreditTransaction(
+        dealer_id=dealer_id,
+        amount=costo,
+        transaction_type="USE"
+    )
+    db.add(transazione)
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Errore nell'utilizzo del servizio.")
+
+    # Risposta con page_url firmata
+    token = Authorize.get_raw_jwt()
+    token_str = Authorize.get_token()
+    final_url = f"{service.page_url}?token={token_str}"
+
+    return {
+        "message": "Servizio usato correttamente",
+        "page_url": final_url,
+        "remaining_credit": user.credit
+    }
