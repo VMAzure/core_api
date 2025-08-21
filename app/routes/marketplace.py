@@ -139,7 +139,6 @@ async def add_service(
             annual_price=annual_price,
             is_pay_per_use=is_pay_per_use.lower() == "true",
             pay_per_use_price=pay_per_use_price,
-            price=0  # legacy compat
         )
         db.add(new_service)
         db.commit()
