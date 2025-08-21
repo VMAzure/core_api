@@ -178,9 +178,13 @@ def login(
     slug = None
     if dealer_id:
         settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer_id).first()
-        if settings:
-            dealer_logo_url = settings.logo_web
-            slug = settings.slug  # ✅ aggiunto
+    elif admin_id:
+        settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == admin_id).first()
+
+    if settings:
+        dealer_logo_url = settings.logo_web
+        slug = settings.slug
+
 
     # Creazione access token
     access_token = Authorize.create_access_token(
@@ -285,9 +289,13 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
     slug = None
     if dealer_id:
         settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer_id).first()
-        if settings:
-            dealer_logo_url = settings.logo_web
-            slug = settings.slug  # ✅ aggiunto
+    elif admin_id:
+        settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.admin_id == admin_id).first()
+
+    if settings:
+        dealer_logo_url = settings.logo_web
+        slug = settings.slug
+
 
     # Creazione nuovo token
     new_token = Authorize.create_access_token(
