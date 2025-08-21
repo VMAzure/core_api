@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+﻿from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import SessionLocal
@@ -373,12 +373,16 @@ class UseServiceRequest(BaseModel):
 
 @marketplace_router.post("/use-service")
 def use_pay_per_use_service(
+    request: Request,  # ⬅️ PRIMA
     payload: UseServiceRequest,
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
+
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
+    token_str = request.headers.get("Authorization", "").replace("Bearer ", "")
+
 
     user = db.query(User).filter(User.email == user_email).first()
     if not user or not is_dealer_user(user):
