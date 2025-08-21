@@ -210,39 +210,44 @@ def get_filtered_services(Authorize: AuthJWT = Depends(), db: Session = Depends(
     elif role in ["dealer", "dealer_team"]:
         dealer_id = get_dealer_id(user)
 
-        # Recupera ID dei servizi acquistati da questo dealer
-        purchased = db.query(PurchasedServices.service_id).filter(
-            PurchasedServices.dealer_id == dealer_id,
-            PurchasedServices.status == "attivo"
+        # Servizi disponibili
+        all_services = db.query(Services).all()
+
+        # Servizi acquistati da questo dealer
+        purchases = db.query(PurchasedServices).filter(
+            PurchasedServices.dealer_id == dealer_id
         ).all()
 
-        active_service_ids = {s.service_id for s in purchased}
-
-        # Mostriamo tutti i servizi disponibili (creati dall'admin)
-        all_services = db.query(Services).all()
+        purchases_map = {p.service_id: p for p in purchases}
 
         result = []
         for s in all_services:
+            purchased = purchases_map.get(s.id)
             result.append({
-            "id": s.id,
-            "name": s.name,
-            "description": s.description,
-            #"price": s.price,
-            "image_url": s.image_url,
-            "page_url": s.page_url or "#",
-            "open_in_new_tab": s.open_in_new_tab,
-            "is_active": s.id in active_service_ids,
-            "activation_fee": s.activation_fee,
-            "monthly_price": s.monthly_price,
-            "quarterly_price": s.quarterly_price,
-            "semiannual_price": s.semiannual_price,
+                "id": s.id,
+                "name": s.name,
+                "description": s.description,
+                "image_url": s.image_url,
+                "page_url": s.page_url or "#",
+                "open_in_new_tab": s.open_in_new_tab,
+                "is_active": purchased.status == "attivo" if purchased else False,
+                "activation_fee": s.activation_fee,
+                "monthly_price": s.monthly_price,
+                "quarterly_price": s.quarterly_price,
+                "semiannual_price": s.semiannual_price,
                 "annual_price": s.annual_price,
-            "is_pay_per_use": s.is_pay_per_use,
-            "pay_per_use_price": s.pay_per_use_price
-        })
-
+                "is_pay_per_use": s.is_pay_per_use,
+                "pay_per_use_price": s.pay_per_use_price,
+                "purchased_service": {
+                    "id": purchased.id,
+                    "status": purchased.status,
+                    "billing_cycle": purchased.billing_cycle,
+                    "next_renewal_at": purchased.next_renewal_at.isoformat() if purchased.next_renewal_at else None
+                } if purchased else None
+            })
 
         return result
+
 
     else:
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
