@@ -971,27 +971,23 @@ async def offerte_filtrate_nlt_pubbliche(
             "dealer_slug": dealer_slug
         })
 
-    # ✅ Modalità DEMO per dealer senza servizio attivo
+    # ✅ DEMO se il servizio "Vetrina NLT" non è attivo (admin escluso)
     if settings.dealer_id:
-        servizio = db.query(Services).filter_by(slug="vetrina-nlt").first()
+        attivo = db.query(PurchasedServices).join(Services).filter(
+            PurchasedServices.dealer_id == settings.dealer_id,
+            PurchasedServices.status == "attivo",
+            Services.name == "Vetrina NLT"
+        ).first() is not None
 
-        if servizio:
-            attivo = db.query(PurchasedServices).filter_by(
-                dealer_id=settings.dealer_id,
-                service_id=servizio.id,
-                status="attivo"
-            ).first() is not None
-
-            if not attivo:
-                print(f"🔍 Modalità DEMO attiva per dealer '{settings.slug}'")
-                for offerta in risultato:
-                    offerta["immagine"] = "/default-placeholder.png"
-                    offerta["canone_mensile"] = 999.0
-                    offerta["durata_mesi"] = 99
-                    offerta["km_inclusi"] = 99000
-                    offerta["logo_web"] = "/default-logo.png"
-                    offerta["demo"] = True
-
+        if not attivo:
+            print(f"🔍 Modalità DEMO attiva per dealer '{settings.slug}'")
+            for offerta in risultato:
+                offerta["immagine"] = "/default-placeholder.png"
+                offerta["canone_mensile"] = 299.0
+                offerta["durata_mesi"] = 36
+                offerta["km_inclusi"] = 45000
+                offerta["logo_web"] = "/default-logo.png"
+                offerta["demo"] = True
 
     return {
         "count": total,
