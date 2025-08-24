@@ -427,3 +427,91 @@ def use_pay_per_use_service(
         "page_url": final_url,
         "remaining_credit": user.credit
     }
+
+@marketplace_router.put("/services/{service_id}")
+async def update_service(
+    service_id: int,
+    name: str = Form(...),
+    description: str = Form(...),
+    file: UploadFile = File(None),
+    page_url: str = Form(...),
+    open_in_new_tab: bool = Form(True),
+
+    # Ricorrenti
+    activation_fee: float = Form(0.0),
+    monthly_price: float = Form(0.0),
+    quarterly_price: float = Form(0.0),
+    semiannual_price: float = Form(0.0),
+    annual_price: float = Form(0.0),
+
+    # PXU
+    is_pay_per_use: str = Form("false"),
+    pay_per_use_price: float = Form(0.0),
+
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """Aggiorna un servizio esistente (solo admin)."""
+    Authorize.jwt_required()
+    user_id = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_id).first()
+
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo l'admin può modificare i servizi.")
+
+    service = db.query(Services).filter(Services.id == service_id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Servizio non trovato.")
+
+    # Validazioni valori
+    for k, v in {
+        "activation_fee": activation_fee,
+        "monthly_price": monthly_price,
+        "quarterly_price": quarterly_price,
+        "semiannual_price": semiannual_price,
+        "annual_price": annual_price,
+        "pay_per_use_price": pay_per_use_price
+    }.items():
+        if v < 0:
+            raise HTTPException(status_code=422, detail=f"Il campo '{k}' non può essere negativo.")
+
+    # Se arriva un nuovo file → aggiorna immagine
+    if file:
+        allowed_extensions = {"png", "jpg", "jpeg", "webp"}
+        file_extension = file.filename.split(".")[-1].lower()
+        if file_extension not in allowed_extensions:
+            raise HTTPException(status_code=400, detail="Formato file non valido.")
+        file_content = await file.read()
+        if len(file_content) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File troppo grande! Max 5MB.")
+        file_name = f"services/{uuid.uuid4()}_{file.filename}"
+        supabase.storage.from_("services").upload(
+            file_name, file_content, {"content-type": file.content_type}
+        )
+        service.image_url = f"{SUPABASE_URL}/storage/v1/object/public/services/{file_name}"
+
+    # Aggiorna i campi
+    service.name = name
+    service.description = description
+    service.page_url = page_url
+    service.open_in_new_tab = open_in_new_tab
+    service.activation_fee = activation_fee
+    service.monthly_price = monthly_price
+    service.quarterly_price = quarterly_price
+    service.semiannual_price = semiannual_price
+    service.annual_price = annual_price
+    service.is_pay_per_use = is_pay_per_use.lower() == "true"
+    service.pay_per_use_price = pay_per_use_price
+
+    try:
+        db.commit()
+        db.refresh(service)
+        return {
+            "message": "Servizio aggiornato con successo",
+            "service_id": service.id,
+            "image_url": service.image_url
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Errore aggiornamento servizio: {e}")
+        raise HTTPException(status_code=500, detail="Errore durante l'aggiornamento del servizio.")
