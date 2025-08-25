@@ -142,6 +142,8 @@ class AdminTeamCreateRequest(BaseModel):
     nome: str
     cognome: str
     cellulare: str
+    ruolo: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 class DealerTeamCreateRequest(BaseModel):
     email: EmailStr
@@ -149,6 +151,8 @@ class DealerTeamCreateRequest(BaseModel):
     nome: str
     cognome: str
     cellulare: str
+    ruolo: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 
 class ClienteConsensoRequest(BaseModel):

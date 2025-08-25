@@ -4,7 +4,7 @@ from datetime import datetime, date, timedelta
 from passlib.context import CryptContext
 from app.database import Base  # Manteniamo solo Base senza importare engine
 from typing import TYPE_CHECKING, Optional, List
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, HttpUrl
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
@@ -64,6 +64,9 @@ class User(Base):
     citta = Column(String, nullable=False)
     codice_sdi = Column(String, nullable=True)
     cellulare = Column(String, nullable=False)
+    # 🔹 nuovi campi
+    ruolo = Column(String, nullable=True)         # es. "Meccanico", "Consulente"
+    avatar_url = Column(String, nullable=True)    # immagine personale
 
     credit = Column(Float, default=0.0)
     parent_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
@@ -94,6 +97,8 @@ class TeamMemberUpdateRequest(BaseModel):
     nome: str
     cognome: str
     cellulare: str
+    ruolo: Optional[str] = None            # es. "Meccanico", "Consulente"
+    avatar_url: Optional[str] = None   # link immagine profilo
 
 class PurchasedServices(Base):
     __tablename__ = "purchased_services"

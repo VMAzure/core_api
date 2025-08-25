@@ -667,8 +667,10 @@ def create_admin_team(
         codice_sdi=admin.codice_sdi,
         logo_url=admin.logo_url,
         parent_id=admin.id,
-        credit=0
-    )
+        credit=0,
+        # 🔹 nuovi campi
+        ruolo=user_data.ruolo,
+        avatar_url=user_data.avatar_url    )
 
     db.add(new_user)
     db.commit()
@@ -713,8 +715,11 @@ def create_dealer_team(
         codice_sdi=dealer.codice_sdi,
         logo_url=dealer.logo_url,
         parent_id=dealer.id,
-        credit=0
-    )
+        credit=0,
+        # 🔹 nuovi campi
+        ruolo=user_data.ruolo,
+        avatar_url=user_data.avatar_url
+)
 
     db.add(new_user)
     db.commit()
@@ -766,7 +771,9 @@ async def get_mio_team(
         "citta": m.citta,
         "codice_sdi": m.codice_sdi,
         "cellulare": m.cellulare,
-        "logo_url": m.logo_url
+        "logo_url": m.logo_url,
+        "avatar_url": m.avatar_url,
+        "ruolo": m.ruolo
     } for m in membri]
 
     return {
@@ -810,6 +817,8 @@ def get_team_pubblico(slug: str, db: Session = Depends(get_db)):
         "email": u.email,
         "cellulare": u.cellulare,
         "logo_url": u.logo_url,
+        "avatar_url": u.avatar_url,
+        "ruolo": u.ruolo,
         "role": u.role,
         "is_dealer": False
     } for u in membri_team]
@@ -821,9 +830,12 @@ def get_team_pubblico(slug: str, db: Session = Depends(get_db)):
         "email": user.email,
         "cellulare": user.cellulare,
         "logo_url": user.logo_url,
+        "avatar_url": user.avatar_url,
+        "ruolo": user.ruolo,
         "role": user.role,
         "is_dealer": True
     })
+
 
     return {"success": True, "team": risultato}
 
@@ -874,6 +886,8 @@ def update_team_member(
     member_to_update.nome = member_data.nome
     member_to_update.cognome = member_data.cognome
     member_to_update.cellulare = member_data.cellulare
+    member_to_update.ruolo = member_data.ruolo
+    member_to_update.avatar_url = member_data.avatar_url
 
     db.commit()
     db.refresh(member_to_update)
@@ -885,7 +899,9 @@ def update_team_member(
             "email": member_to_update.email,
             "nome": member_to_update.nome,
             "cognome": member_to_update.cognome,
-            "cellulare": member_to_update.cellulare
+            "cellulare": member_to_update.cellulare,
+            "ruolo": member_to_update.ruolo,
+            "avatar_url": member_to_update.avatar_url
         }
     }
 
