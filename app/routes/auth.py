@@ -364,8 +364,16 @@ def forgot_password(request: ForgotPasswordRequest, background_tasks: Background
     user.reset_token_expiration = expiration
     db.commit()
 
-    # Usa sempre admin_id=1 (SuperAdmin)
-    background_tasks.add_task(send_reset_email, 4, request.email, token)
+    # --- trova l'admin corretto ---
+    if user.role in ["admin", "superadmin"]:
+        admin_id = user.id
+    else:
+        admin_id = user.parent_id  # per dealer/dealer_team/admin_team
+
+    if not admin_id:
+        raise HTTPException(status_code=400, detail="Admin non trovato per questo utente")
+
+    background_tasks.add_task(send_reset_email, admin_id, request.email, token)
 
     return {"message": "Email inviata correttamente"}
 
