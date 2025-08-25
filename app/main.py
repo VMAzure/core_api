@@ -144,6 +144,10 @@ app.add_middleware(
         "https://azcore.it",       # 👈 AGGIUNGI ANCHE QUESTO SENZA WWW se usato
         "https://nlt.rent",
         "https://www.nlt.rent",
+        "https://www.scuderia76.it",
+        "https://scuderia76.it",
+        "https://www.gamma-auto.it",
+        "https://gamma-auto.it",
     ],
     allow_credentials=True,
     allow_methods=["*"],
