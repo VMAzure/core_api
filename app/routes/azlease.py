@@ -846,7 +846,6 @@ async def lista_usato_pubblico(
     slug: str,
     db: Session = Depends(get_db)
 ):
-    # recupero settings per slug
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
         raise HTTPException(404, f"Slug '{slug}' non trovato")
@@ -858,7 +857,6 @@ async def lista_usato_pubblico(
 
     admin_id = user.parent_id if user.role == "dealer" and user.parent_id else user.id
 
-    # prendo tutte le auto usate visibili per l'admin/dealer
     auto_query = db.execute(text("""
         SELECT 
             a.id AS id_auto,
@@ -885,7 +883,6 @@ async def lista_usato_pubblico(
     for row in auto_query:
         auto = dict(row._mapping)
 
-        # tutte le immagini
         immagini = db.execute(text("""
             SELECT id, foto AS foto_url, principale
             FROM azlease_usatoimg
@@ -893,9 +890,27 @@ async def lista_usato_pubblico(
             ORDER BY principale DESC
         """), {"id_auto": auto["id_auto"]}).fetchall()
 
-        # dettagli tecnici motornet
         dettagli = db.execute(text("""
-            SELECT alimentazione, cambio, potenza, segmento_descrizione, tipo_descrizione
+            SELECT 
+                alimentazione,
+                cambio,
+                trazione,
+                hp,
+                kw,
+                cilindrata,
+                descrizione_motore,
+                euro,
+                consumo_medio,
+                emissioni_co2,
+                segmento,
+                categoria,
+                tipo,
+                porte,
+                posti,
+                bagagliaio,
+                lunghezza,
+                larghezza,
+                altezza
             FROM mnet_dettagli_usato
             WHERE codice_motornet_uni = :codice
         """), {"codice": auto["codice_motornet"]}).fetchone()
@@ -907,6 +922,7 @@ async def lista_usato_pubblico(
         })
 
     return risultato
+
 
 
 @router.get("/usato-pubblico/{slug}/{id_auto}", tags=["Public AZLease"])
