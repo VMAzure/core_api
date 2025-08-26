@@ -841,7 +841,7 @@ def elimina_perizia_usato(
 
     return {"message": "Perizia eliminata correttamente"}
 
-@router.get("/usato-pubblico/{slug}")
+@router.get("/usato-pubblico/{slug}", tags=["Public AZLease"])
 async def lista_usato_pubblico(
     slug: str,
     db: Session = Depends(get_db)
@@ -880,7 +880,7 @@ async def lista_usato_pubblico(
     risultati = db.execute(text(query), {"admin_id": admin_id}).fetchall()
     return [dict(r._mapping) for r in risultati]
 
-@router.get("/usato-pubblico/{slug}/{id_auto}")
+@router.get("/usato-pubblico/{slug}/{id_auto}", tags=["Public AZLease"])
 async def dettaglio_usato_pubblico(
     slug: str,
     id_auto: str,
