@@ -925,6 +925,7 @@ async def foto_usato_pubblico(
     id_auto: str,
     db: Session = Depends(get_db)
 ):
+    # Recupera lo slug del dealer o admin
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
         raise HTTPException(404, f"Slug '{slug}' non trovato.")
@@ -934,16 +935,16 @@ async def foto_usato_pubblico(
     if not user:
         raise HTTPException(404, "Utente non trovato per questo slug.")
 
-    # ✅ verifica che l'auto appartenga a questo admin e sia visibile
+    # ✅ verifica che l'auto appartenga a questo dealer/admin e sia visibile
     auto = db.execute(text("""
         SELECT i.id
         FROM azlease_usatoauto a
         JOIN azlease_usatoin i ON i.id = a.id_usatoin
         WHERE a.id = :id_auto
-          AND i.admin_id = :admin_id
+          AND (i.admin_id = :user_id OR i.dealer_id = :user_id)
           AND i.visibile = TRUE
           AND i.venduto_da IS NULL
-    """), {"id_auto": id_auto, "admin_id": user.id}).fetchone()
+    """), {"id_auto": id_auto, "user_id": user.id}).fetchone()
 
     if not auto:
         raise HTTPException(404, "Auto non trovata o non visibile.")
@@ -962,3 +963,4 @@ async def foto_usato_pubblico(
             for i in immagini
         ]
     }
+
