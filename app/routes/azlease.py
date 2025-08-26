@@ -918,3 +918,47 @@ async def dettaglio_usato_pubblico(
         "immagini": [dict(i._mapping) for i in immagini],
         "dettagli": dict(dettagli._mapping) if dettagli else {}
     }
+
+@router.get("/usato-pubblico/{slug}/{id_auto}/foto", tags=["Public AZLease"])
+async def foto_usato_pubblico(
+    slug: str,
+    id_auto: str,
+    db: Session = Depends(get_db)
+):
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
+    if not settings:
+        raise HTTPException(404, f"Slug '{slug}' non trovato.")
+
+    user_id = settings.dealer_id or settings.admin_id
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Utente non trovato per questo slug.")
+
+    # ✅ verifica che l'auto appartenga a questo admin e sia visibile
+    auto = db.execute(text("""
+        SELECT i.id
+        FROM azlease_usatoauto a
+        JOIN azlease_usatoin i ON i.id = a.id_usatoin
+        WHERE a.id = :id_auto
+          AND i.admin_id = :admin_id
+          AND i.visibile = TRUE
+          AND i.venduto_da IS NULL
+    """), {"id_auto": id_auto, "admin_id": user.id}).fetchone()
+
+    if not auto:
+        raise HTTPException(404, "Auto non trovata o non visibile.")
+
+    immagini = db.execute(text("""
+        SELECT id, foto, principale
+        FROM azlease_usatoimg
+        WHERE auto_id = :id_auto
+        ORDER BY principale DESC
+    """), {"id_auto": id_auto}).fetchall()
+
+    return {
+        "auto_id": id_auto,
+        "immagini": [
+            {"id": i.id, "foto_url": i.foto, "principale": i.principale}
+            for i in immagini
+        ]
+    }
