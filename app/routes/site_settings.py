@@ -171,22 +171,39 @@ async def create_or_update_site_settings(
         ).first()
 
     # gestione slug
-    if not payload.slug:
-        payload.slug = generate_slug(current_user.ragione_sociale)
-        existing_slug = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == payload.slug).first()
-        counter = 1
-        base_slug = payload.slug
-        while existing_slug:
-            payload.slug = f"{base_slug}-{counter}"
-            existing_slug = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == payload.slug).first()
-            counter += 1
-    else:
-        slug_filter = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == payload.slug)
-        if settings:
-            slug_filter = slug_filter.filter(SiteAdminSettings.id != settings.id)
-        existing_slug = slug_filter.first()
-        if existing_slug:
-            raise HTTPException(status_code=409, detail="Slug già in uso")
+    if settings:  # record esistente
+        if payload.slug and payload.slug != settings.slug:
+            # utente vuole cambiare slug -> controlla unicità
+            existing_slug = db.query(SiteAdminSettings).filter(
+                SiteAdminSettings.slug == payload.slug,
+                SiteAdminSettings.id != settings.id
+            ).first()
+            if existing_slug:
+                raise HTTPException(status_code=409, detail="Slug già in uso")
+            settings.slug = payload.slug  # assegna nuovo slug
+        # se payload.slug è vuoto o uguale, non toccare lo slug esistente
+    else:  # nuovo record
+        if not payload.slug:
+            # genera slug da ragione sociale
+            payload.slug = generate_slug(current_user.ragione_sociale)
+            existing_slug = db.query(SiteAdminSettings).filter(
+                SiteAdminSettings.slug == payload.slug
+            ).first()
+            counter = 1
+            base_slug = payload.slug
+            while existing_slug:
+                payload.slug = f"{base_slug}-{counter}"
+                existing_slug = db.query(SiteAdminSettings).filter(
+                    SiteAdminSettings.slug == payload.slug
+                ).first()
+                counter += 1
+        else:
+            # payload.slug già presente -> verifica unicità
+            existing_slug = db.query(SiteAdminSettings).filter(
+                SiteAdminSettings.slug == payload.slug
+            ).first()
+            if existing_slug:
+                raise HTTPException(status_code=409, detail="Slug già in uso")
 
     data = payload.dict(exclude_unset=True)
     if data.get("prov_vetrina") is None:
@@ -210,11 +227,11 @@ async def create_or_update_site_settings(
             )
         db.add(settings)
 
-
     db.commit()
     db.refresh(settings)
 
     return {"status": "success", "slug": settings.slug, "id": settings.id}
+
 
 
 if os.getenv("ENV") != "production":
