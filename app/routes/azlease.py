@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db, supabase_client, SUPABASE_URL
-from app.models import User, AZUsatoInsertRequest, AZLeaseQuotazioni
+from app.models import User, AZUsatoInsertRequest, AZLeaseQuotazioni, SiteAdminSettings
 from app.schemas import AutoUsataCreate
 from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
 import uuid
@@ -840,3 +840,81 @@ def elimina_perizia_usato(
     db.commit()
 
     return {"message": "Perizia eliminata correttamente"}
+
+@router.get("/usato-pubblico/{slug}")
+async def lista_usato_pubblico(
+    slug: str,
+    db: Session = Depends(get_db)
+):
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
+    if not settings:
+        raise HTTPException(404, f"Slug '{slug}' non trovato")
+
+    user_id = settings.dealer_id or settings.admin_id
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Utente non trovato per questo slug")
+
+    admin_id = user.parent_id if user.role == "dealer" and user.parent_id else user.id
+
+    query = """
+        SELECT 
+            a.id AS id_auto,
+            d.marca_nome AS marca,
+            d.allestimento,
+            a.anno_immatricolazione,
+            a.km_certificati,
+            a.colore,
+            i.prezzo_vendita,
+            i.iva_esposta,
+            img.foto AS foto_principale
+        FROM azlease_usatoauto a
+        JOIN azlease_usatoin i ON i.id = a.id_usatoin
+        LEFT JOIN mnet_dettagli_usato d ON d.codice_motornet_uni = a.codice_motornet
+        LEFT JOIN azlease_usatoimg img ON img.auto_id = a.id AND img.principale = TRUE
+        WHERE i.admin_id = :admin_id
+          AND i.visibile = TRUE
+          AND i.venduto_da IS NULL
+        ORDER BY i.data_inserimento DESC
+    """
+    risultati = db.execute(text(query), {"admin_id": admin_id}).fetchall()
+    return [dict(r._mapping) for r in risultati]
+
+@router.get("/usato-pubblico/{slug}/{id_auto}")
+async def dettaglio_usato_pubblico(
+    slug: str,
+    id_auto: str,
+    db: Session = Depends(get_db)
+):
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
+    if not settings:
+        raise HTTPException(404, f"Slug '{slug}' non trovato")
+
+    user_id = settings.dealer_id or settings.admin_id
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Utente non trovato per questo slug")
+
+    auto = db.execute(text("""
+        SELECT a.*, i.prezzo_vendita, i.iva_esposta, i.visibile
+        FROM azlease_usatoauto a
+        JOIN azlease_usatoin i ON i.id = a.id_usatoin
+        WHERE a.id = :id_auto AND i.visibile = TRUE AND i.venduto_da IS NULL
+    """), {"id_auto": id_auto}).fetchone()
+
+    if not auto:
+        raise HTTPException(404, "Auto non trovata o non visibile")
+
+    immagini = db.execute(text("""
+        SELECT foto, principale FROM azlease_usatoimg WHERE auto_id = :id_auto
+    """), {"id_auto": id_auto}).fetchall()
+
+    dettagli = db.execute(text("""
+        SELECT * FROM mnet_dettagli_usato WHERE codice_motornet_uni = :codice
+    """), {"codice": auto.codice_motornet}).fetchone()
+
+    return {
+        "auto": dict(auto._mapping),
+        "immagini": [dict(i._mapping) for i in immagini],
+        "dettagli": dict(dettagli._mapping) if dettagli else {}
+    }
