@@ -846,6 +846,7 @@ async def lista_usato_pubblico(
     slug: str,
     db: Session = Depends(get_db)
 ):
+    # recupero settings per slug
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
         raise HTTPException(404, f"Slug '{slug}' non trovato")
@@ -857,28 +858,56 @@ async def lista_usato_pubblico(
 
     admin_id = user.parent_id if user.role == "dealer" and user.parent_id else user.id
 
-    query = """
+    # prendo tutte le auto usate visibili per l'admin/dealer
+    auto_query = db.execute(text("""
         SELECT 
             a.id AS id_auto,
-            d.marca_nome AS marca,
-            d.allestimento,
             a.anno_immatricolazione,
             a.km_certificati,
             a.colore,
+            a.codice_motornet,
             i.prezzo_vendita,
             i.iva_esposta,
-            img.foto AS foto_principale
+            i.data_inserimento,
+            i.opzionato_da,
+            i.venduto_da,
+            d.marca_nome AS marca,
+            d.allestimento
         FROM azlease_usatoauto a
         JOIN azlease_usatoin i ON i.id = a.id_usatoin
         LEFT JOIN mnet_dettagli_usato d ON d.codice_motornet_uni = a.codice_motornet
-        LEFT JOIN azlease_usatoimg img ON img.auto_id = a.id AND img.principale = TRUE
         WHERE i.admin_id = :admin_id
           AND i.visibile = TRUE
-          AND i.venduto_da IS NULL
         ORDER BY i.data_inserimento DESC
-    """
-    risultati = db.execute(text(query), {"admin_id": admin_id}).fetchall()
-    return [dict(r._mapping) for r in risultati]
+    """), {"admin_id": admin_id}).fetchall()
+
+    risultato = []
+    for row in auto_query:
+        auto = dict(row._mapping)
+
+        # tutte le immagini
+        immagini = db.execute(text("""
+            SELECT id, foto AS foto_url, principale
+            FROM azlease_usatoimg
+            WHERE auto_id = :id_auto
+            ORDER BY principale DESC
+        """), {"id_auto": auto["id_auto"]}).fetchall()
+
+        # dettagli tecnici motornet
+        dettagli = db.execute(text("""
+            SELECT alimentazione, cambio, potenza, segmento_descrizione, tipo_descrizione
+            FROM mnet_dettagli_usato
+            WHERE codice_motornet_uni = :codice
+        """), {"codice": auto["codice_motornet"]}).fetchone()
+
+        risultato.append({
+            "auto": auto,
+            "immagini": [dict(img._mapping) for img in immagini],
+            "dettagli": dict(dettagli._mapping) if dettagli else {}
+        })
+
+    return risultato
+
 
 @router.get("/usato-pubblico/{slug}/{id_auto}", tags=["Public AZLease"])
 async def dettaglio_usato_pubblico(
