@@ -846,18 +846,17 @@ async def lista_usato_pubblico(
     slug: str,
     db: Session = Depends(get_db)
 ):
+    # 1) Resolve slug → settings
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
         raise HTTPException(404, f"Slug '{slug}' non trovato")
 
-    user_id = settings.dealer_id or settings.admin_id
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(404, "Utente non trovato per questo slug")
+    # 2) Deriva admin_id e, se presente, dealer_id
+    admin_id = settings.admin_id
+    dealer_id = settings.dealer_id  # None per siti "admin brand", valorizzato per siti dealer
 
-    admin_id = user.parent_id if user.role == "dealer" and user.parent_id else user.id
-
-    auto_query = db.execute(text("""
+    # 3) Query stock: sempre per admin, e se dealer_id è valorizzato filtra anche per dealer
+    sql = text("""
         SELECT 
             a.id AS id_auto,
             a.anno_immatricolazione,
@@ -876,41 +875,28 @@ async def lista_usato_pubblico(
         LEFT JOIN mnet_dettagli_usato d ON d.codice_motornet_uni = a.codice_motornet
         WHERE i.admin_id = :admin_id
           AND i.visibile = TRUE
+          AND (:dealer_id IS NULL OR i.dealer_id = :dealer_id)
         ORDER BY i.data_inserimento DESC
-    """), {"admin_id": admin_id}).fetchall()
+    """)
+    rows = db.execute(sql, {"admin_id": admin_id, "dealer_id": dealer_id}).fetchall()
 
     risultato = []
-    for row in auto_query:
+    for row in rows:
         auto = dict(row._mapping)
 
         immagini = db.execute(text("""
             SELECT id, foto AS foto_url, principale
             FROM azlease_usatoimg
             WHERE auto_id = :id_auto
-            ORDER BY principale DESC
+            ORDER BY principale DESC, id ASC
         """), {"id_auto": auto["id_auto"]}).fetchall()
 
         dettagli = db.execute(text("""
             SELECT 
-                alimentazione,
-                cambio,
-                trazione,
-                hp,
-                kw,
-                cilindrata,
-                descrizione_motore,
-                euro,
-                consumo_medio,
-                emissioni_co2,
-                segmento,
-                categoria,
-                tipo,
-                porte,
-                posti,
-                bagagliaio,
-                lunghezza,
-                larghezza,
-                altezza
+                alimentazione, cambio, trazione, hp, kw, cilindrata,
+                descrizione_motore, euro, consumo_medio, emissioni_co2,
+                segmento, categoria, tipo, porte, posti, bagagliaio,
+                lunghezza, larghezza, altezza
             FROM mnet_dettagli_usato
             WHERE codice_motornet_uni = :codice
         """), {"codice": auto["codice_motornet"]}).fetchone()
@@ -922,6 +908,7 @@ async def lista_usato_pubblico(
         })
 
     return risultato
+
 
 
 
