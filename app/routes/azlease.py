@@ -45,10 +45,12 @@ async def inserisci_auto_usata(
     db.execute(text("""
         INSERT INTO azlease_usatoin (
             id, dealer_id, admin_id, data_inserimento, data_ultima_modifica, prezzo_costo,
-            prezzo_vendita, visibile, opzionato_da, opzionato_il, venduto_da, venduto_il, iva_esposta
+            prezzo_vendita, visibile, opzionato_da, opzionato_il, venduto_da, venduto_il, iva_esposta,
+            descrizione
         ) VALUES (
             :id, :dealer_id, :admin_id, :inserimento, :modifica, :costo,
-            :vendita, :visibile, :opzionato_da, :opzionato_il, :venduto_da, :venduto_il, :iva_esposta
+            :vendita, :visibile, :opzionato_da, :opzionato_il, :venduto_da, :venduto_il, :iva_esposta,
+            :descrizione
         )
     """), {
         "id": str(usatoin_id),
@@ -63,9 +65,11 @@ async def inserisci_auto_usata(
         "opzionato_il": payload.opzionato_il,
         "venduto_da": payload.venduto_da,
         "venduto_il": payload.venduto_il,
-        "iva_esposta": payload.iva_esposta if hasattr(payload, "iva_esposta") else False
-
+        "iva_esposta": payload.iva_esposta if hasattr(payload, "iva_esposta") else False,
+        "descrizione": payload.descrizione or ""
     })
+                                      
+
 
     auto_id = uuid.uuid4()
     db.execute(text("""
