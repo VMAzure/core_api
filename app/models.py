@@ -770,12 +770,11 @@ class AZLeaseUsatoAuto(Base):
     descrizione_ultimo_intervento = Column(Text, nullable=True)
     codice_motornet = Column(Text, nullable=True)
     colore = Column(Text, nullable=True)
-    id_usatoin = Column(UUID(as_uuid=True), nullable=True)
 
-    usatoin = relationship(
-        "AZLeaseUsatoIn",
-        backref="auto_usate"
-    )
+    id_usatoin = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoin.id"), nullable=True)  # ✅ FIX
+
+    usatoin = relationship("AZLeaseUsatoIn", backref="auto_usate")
+
 
 class NltPreventiviTimeline(Base):
     __tablename__ = 'nlt_preventivi_timeline'
