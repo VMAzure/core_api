@@ -107,6 +107,72 @@ async def inserisci_auto_usata(
     }
 
 
+class DescrizioneInput(BaseModel):
+    descrizione: str
+
+@router.post("/usato/{id_auto}/descrizione", tags=["AZLease"])
+async def aggiorna_descrizione_usato(
+    id_auto: str,
+    payload: DescrizioneInput,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=403, detail="Utente non autorizzato")
+
+    result = db.execute(text("""
+        SELECT i.id, i.dealer_id, i.admin_id
+        FROM azlease_usatoauto a
+        JOIN azlease_usatoin i ON i.id = a.id_usatoin
+        WHERE a.id = :id_auto
+    """), {"id_auto": id_auto}).fetchone()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Auto non trovata")
+
+    is_owner = (
+        user.role.lower() in ["superadmin", "admin", "admin_team"]
+        or (is_dealer_user(user) and get_dealer_id(user) == result.dealer_id)
+    )
+
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Accesso negato")
+
+    db.execute(text("""
+        UPDATE azlease_usatoin
+        SET descrizione = :descrizione
+        WHERE id = :id_usatoin
+    """), {
+        "descrizione": payload.descrizione.strip(),
+        "id_usatoin": result.id
+    })
+
+    db.commit()
+    return {"success": True, "message": "Descrizione aggiornata correttamente"}
+
+@router.get("/usato-pubblico/{id_auto}/descrizione", tags=["Public AZLease"])
+async def get_descrizione_pubblica(id_auto: str, db: Session = Depends(get_db)):
+    result = db.execute(text("""
+        SELECT i.descrizione
+        FROM azlease_usatoauto a
+        JOIN azlease_usatoin i ON i.id = a.id_usatoin
+        WHERE a.id = :id_auto
+          AND i.visibile = TRUE
+          AND i.venduto_da IS NULL
+    """), {"id_auto": id_auto}).fetchone()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Auto non trovata o non visibile")
+
+    return {
+        "id_auto": id_auto,
+        "descrizione": result.descrizione or ""
+    }
+
+
 
 @router.post("/foto-usato", tags=["AZLease"])
 async def upload_foto_usato(
