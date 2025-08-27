@@ -7,6 +7,7 @@ import os
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 async def genera_descrizione_gpt(prompt: str, max_tokens: int = 300):
+    max_tokens = min(max_tokens, 1000)  # ⬅️ Limite soft lato backend
     try:
         response = await client.chat.completions.create(
             model="gpt-4o",
@@ -18,3 +19,4 @@ async def genera_descrizione_gpt(prompt: str, max_tokens: int = 300):
     except Exception as e:
         print("❌ GPT error:", e)
         raise HTTPException(status_code=500, detail="Errore generazione testo GPT.")
+
