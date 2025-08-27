@@ -846,17 +846,14 @@ async def lista_usato_pubblico(
     slug: str,
     db: Session = Depends(get_db)
 ):
-    # 1) Resolve slug → settings
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
         raise HTTPException(404, f"Slug '{slug}' non trovato")
 
-    # 2) Deriva admin_id e, se presente, dealer_id
     admin_id = settings.admin_id
-    dealer_id = settings.dealer_id  # None per siti "admin brand", valorizzato per siti dealer
+    dealer_id = settings.dealer_id  # None → admin brand
 
-    # 3) Query stock: sempre per admin, e se dealer_id è valorizzato filtra anche per dealer
-    sql = text("""
+    query = text("""
         SELECT 
             a.id AS id_auto,
             a.anno_immatricolazione,
@@ -878,7 +875,7 @@ async def lista_usato_pubblico(
           AND (:dealer_id IS NULL OR i.dealer_id = :dealer_id)
         ORDER BY i.data_inserimento DESC
     """)
-    rows = db.execute(sql, {"admin_id": admin_id, "dealer_id": dealer_id}).fetchall()
+    rows = db.execute(query, {"admin_id": admin_id, "dealer_id": dealer_id}).fetchall()
 
     risultato = []
     for row in rows:
@@ -908,7 +905,6 @@ async def lista_usato_pubblico(
         })
 
     return risultato
-
 
 
 
