@@ -932,12 +932,13 @@ async def lista_usato_pubblico(
             a.km_certificati,
             a.colore,
             a.codice_motornet,
+            a.cronologia_tagliandi,
             i.prezzo_vendita,
             i.iva_esposta,
             i.data_inserimento,
             i.opzionato_da,
             i.venduto_da,
-            i.dealer_id,                        -- 👈 per-auto
+            i.dealer_id,
             d.marca_nome AS marca,
             d.allestimento
         FROM azlease_usatoauto a
@@ -990,7 +991,11 @@ async def lista_usato_pubblico(
                 alimentazione, cambio, trazione, hp, kw, cilindrata,
                 descrizione_motore, euro, consumo_medio, emissioni_co2,
                 segmento, categoria, tipo, porte, posti, bagagliaio,
-                lunghezza, larghezza, altezza
+                lunghezza, larghezza, altezza,
+                velocita, accelerazione,
+                consumo_urbano, consumo_extraurbano,
+                emissioni_urbe, emissioni_extraurb,
+                neo_patentati
             FROM mnet_dettagli_usato
             WHERE codice_motornet_uni = :codice
         """), {"codice": auto["codice_motornet"]}).fetchone()
