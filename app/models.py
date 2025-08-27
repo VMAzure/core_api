@@ -382,7 +382,38 @@ class Danno(BaseModel):
     descrizione: str
  
 
+class AZLeaseUsatoIn(Base):
+    __tablename__ = "azlease_usatoin"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dealer_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
+    admin_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=False)
+
+    data_inserimento = Column(DateTime, nullable=False, default=func.now())
+    data_ultima_modifica = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
+
+    prezzo_costo = Column(Float, nullable=False)
+    prezzo_vendita = Column(Float, nullable=False)
+    visibile = Column(Boolean, nullable=False, default=True)
+
+    opzionato_da = Column(String, nullable=True)
+    opzionato_il = Column(String, nullable=True)
+    venduto_da = Column(String, nullable=True)
+    venduto_il = Column(String, nullable=True)
+
+    iva_esposta = Column(Boolean, nullable=False, default=False)
+    descrizione = Column(Text, nullable=False, default="")
+
+    # ✅ opzionale: relazioni
+    admin = relationship("User", foreign_keys=[admin_id])
+    dealer = relationship("User", foreign_keys=[dealer_id])
+
+
+
+
 class AZUsatoInsertRequest(BaseModel):
+
     targa: str
     anno_immatricolazione: int
     data_passaggio_proprieta: Optional[date]
@@ -403,6 +434,8 @@ class AZUsatoInsertRequest(BaseModel):
     venduto_il: Optional[str] = None
     visibile: Optional[bool] = True
     iva_esposta: Optional[bool] = False
+    descrizione: Optional[str] = ""
+
 
 
 class NltOfferte(Base):
@@ -738,6 +771,11 @@ class AZLeaseUsatoAuto(Base):
     codice_motornet = Column(Text, nullable=True)
     colore = Column(Text, nullable=True)
     id_usatoin = Column(UUID(as_uuid=True), nullable=True)
+
+    usatoin = relationship(
+        "AZLeaseUsatoIn",
+        backref="auto_usate"
+    )
 
 class NltPreventiviTimeline(Base):
     __tablename__ = 'nlt_preventivi_timeline'
