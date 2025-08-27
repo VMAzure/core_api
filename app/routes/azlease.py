@@ -901,7 +901,11 @@ async def lista_usato_pubblico(
         risultato.append({
             "auto": auto,
             "immagini": [dict(img._mapping) for img in immagini],
-            "dettagli": dict(dettagli._mapping) if dettagli else {}
+            "dettagli": dict(dettagli._mapping) if dettagli else {},
+            "dealer_id": dealer_id or admin_id,
+            "dealer_logo": settings.logo_web,
+            "dealer_nome": settings.meta_title,
+            "dealer_indirizzo": settings.contact_address
         })
 
     return risultato
