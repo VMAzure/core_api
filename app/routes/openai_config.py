@@ -31,30 +31,19 @@ async def genera_testo(
     if not user:
         raise HTTPException(status_code=403, detail="Utente non trovato")
 
-    if is_admin_user(user):
-        output = await genera_descrizione_gpt(payload.prompt, payload.max_tokens)
-        return {"success": True, "output": output}
+    is_dealer = is_dealer_user(user)
+    is_admin = is_admin_user(user)
 
-    if is_dealer_user(user):
-        servizio_attivo = (
-            db.query(PurchasedServices)
-            .join(Services, PurchasedServices.service_id == Services.id)
-            .filter(
-                Services.name == "GPT",
-                PurchasedServices.status == "attivo",
-                PurchasedServices.dealer_id == user.id
-            )
-            .first()
-        )
-
-        if not servizio_attivo:
-            raise HTTPException(status_code=403, detail="Servizio GPT non attivo")
-
+    # DEALER → verifica credito
+    if is_dealer:
         if user.credit is None or user.credit < GPT_COSTO_CREDITO:
             raise HTTPException(status_code=402, detail="Credito insufficiente")
 
-        output = await genera_descrizione_gpt(payload.prompt, payload.max_tokens)
+    # 🧠 Genera testo
+    output = await genera_descrizione_gpt(payload.prompt, payload.max_tokens)
 
+    # DEALER → scala credito + notifica
+    if is_dealer:
         user.credit -= GPT_COSTO_CREDITO
 
         db.add(CreditTransaction(
@@ -71,8 +60,7 @@ async def genera_testo(
             messaggio="Hai utilizzato 0.5 crediti per la generazione di un testo GPT."
         )
 
-        db.commit()
+    db.commit()
 
-        return {"success": True, "output": output}
+    return {"success": True, "output": output}
 
-    raise HTTPException(status_code=403, detail="Ruolo non supportato")
