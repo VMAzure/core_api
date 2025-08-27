@@ -846,14 +846,16 @@ async def lista_usato_pubblico(
     slug: str,
     db: Session = Depends(get_db)
 ):
+    # Settings del sito (admin o dealer)
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
         raise HTTPException(404, f"Slug '{slug}' non trovato")
 
     admin_id = settings.admin_id
-    dealer_id = settings.dealer_id  # None → admin brand
+    slug_dealer_id = settings.dealer_id  # None se brand admin
 
-    query = text("""
+    # Lista auto + dealer che le ha inserite
+    rows = db.execute(text("""
         SELECT 
             a.id AS id_auto,
             a.anno_immatricolazione,
@@ -865,6 +867,7 @@ async def lista_usato_pubblico(
             i.data_inserimento,
             i.opzionato_da,
             i.venduto_da,
+            i.dealer_id,                        -- 👈 per-auto
             d.marca_nome AS marca,
             d.allestimento
         FROM azlease_usatoauto a
@@ -874,8 +877,32 @@ async def lista_usato_pubblico(
           AND i.visibile = TRUE
           AND (:dealer_id IS NULL OR i.dealer_id = :dealer_id)
         ORDER BY i.data_inserimento DESC
-    """)
-    rows = db.execute(query, {"admin_id": admin_id, "dealer_id": dealer_id}).fetchall()
+    """), {"admin_id": admin_id, "dealer_id": slug_dealer_id}).fetchall()
+
+    # Prefetch settings per tutti i dealer coinvolti
+    dealer_ids = {r.dealer_id for r in rows if getattr(r, "dealer_id", None) is not None}
+    dealer_settings = {}
+    if dealer_ids:
+        q = (
+            db.query(SiteAdminSettings.dealer_id,
+                     SiteAdminSettings.logo_web,
+                     SiteAdminSettings.meta_title,
+                     SiteAdminSettings.contact_address)
+              .filter(SiteAdminSettings.dealer_id.in_(dealer_ids))
+        )
+        for r in q.all():
+            dealer_settings[r.dealer_id] = {
+                "logo": r.logo_web,
+                "nome": r.meta_title,
+                "indirizzo": r.contact_address,
+            }
+
+    # Fallback admin settings
+    admin_defaults = {
+        "logo": settings.logo_web,
+        "nome": settings.meta_title,
+        "indirizzo": settings.contact_address,
+    }
 
     risultato = []
     for row in rows:
@@ -898,17 +925,22 @@ async def lista_usato_pubblico(
             WHERE codice_motornet_uni = :codice
         """), {"codice": auto["codice_motornet"]}).fetchone()
 
+        # Dealer effettivo dell’auto o admin come fallback
+        auto_dealer_id = row.dealer_id if getattr(row, "dealer_id", None) is not None else None
+        info = dealer_settings.get(auto_dealer_id, admin_defaults)
+
         risultato.append({
             "auto": auto,
             "immagini": [dict(img._mapping) for img in immagini],
             "dettagli": dict(dettagli._mapping) if dettagli else {},
-            "dealer_id": dealer_id or admin_id,
-            "dealer_logo": settings.logo_web,
-            "dealer_nome": settings.meta_title,
-            "dealer_indirizzo": settings.contact_address
+            "dealer_id": auto_dealer_id or admin_id,
+            "dealer_logo": info["logo"],
+            "dealer_nome": info["nome"],
+            "dealer_indirizzo": info["indirizzo"],
         })
 
     return risultato
+
 
 
 
