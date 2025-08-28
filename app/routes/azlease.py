@@ -1018,24 +1018,31 @@ async def lista_usato_pubblico(
 
 
 
-
 @router.get("/usato-pubblico/{slug}/{id_auto}", tags=["Public AZLease"])
 async def dettaglio_usato_pubblico(
     slug: str,
     id_auto: str,
     db: Session = Depends(get_db)
 ):
+    # ✅ Recupera impostazioni sito
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
         raise HTTPException(404, f"Slug '{slug}' non trovato")
 
+    # ✅ Recupera utente (dealer o admin)
     user_id = settings.dealer_id or settings.admin_id
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "Utente non trovato per questo slug")
 
+    # ✅ Recupera dati auto con descrizione inclusa
     auto = db.execute(text("""
-        SELECT a.*, i.prezzo_vendita, i.iva_esposta, i.visibile
+        SELECT 
+            a.*, 
+            i.prezzo_vendita, 
+            i.iva_esposta, 
+            i.visibile,
+            i.descrizione
         FROM azlease_usatoauto a
         JOIN azlease_usatoin i ON i.id = a.id_usatoin
         WHERE a.id = :id_auto AND i.visibile = TRUE AND i.venduto_da IS NULL
@@ -1044,19 +1051,24 @@ async def dettaglio_usato_pubblico(
     if not auto:
         raise HTTPException(404, "Auto non trovata o non visibile")
 
+    # ✅ Recupera immagini
     immagini = db.execute(text("""
         SELECT foto, principale FROM azlease_usatoimg WHERE auto_id = :id_auto
     """), {"id_auto": id_auto}).fetchall()
 
+    # ✅ Recupera dettagli Motornet
     dettagli = db.execute(text("""
         SELECT * FROM mnet_dettagli_usato WHERE codice_motornet_uni = :codice
     """), {"codice": auto.codice_motornet}).fetchone()
 
+    # ✅ Response finale
     return {
         "auto": dict(auto._mapping),
+        "descrizione": auto.descrizione,
         "immagini": [dict(i._mapping) for i in immagini],
         "dettagli": dict(dettagli._mapping) if dettagli else {}
     }
+
 
 @router.get("/usato-pubblico/{slug}/{id_auto}/foto", tags=["Public AZLease"])
 async def foto_usato_pubblico(
