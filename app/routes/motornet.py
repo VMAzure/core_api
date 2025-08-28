@@ -670,6 +670,30 @@ async def get_tutti_modelli(db: Session = Depends(get_db)):
         for modello in modelli
     ]
 
+@router_usato.get("/accessori-pubblico", tags=["MNet Pubblico"])
+async def get_accessori_usato_pubblico(
+    codice_motornet: str = Query(...),
+    anno: int = Query(...),
+    mese: int = Query(...),
+):
+    """Accessori usato (Motornet) pubblici senza JWT"""
+    token = get_motornet_token()
+
+    headers = { "Authorization": f"Bearer {token}" }
+
+    motornet_url = (
+        f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/accessori"
+        f"?codice_motornet_uni={codice_motornet}"
+        f"&anno={anno}"
+        f"&mese={mese}"
+    )
+
+    response = requests.get(motornet_url, headers=headers)
+
+    if response.status_code == 200:
+        return response.json()
+
+    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero degli accessori del veicolo")
 
 
 
