@@ -808,16 +808,6 @@ class AutousatoAccessoriOptional(Base):
         back_populates="optional"
     )
 
-class AutousatoColori(Base):
-    __tablename__ = "autousato_colori"
-    __table_args__ = {"schema": "public"}
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    codice_motornet = Column(String, index=True, nullable=False)
-    descrizione = Column(String, nullable=False)
-    tipo = Column(String, nullable=True)   # Metallizzato, Pastello, etc.
-    prezzo = Column(Numeric(10, 2), nullable=True)
-
 class AutousatoAccessoriPacchetti(Base):
     __tablename__ = "autousato_accessori_pacchetti"
     __table_args__ = {"schema": "public"}

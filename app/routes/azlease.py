@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db, supabase_client, SUPABASE_URL
-from app.models import User, AZUsatoInsertRequest, AZLeaseQuotazioni, SiteAdminSettings
+from app.models import AZLeaseUsatoAuto, User, AZUsatoInsertRequest, AZLeaseQuotazioni, SiteAdminSettings
 from app.schemas import AutoUsataCreate
 from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
 import uuid
@@ -15,6 +15,10 @@ from typing import Optional
 from pydantic import BaseModel
 from app.routes.auth import get_current_user  # la funzione che decodifica JWT
 from typing import List
+import uuid
+from uuid import UUID
+from app.routes.motornet import get_motornet_token  # ✅ importa la funzione dove definita
+
 
 def get_descrizione_safe(val):
     return val.get("descrizione") if isinstance(val, dict) else val
@@ -74,18 +78,21 @@ async def inserisci_auto_usata(
     auto_id = uuid.uuid4()
     db.execute(text("""
         INSERT INTO azlease_usatoauto (
-            id, targa, anno_immatricolazione, data_passaggio_proprieta, km_certificati,
-            data_ultimo_intervento, descrizione_ultimo_intervento, cronologia_tagliandi, doppie_chiavi,
-            codice_motornet, colore, id_usatoin
-        ) VALUES (
-            :id, :targa, :anno, :passaggio, :km,
-            :intervento_data, :intervento_desc, :tagliandi, :chiavi,
-            :codice, :colore, :usatoin_id
+            id, targa, anno_immatricolazione, mese_immatricolazione, data_passaggio_proprieta,
+            km_certificati, data_ultimo_intervento, descrizione_ultimo_intervento,
+            cronologia_tagliandi, doppie_chiavi, codice_motornet, colore, id_usatoin
         )
+        VALUES (
+            :id, :targa, :anno, :mese, :passaggio,
+            :km, :intervento_data, :intervento_desc,
+            :tagliandi, :chiavi, :codice, :colore, :usatoin_id
+        )
+
     """), {
         "id": str(auto_id),
         "targa": payload.targa,
         "anno": payload.anno_immatricolazione,
+        "mese": getattr(payload, "mese_immatricolazione", None),
         "passaggio": payload.data_passaggio_proprieta,
         "km": payload.km_certificati,
         "intervento_data": payload.data_ultimo_intervento,
@@ -106,6 +113,176 @@ async def inserisci_auto_usata(
         "id_inserimento": str(usatoin_id)
     }
 
+class AccessorioColore(BaseModel):
+    descrizione: str
+    tipo: Optional[str] = None
+    prezzo: Optional[float] = None
+
+class AZAccessoriInsertRequest(BaseModel):
+    id_auto: UUID
+    codice_motornet: str
+    anno: int
+    mese: int
+
+@router.post("/usato/accessori-popola", tags=["AZLease"])
+async def popola_accessori_usato(
+    payload: AZAccessoriInsertRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    # 🔒 JWT + ruolo
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user or not (is_admin_user(user) or is_dealer_user(user)):
+        raise HTTPException(status_code=403, detail="Accesso negato")
+
+    # 🔍 Verifica auto esistente
+    auto = db.query(AZLeaseUsatoAuto).filter_by(id=payload.id_auto).first()
+    if not auto:
+        raise HTTPException(status_code=404, detail="Auto non trovata")
+
+    # 🔁 Fetch da Motornet
+    try:
+        token = get_motornet_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        url = (
+            "https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/accessori"
+            f"?codice_motornet_uni={payload.codice_motornet}&anno={payload.anno}&mese={payload.mese}"
+        )
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore chiamata Motornet: {str(e)}")
+
+    # ⛔️ Svuota precedenti (eventuale reinvocazione)
+    db.execute(text("DELETE FROM public.autousato_accessori_serie WHERE id_auto = :id"), {"id": str(payload.id_auto)})
+    db.execute(text("DELETE FROM public.autousato_accessori_optional WHERE id_auto = :id"), {"id": str(payload.id_auto)})
+    db.execute(text("DELETE FROM public.autousato_accessori_pacchetti WHERE id_auto = :id"), {"id": str(payload.id_auto)})
+
+    # ✅ Serie
+    for acc in data.get("serie", []):
+        db.execute(text("""
+            INSERT INTO public.autousato_accessori_serie (id, id_auto, codice, descrizione, macrogruppo)
+            VALUES (:id, :auto, :codice, :descrizione, :gruppo)
+        """), {
+            "id": str(uuid.uuid4()),
+            "auto": str(payload.id_auto),
+            "codice": acc.get("codice"),
+            "descrizione": acc.get("descrizione"),
+            "gruppo": acc.get("macrogruppo")
+        })
+
+    # ✅ Optional
+    for acc in data.get("optionals", []):
+        db.execute(text("""
+            INSERT INTO public.autousato_accessori_optional (id, id_auto, codice, descrizione, prezzo, presente, macrogruppo)
+            VALUES (:id, :auto, :codice, :descrizione, :prezzo, false, :gruppo)
+        """), {
+            "id": str(uuid.uuid4()),
+            "auto": str(payload.id_auto),
+            "codice": acc.get("codice"),
+            "descrizione": acc.get("descrizione"),
+            "prezzo": acc.get("prezzoSvalutato"),
+            "gruppo": acc.get("macrogruppo")
+        })
+
+    # ✅ Pacchetti
+    for pac in data.get("pacchetti", []):
+        db.execute(text("""
+            INSERT INTO public.autousato_accessori_pacchetti (id, id_auto, descrizione, prezzo)
+            VALUES (:id, :auto, :descrizione, :prezzo)
+        """), {
+            "id": str(uuid.uuid4()),
+            "auto": str(payload.id_auto),
+            "descrizione": pac.get("descrizione"),
+            "prezzo": pac.get("prezzoSvalutato")
+        })
+
+    
+
+    db.commit()
+    return {"message": "Accessori e colori salvati correttamente"}
+
+@router.put("/usato/optional/{id_optional}", tags=["AZLease"])
+async def aggiorna_optional_accessorio(
+    id_optional: UUID,
+    presente: bool,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    # 🔐 Verifica autenticazione
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user or not (is_admin_user(user) or is_dealer_user(user)):
+        raise HTTPException(status_code=403, detail="Accesso non autorizzato")
+
+    # ✅ Verifica accessorio esistente
+    result = db.execute(text("""
+        SELECT id FROM public.autousato_accessori_optional
+        WHERE id = :id
+    """), {"id": str(id_optional)}).fetchone()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Accessorio non trovato")
+
+    # 🔁 Aggiorna campo
+    db.execute(text("""
+        UPDATE public.autousato_accessori_optional
+        SET presente = :presente
+        WHERE id = :id
+    """), {
+        "id": str(id_optional),
+        "presente": presente
+    })
+
+    db.commit()
+    return {"message": "Accessorio aggiornato", "id": str(id_optional), "presente": presente}
+
+@router.get("/public/usato/{id_auto}/dettagli-attivi", tags=["AZLease - Pubblico"])
+async def get_dettaglio_attivo_pubblico(
+    id_auto: UUID,
+    db: Session = Depends(get_db)
+):
+    auto = db.execute(text("""
+        SELECT * FROM public.azlease_usatoauto WHERE id = :id
+    """), {"id": str(id_auto)}).mappings().first()
+
+    if not auto:
+        raise HTTPException(status_code=404, detail="Auto non trovata")
+
+    accessori_serie = db.execute(text("""
+        SELECT codice, descrizione, macrogruppo
+        FROM public.autousato_accessori_serie
+        WHERE id_auto = :id
+        ORDER BY descrizione
+    """), {"id": str(id_auto)}).fetchall()
+
+    accessori_optional = db.execute(text("""
+        SELECT id, codice, descrizione, macrogruppo, prezzo
+        FROM public.autousato_accessori_optional
+        WHERE id_auto = :id AND presente = true
+        ORDER BY descrizione
+    """), {"id": str(id_auto)}).fetchall()
+
+    pacchetti = db.execute(text("""
+        SELECT descrizione, prezzo
+        FROM public.autousato_accessori_pacchetti
+        WHERE id_auto = :id
+        ORDER BY descrizione
+    """), {"id": str(id_auto)}).fetchall()
+
+    return {
+        "auto": dict(auto),
+        "colore": auto["colore"],
+        "accessori_serie": [dict(row) for row in accessori_serie],
+        "accessori_optional": [dict(row) for row in accessori_optional],
+        "pacchetti": [dict(row) for row in pacchetti]
+    }
 
 class DescrizioneInput(BaseModel):
     descrizione: str
