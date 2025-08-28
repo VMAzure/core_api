@@ -9,6 +9,8 @@ from app.models import User, MnetModelli, MnetMarcaUsato, MnetModelloUsato
 from datetime import datetime
 import httpx
 from app.utils.modelli import pulisci_modello
+from fastapi import Query
+
 
 router_generic = APIRouter()
 router_usato = APIRouter(prefix="/usato/motornet")
@@ -96,13 +98,19 @@ async def get_marche_usato(
 
 @router_usato.get("/marche-pubblico", tags=["MNet Pubblico"])
 async def get_marche_usato_pubblico(
+    acronimo: str = Query(None, description="Filtro opzionale per acronimo marca"),
     db: Session = Depends(get_db)
 ):
-    marche = db.query(
+    query = db.query(
         MnetMarcaUsato.acronimo,
         MnetMarcaUsato.nome,
         MnetMarcaUsato.logo
-    ).order_by(MnetMarcaUsato.nome).all()
+    )
+
+    if acronimo:
+        query = query.filter(MnetMarcaUsato.acronimo == acronimo.upper())
+
+    marche = query.order_by(MnetMarcaUsato.nome).all()
 
     return [
         {
