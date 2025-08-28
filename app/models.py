@@ -770,10 +770,76 @@ class AZLeaseUsatoAuto(Base):
     descrizione_ultimo_intervento = Column(Text, nullable=True)
     codice_motornet = Column(Text, nullable=True)
     colore = Column(Text, nullable=True)
+    mese_immatricolazione = Column(SmallInteger, nullable=True)  # valori 1–12
 
     id_usatoin = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoin.id"), nullable=True)  # ✅ FIX
 
     usatoin = relationship("AZLeaseUsatoIn", backref="auto_usate")
+
+class AutousatoAccessoriSerie(Base):
+    __tablename__ = "autousato_accessori_serie"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_auto = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoauto.id"), nullable=False)
+    codice = Column(String, nullable=True)
+    descrizione = Column(Text, nullable=False)
+    macrogruppo = Column(String, nullable=True)
+
+    auto = relationship("AZLeaseUsatoAuto", backref="accessori_serie")
+
+class AutousatoAccessoriOptional(Base):
+    __tablename__ = "autousato_accessori_optional"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_auto = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoauto.id"), nullable=False)
+    codice = Column(String, nullable=True)
+    descrizione = Column(Text, nullable=False)
+    prezzo = Column(Numeric(10, 2), nullable=True)
+    presente = Column(Boolean, default=False)
+    macrogruppo = Column(String, nullable=True)
+
+    auto = relationship("AZLeaseUsatoAuto", backref="accessori_optional")
+
+    pacchetti = relationship(
+        "AutousatoAccessoriPacchetti",
+        secondary="public.autousato_pacchetto_optional",
+        back_populates="optional"
+    )
+
+class AutousatoColori(Base):
+    __tablename__ = "autousato_colori"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    codice_motornet = Column(String, index=True, nullable=False)
+    descrizione = Column(String, nullable=False)
+    tipo = Column(String, nullable=True)   # Metallizzato, Pastello, etc.
+    prezzo = Column(Numeric(10, 2), nullable=True)
+
+class AutousatoAccessoriPacchetti(Base):
+    __tablename__ = "autousato_accessori_pacchetti"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_auto = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoauto.id", ondelete="CASCADE"), nullable=False)
+    descrizione = Column(Text, nullable=False)
+    prezzo = Column(Numeric(10, 2))
+
+    optional = relationship(
+        "AutousatoAccessoriOptional",
+        secondary="public.autousato_pacchetto_optional",
+        back_populates="pacchetti"
+    )
+
+
+class AutousatoPacchettoOptional(Base):
+    __tablename__ = "autousato_pacchetto_optional"
+    __table_args__ = {"schema": "public"}
+
+    id_pacchetto = Column(UUID(as_uuid=True), ForeignKey("public.autousato_accessori_pacchetti.id", ondelete="CASCADE"), primary_key=True)
+    id_optional = Column(UUID(as_uuid=True), ForeignKey("public.autousato_accessori_optional.id", ondelete="CASCADE"), primary_key=True)
 
 
 class NltPreventiviTimeline(Base):
