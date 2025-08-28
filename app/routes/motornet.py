@@ -94,6 +94,24 @@ async def get_marche_usato(
         } for row in marche
     ]
 
+@router_usato.get("/marche-pubblico", tags=["MNet Pubblico"])
+async def get_marche_usato_pubblico(
+    db: Session = Depends(get_db)
+):
+    marche = db.query(
+        MnetMarcaUsato.acronimo,
+        MnetMarcaUsato.nome,
+        MnetMarcaUsato.logo
+    ).order_by(MnetMarcaUsato.nome).all()
+
+    return [
+        {
+            "acronimo": row.acronimo,
+            "nome": row.nome,
+            "logo": row.logo
+        } for row in marche
+    ]
+
 
 @router_usato.get("/modelli/{codice_marca}", tags=["Usato"])
 async def get_modelli_usato(
