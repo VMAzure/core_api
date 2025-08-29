@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func, SmallInteger, Boolean, Numeric, Date, TIMESTAMP, text
+from sqlalchemy import UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime, date, timedelta
 from passlib.context import CryptContext
@@ -1290,5 +1291,45 @@ class Notifica(Base):
         foreign_keys=[tipo_id],
         primaryjoin=lambda: NotificaType.id == Notifica.tipo_id
     )
+
+# --- Nuovo modello: AutousatoVideo ------------------------------------------
+
+class AutousatoVideo(Base):
+    __tablename__ = "autousato_videos"
+    __table_args__ = (
+        {"schema": "public"},
+        UniqueConstraint("id_auto", "video_id", name="autousato_videos_auto_vid_uniq"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_auto = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoauto.id", ondelete="CASCADE"), nullable=False)
+
+    # YouTube
+    video_id = Column(String, nullable=False)          # es. "DmjIvb1c48E"
+    title = Column(Text, nullable=True)
+    channel_title = Column(Text, nullable=True)
+    published_at = Column(DateTime, nullable=True)
+    duration_sec = Column(Integer, nullable=True)
+    embeddable = Column(Boolean, nullable=False, default=True)
+    view_count = Column(BigInteger, nullable=True)
+
+    # Ranking e tracciamento
+    rank_score = Column(Numeric(6, 2), nullable=False, default=0)
+    source_query = Column(Text, nullable=True)
+    is_pinned = Column(Boolean, nullable=False, default=False)
+    is_blacklisted = Column(Boolean, nullable=False, default=False)
+    checked_at = Column(DateTime, nullable=False, default=func.now())
+    error_count = Column(SmallInteger, nullable=False, default=0)
+    last_error = Column(Text, nullable=True)
+
+    auto = relationship("AZLeaseUsatoAuto", backref="videos")
+
+# indice parziale: un solo pinned per auto
+Index(
+    "ux_av_one_pinned_per_auto",
+    AutousatoVideo.id_auto,
+    unique=True,
+    postgresql_where=(AutousatoVideo.is_pinned.is_(True))
+)
 
 
