@@ -341,8 +341,9 @@ async def get_dettaglio_attivo_pubblico(
     pacchetti = db.execute(text("""
         SELECT descrizione, prezzo
         FROM public.autousato_accessori_pacchetti
-        WHERE id_auto = :id
+        WHERE id_auto = :id AND presente = true
         ORDER BY descrizione
+
     """), {"id": str(id_auto)}).mappings().all()
 
 
