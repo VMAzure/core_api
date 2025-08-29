@@ -19,6 +19,13 @@ import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
 
+from app.utils.video_jobs import (
+    video_daily_batch,
+    video_revalidate_existing,
+    video_weekly_sweep,
+)
+
+
 
 # Configurazione dei log
 logging.basicConfig(filename="cron_job.log", level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -234,4 +241,10 @@ scheduler.add_job(aggiorna_rating_convenienza_job, 'cron', hour=3, minute=30)
 
 # Ogni martedì alle 01:00 → sync completo usato, solo se ci sono modelli
 scheduler.add_job(aggiorna_usato_settimanale, 'cron', day_of_week='tue', hour=1, minute=0)
+
+# Video jobs
+scheduler.add_job(video_revalidate_existing, 'cron', hour=2,  minute=45)   # daily light
+scheduler.add_job(video_daily_batch,       'cron', hour=5,  minute=20)   # daily search
+scheduler.add_job(video_weekly_sweep,      'cron', day_of_week='sun', hour=5, minute=40)  # weekly
+
 

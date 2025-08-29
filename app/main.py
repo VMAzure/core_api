@@ -58,8 +58,6 @@ from app.routes.notifiche import router as notifiche_router
 from app.routes.videos import router as videos_router
 
 
-
-
 # ✅ Configuriamo il logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
 logger = logging.getLogger("uvicorn")
@@ -80,6 +78,13 @@ app = FastAPI(title="CORE API", version="1.0")
 def start_cron_job():
     scheduler.start()
     print("✅ Cron job APScheduler avviato!")
+
+@app.on_event("shutdown")
+def stop_cron_job():
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
+        print("🛑 APScheduler fermato")
+
 
 # ✅ Configurazione dello schema di autenticazione Bearer per Swagger UI
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
