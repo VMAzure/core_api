@@ -192,19 +192,52 @@ async def popola_accessori_usato(
     # ✅ Pacchetti
     for pac in data.get("pacchetti", []):
         db.execute(text("""
-            INSERT INTO public.autousato_accessori_pacchetti (id, id_auto, descrizione, prezzo)
-            VALUES (:id, :auto, :descrizione, :prezzo)
+            INSERT INTO public.autousato_accessori_pacchetti
+                (id, id_auto, codice, descrizione, prezzo, presente)
+            VALUES (:id, :auto, :codice, :descrizione, :prezzo, false)
         """), {
             "id": str(uuid.uuid4()),
             "auto": str(payload.id_auto),
+            "codice": pac.get("codice"),                         # 👈 nuovo
             "descrizione": pac.get("descrizione"),
-            "prezzo": pac.get("prezzoSvalutato")
+            "prezzo": pac.get("prezzoSvalutato"),
         })
+
 
     
 
     db.commit()
     return {"message": "Accessori e colori salvati correttamente"}
+
+
+class PacchettiBatchSet(BaseModel):
+    id_auto: UUID
+    codici_true: List[str] = []
+    codici_false: List[str] = []
+
+
+@router.post("/usato/pacchetti/batch-set", tags=["AZLease"])
+async def batch_set_pacchetti(data: PacchettiBatchSet, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    Authorize.jwt_required()
+    # ...controlli ruolo...
+
+    if data.codici_true:
+        db.execute(text("""
+            UPDATE public.autousato_accessori_pacchetti
+            SET presente = TRUE
+            WHERE id_auto = :id_auto AND codice = ANY(:codes)
+        """), {"id_auto": str(data.id_auto), "codes": data.codici_true})
+
+    if data.codici_false:
+        db.execute(text("""
+            UPDATE public.autousato_accessori_pacchetti
+            SET presente = FALSE
+            WHERE id_auto = :id_auto AND codice = ANY(:codes)
+        """), {"id_auto": str(data.id_auto), "codes": data.codici_false})
+
+    db.commit()
+    return {"success": True}
+
 
 @router.put("/usato/optional/{id_optional}", tags=["AZLease"])
 async def aggiorna_optional_accessorio(

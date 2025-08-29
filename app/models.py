@@ -813,9 +813,13 @@ class AutousatoAccessoriPacchetti(Base):
     __table_args__ = {"schema": "public"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    id_auto = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoauto.id", ondelete="CASCADE"), nullable=False)
+    id_auto = Column(UUID(as_uuid=True),
+                     ForeignKey("public.azlease_usatoauto.id", ondelete="CASCADE"),
+                     nullable=False)
+    codice = Column(String(32), nullable=True)                     # 👈 nuovo
     descrizione = Column(Text, nullable=False)
     prezzo = Column(Numeric(10, 2))
+    presente = Column(Boolean, nullable=False, default=False, server_default="false")
 
     optional = relationship(
         "AutousatoAccessoriOptional",
