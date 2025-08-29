@@ -1106,6 +1106,7 @@ class NltOfferteRating(Base):
 
 
 class MnetMarcaUsato(Base):
+    __table_args__ = {"schema": "public"}
     __tablename__ = "mnet_marche_usato"
     acronimo = Column(String, primary_key=True)
     nome = Column(String, nullable=False)
@@ -1115,6 +1116,7 @@ class MnetMarcaUsato(Base):
 
 
 class MnetModelloUsato(Base):
+    __table_args__ = {"schema": "public"}
     __tablename__ = "mnet_modelli_usato"
 
     marca_acronimo = Column(String, primary_key=True)
@@ -1135,7 +1137,10 @@ class MnetModelloUsato(Base):
 
 
 class MnetAllestimentoUsato(Base):
+    __table_args__ = {"schema": "public"}
+    
     __tablename__ = "mnet_allestimenti_usato"
+
     codice_motornet_uni = Column(String, primary_key=True)
     acronimo_marca = Column(String)
     codice_desc_modello = Column(String, ForeignKey("mnet_modelli_usato.codice_desc_modello", ondelete="CASCADE"))
@@ -1151,6 +1156,7 @@ from sqlalchemy import Column, String, Integer, Float, Boolean, Date
 
 
 class MnetDettaglioUsato(Base):
+    __table_args__ = {"schema": "public"}
     __tablename__ = "mnet_dettagli_usato"
 
     codice_motornet_uni = Column(String, primary_key=True)
