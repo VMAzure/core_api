@@ -243,6 +243,40 @@ async def aggiorna_optional_accessorio(
     db.commit()
     return {"message": "Accessorio aggiornato", "id": str(id_optional), "presente": presente}
 
+# NEW
+class OptionalBatchSet(BaseModel):
+    id_auto: UUID
+    codici_true: List[str] = []     # codici Motornet da impostare presente=true
+    codici_false: List[str] = []    # opzionale: da forzare a false
+
+@router.post("/usato/optional/batch-set", tags=["AZLease"])
+async def batch_set_optional(
+    data: OptionalBatchSet,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    # sicurezza come nelle altre rotte...
+
+    # set true
+    if data.codici_true:
+        db.execute(text("""
+            UPDATE public.autousato_accessori_optional
+            SET presente = TRUE
+            WHERE id_auto = :id_auto AND codice = ANY(:codici_true)
+        """), {"id_auto": str(data.id_auto), "codici_true": data.codici_true})
+
+    # set false (facoltativo)
+    if data.codici_false:
+        db.execute(text("""
+            UPDATE public.autousato_accessori_optional
+            SET presente = FALSE
+            WHERE id_auto = :id_auto AND codice = ANY(:codici_false)
+        """), {"id_auto": str(data.id_auto), "codici_false": data.codici_false})
+
+    db.commit()
+    return {"success": True}
+
 @router.get("/public/usato/{id_auto}/dettagli-attivi", tags=["AZLease - Pubblico"])
 async def get_dettaglio_attivo_pubblico(
     id_auto: UUID,
