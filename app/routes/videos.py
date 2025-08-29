@@ -28,8 +28,21 @@ VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
 _BLOCK_RE = re.compile(r"(assetto corsa|forza horizon|gran turismo|gt7|gameplay|simulator)", re.I)
 _SOUND_RE = re.compile(r"(sound|exhaust|scarico|pov)", re.I)
 _WHITELIST = {
-    "Automoto.it", "Motor1 Italia", "Quattroruote", "DriveK Italia", "AlVolante", "HDMotori",
+    "Automoto.it", "Motor1 Italia", "Quattroruote", "HDmotori", "AlVolante", "OmniAuto.it"
 }
+
+def _lang_bonus(lang: str | None) -> float:
+    if not lang:
+        return 0.0
+    L = lang.lower()
+    return 0.6 if L.startswith("it") else -0.6
+
+def _to_utc_z(dt: datetime | None) -> str | None:
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 def _iso8601_to_seconds(dur: str) -> int:
     if not dur:
@@ -135,7 +148,8 @@ def get_public_videos(id_auto: str, db: Session = Depends(get_db), limit: int = 
     if not auto:
         raise HTTPException(status_code=404, detail="Auto non trovata")
 
-    q = (
+    # prendi una rosa ampia per applicare cap per canale
+    rows = (
         db.query(AutousatoVideo)
         .filter(
             AutousatoVideo.id_auto == id_auto,
@@ -147,24 +161,41 @@ def get_public_videos(id_auto: str, db: Session = Depends(get_db), limit: int = 
             AutousatoVideo.rank_score.desc(),
             AutousatoVideo.published_at.desc().nullslast(),
         )
-        .limit(limit)
+        .limit(30)
         .all()
     )
 
-    def to_out(v: AutousatoVideo) -> Dict[str, Any]:
+    picked, seen = [], set()
+    for v in rows:
+        ch = (v.channel_title or "").strip()
+        if v.is_pinned or ch not in seen:
+            picked.append(v)
+            seen.add(ch)
+        if len(picked) >= limit:
+            break
+    if len(picked) < limit:
+        for v in rows:
+            if v in picked:
+                continue
+            picked.append(v)
+            if len(picked) >= limit:
+                break
+
+    def to_out(v: AutousatoVideo):
         vid = v.video_id
         return {
             "videoId": vid,
             "title": v.title,
             "channel": v.channel_title,
-            "publishedAt": v.published_at.isoformat() if v.published_at else None,
+            "publishedAt": _to_utc_z(v.published_at),
             "durationSec": v.duration_sec,
             "thumbnail": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
             "embedUrl": f"https://www.youtube-nocookie.com/embed/{vid}",
             "pinned": v.is_pinned,
         }
 
-    return {"videos": [to_out(v) for v in q]}
+    return {"videos": [to_out(v) for v in picked]}
+
 
 @router.post("/admin/usato/{id_auto}/videos/refresh", status_code=status.HTTP_200_OK)
 async def refresh_videos(
@@ -240,22 +271,26 @@ async def refresh_videos(
                 st = v.get("status", {})
                 cd = v.get("contentDetails", {})
                 stats = v.get("statistics", {})
-                title = sn.get("title", "")
-                channel = sn.get("channelTitle", "")
                 if sn.get("liveBroadcastContent") != "none":
                     continue
                 if st.get("madeForKids") is True:
                     continue
                 if not st.get("embeddable", False):
                     continue
-                if _BLOCK_RE.search(title or ""):
+
+                title   = sn.get("title", "") or ""
+                channel = sn.get("channelTitle", "") or ""
+                ch_id   = sn.get("channelId")
+                if _BLOCK_RE.search(title):
                     continue
 
                 dur_sec = _iso8601_to_seconds(cd.get("duration", "PT0S"))
                 if dur_sec > 45 * 60:
                     continue
 
-                views = int(stats.get("viewCount", "0") or 0)
+                views   = int(stats.get("viewCount", "0") or 0)
+                lang    = sn.get("defaultAudioLanguage") or sn.get("defaultLanguage")
+
                 needles = [marca, modello, allest, str(auto.anno_immatricolazione or "")]
                 score = (
                     _title_score(title, needles)
@@ -263,18 +298,22 @@ async def refresh_videos(
                     + _views_bonus(views)
                     + _duration_bonus(dur_sec, title)
                     + _whitelist_bonus(channel)
+                    + _lang_bonus(lang)
                 )
 
                 results.append({
                     "videoId": v["id"],
                     "title": title,
                     "channel": channel,
+                    "channelId": ch_id,
                     "publishedAt": sn.get("publishedAt"),
                     "durationSec": dur_sec,
                     "embeddable": True,
                     "viewCount": views,
                     "rankScore": round(score, 2),
+                    "audioLang": lang,
                 })
+
 
     # Upsert in DB (rispetta pinned/blacklist)
     inserted = updated = 0
@@ -286,33 +325,37 @@ async def refresh_videos(
             .first()
         )
         if not existing:
-            v = AutousatoVideo(
+            vrow = AutousatoVideo(
                 id_auto=id_auto,
                 video_id=item["videoId"],
                 title=item["title"],
                 channel_title=item["channel"],
+                channel_id=item.get("channelId"),
                 published_at=datetime.fromisoformat(item["publishedAt"].replace("Z", "+00:00")) if item["publishedAt"] else None,
                 duration_sec=item["durationSec"],
                 embeddable=item["embeddable"],
                 view_count=item["viewCount"],
                 rank_score=item["rankScore"],
                 source_query="; ".join(queries)[:1000],
+                audio_lang=item.get("audioLang"),
                 checked_at=now,
             )
-            db.add(v)
+            db.add(vrow)
             inserted += 1
         else:
-            # non toccare pinned/blacklist
             existing.title = item["title"]
             existing.channel_title = item["channel"]
+            existing.channel_id = item.get("channelId") or existing.channel_id
             existing.published_at = datetime.fromisoformat(item["publishedAt"].replace("Z", "+00:00")) if item["publishedAt"] else existing.published_at
             existing.duration_sec = item["durationSec"]
             existing.embeddable = item["embeddable"]
             existing.view_count = item["viewCount"]
             existing.rank_score = item["rankScore"]
             existing.source_query = "; ".join(queries)[:1000]
+            existing.audio_lang = item.get("audioLang") or existing.audio_lang
             existing.checked_at = now
             updated += 1
+
 
     db.commit()
 

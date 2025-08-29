@@ -1325,6 +1325,9 @@ class AutousatoVideo(Base):
     checked_at = Column(DateTime, nullable=False, default=func.now())
     error_count = Column(SmallInteger, nullable=False, default=0)
     last_error = Column(Text, nullable=True)
+    channel_id  = Column(String, nullable=True)
+    audio_lang  = Column(String, nullable=True)
+
 
     auto = relationship("AZLeaseUsatoAuto", backref="videos")
 
