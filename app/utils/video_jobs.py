@@ -134,70 +134,50 @@ def _has_year_in_model(model: str) -> bool:
 
 
 def _resolve_car_labels(db: Session, auto: AZLeaseUsatoAuto) -> Dict[str, str]:
-    """Ricava marca/modello/allestimento da Mnet*, con fallback robusto."""
-    marca = modello = allest = ""
+    """Ricava marca e modello esteso da Mnet*, senza usare allestimento o immatricolazione."""
+    marca = modello = ""
 
-    md = (
-        db.query(MnetDettaglioUsato)
-        .filter(MnetDettaglioUsato.codice_motornet_uni == auto.codice_motornet)
-        .first()
-    )
-    if md:
-        marca = (md.marca_nome or "").strip() or (md.marca_acronimo or "").strip()
-        modello = (md.modello or "").strip()
-        allest = (md.allestimento or "").strip()
+    md = db.query(MnetDettaglioUsato).filter(MnetDettaglioUsato.codice_motornet_uni == auto.codice_motornet).first()
+    mau = db.query(MnetAllestimentoUsato).filter(MnetAllestimentoUsato.codice_motornet_uni == auto.codice_motornet).first() if not md else None
+    mmu = db.query(MnetModelloUsato).filter(MnetModelloUsato.codice_desc_modello == (mau.codice_desc_modello if mau else None)).first() if mau else None
 
-    if not md:
-        mau = (
-            db.query(MnetAllestimentoUsato)
-            .filter(MnetAllestimentoUsato.codice_motornet_uni == auto.codice_motornet)
-            .first()
-        )
-        mmu = (
-            db.query(MnetModelloUsato)
-            .filter(MnetModelloUsato.codice_desc_modello == (mau.codice_desc_modello if mau else None))
-            .first()
-            if mau
-            else None
-        )
-        if mau:
-            allest = (mau.versione or "").strip()
-        if mmu:
-            modello = (mmu.descrizione or "").strip()
-        # ricava nome marca
-        acr = None
-        if md and md.marca_acronimo:
-            acr = md.marca_acronimo
-        elif mau and mau.acronimo_marca:
-            acr = mau.acronimo_marca
-        elif mmu and mmu.marca_acronimo:
-            acr = mmu.marca_acronimo
-        if acr:
-            mmar = db.query(MnetMarcaUsato).filter(MnetMarcaUsato.acronimo == acr).first()
-            marca = (mmar.nome if mmar and mmar.nome else acr).strip()
+    if md and md.marca_nome:
+        marca = md.marca_nome.strip()
+    elif md and md.marca_acronimo:
+        marca = md.marca_acronimo.strip()
+    elif mau and mau.acronimo_marca:
+        marca = mau.acronimo_marca.strip()
+    elif mmu and mmu.marca_acronimo:
+        marca = mmu.marca_acronimo.strip()
 
-    return {"marca": marca or "", "modello": modello or "", "allest": allest or ""}
+    if mmu:
+        modello = (mmu.gamma_descrizione or mmu.descrizione or "").strip()
+
+    return {
+        "marca": marca or "",
+        "modello": modello or "",
+        "allest": ""  # <-- disattivato completamente
+    }
 
 
-def _build_queries(marca: str, modello: str, allest: str, anno: Optional[int]) -> List[str]:
+
+def _build_queries(marca: str, modello: str, allest: str, anno: int) -> List[str]:
     base = f"{marca} {modello}".strip()
     qs = {
-        f"{base} {allest}".strip(),
         base,
-        f"{base} prova su strada",
         f"{base} review",
         f"{base} test drive",
+        f"{base} prova su strada",
         f"{base} sound exhaust",
     }
     if anno and not _has_year_in_model(modello):
         qs |= {
             f"{base} {anno}",
-            f"{base} {allest} {anno}".strip(),
             f"{base} review {anno}",
-            f"{base} prova su strada {anno}",
+            f"{base} test drive {anno}",
         }
-    # normalizza
-    return [re.sub(r"\s+", " ", q).strip() for q in qs if q and q.strip()]
+    return [re.sub(r"\s+", " ", q).strip() for q in qs if q.strip()]
+
 
 
 def _quota_cost(search_calls: int, video_count: int) -> int:
@@ -479,7 +459,7 @@ def _select_auto_for_batch(db: Session, batch_size: int) -> List[str]:
     
             func.sum(case((AutousatoVideo.error_count > 0, 1), else_=0)).label("err_rows"),
 
-        )
+            )
         .outerjoin(AutousatoVideo, AutousatoVideo.id_auto == AZLeaseUsatoAuto.id)
         .group_by(AZLeaseUsatoAuto.id)
         .subquery()
