@@ -720,7 +720,6 @@ class MnetDettagli(Base):
     hc = Column(Text)
     nox = Column(Text)
     pm10 = Column(Text)
-    #tipo_cons = Column(Text)
     wltp = Column(Text)
 
     ridotte = Column(Boolean)
@@ -1252,7 +1251,6 @@ class MnetDettaglioUsato(Base):
     volumi = Column(String)
     neo_patentati = Column(Boolean)
     paese_prod = Column(String)
-    tipo_cons = Column(String)
     ridotte = Column(Boolean)
 
 class NotificaType(Base):
