@@ -1227,7 +1227,6 @@ class MnetDettaglioUsato(Base):
     # Abitabilità
     porte = Column(Integer)
     posti = Column(Integer)
-    posti_max = Column(Integer)
 
     # Motore e struttura
     cilindri = Column(String)
