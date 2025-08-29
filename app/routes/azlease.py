@@ -237,21 +237,39 @@ async def batch_set_optional(
     db: Session = Depends(get_db)
 ):
     Authorize.jwt_required()
-    # ...controlli ruolo...
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
 
+    if not user or not (is_admin_user(user) or is_dealer_user(user)):
+        raise HTTPException(status_code=403, detail="Accesso negato")
+
+    updated = 0
     for opt in data.accessori:
-        db.execute(text("""
+        codice_clean = (opt.codice or "").strip()
+
+        if not codice_clean:
+            print(f"⚠️ Codice mancante o vuoto: {opt}")
+            continue
+
+        result = db.execute(text("""
             UPDATE public.autousato_accessori_optional
             SET presente = TRUE, prezzo = :prezzo
             WHERE id_auto = :id_auto AND codice = :codice
         """), {
             "id_auto": str(data.id_auto),
-            "codice": opt.codice,
+            "codice": codice_clean,
             "prezzo": opt.prezzo
         })
 
+        if result.rowcount == 0:
+            print(f"❌ Nessun accessorio aggiornato → codice: {codice_clean}")
+        else:
+            print(f"✅ Accessorio aggiornato: {codice_clean} → prezzo={opt.prezzo}")
+            updated += result.rowcount
+
     db.commit()
-    return {"success": True}
+    return {"success": True, "aggiornati": updated}
+
 
 @router.post("/usato/pacchetti/batch-set", tags=["AZLease"])
 async def batch_set_pacchetti(
@@ -260,21 +278,39 @@ async def batch_set_pacchetti(
     db: Session = Depends(get_db)
 ):
     Authorize.jwt_required()
-    # ...controlli ruolo...
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
 
+    if not user or not (is_admin_user(user) or is_dealer_user(user)):
+        raise HTTPException(status_code=403, detail="Accesso negato")
+
+    updated = 0
     for pac in data.pacchetti:
-        db.execute(text("""
+        codice_clean = (pac.codice or "").strip()
+
+        if not codice_clean:
+            print(f"⚠️ Codice pacchetto vuoto: {pac}")
+            continue
+
+        result = db.execute(text("""
             UPDATE public.autousato_accessori_pacchetti
             SET presente = TRUE, prezzo = :prezzo
             WHERE id_auto = :id_auto AND codice = :codice
         """), {
             "id_auto": str(data.id_auto),
-            "codice": pac.codice,
+            "codice": codice_clean,
             "prezzo": pac.prezzo
         })
 
+        if result.rowcount == 0:
+            print(f"❌ Nessun pacchetto aggiornato → codice: {codice_clean}")
+        else:
+            print(f"✅ Pacchetto aggiornato: {codice_clean} → prezzo={pac.prezzo}")
+            updated += result.rowcount
+
     db.commit()
-    return {"success": True}
+    return {"success": True, "aggiornati": updated}
+
 
 
 @router.put("/usato/optional/{id_optional}", tags=["AZLease"])
