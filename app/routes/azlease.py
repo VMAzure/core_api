@@ -185,7 +185,7 @@ async def popola_accessori_usato(
             "auto": str(payload.id_auto),
             "codice": acc.get("codice"),
             "descrizione": acc.get("descrizione"),
-            "prezzo": acc.get("prezzoSvalutato"),
+            "prezzo": acc.get("prezzo"),
             "gruppo": acc.get("macrogruppo")
         })
 
@@ -200,7 +200,7 @@ async def popola_accessori_usato(
             "auto": str(payload.id_auto),
             "codice": pac.get("codice"),                         # 👈 nuovo
             "descrizione": pac.get("descrizione"),
-            "prezzo": pac.get("prezzoSvalutato"),
+            "prezzo": pac.get("prezzo"),
         })
 
 
