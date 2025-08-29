@@ -327,21 +327,24 @@ async def get_dettaglio_attivo_pubblico(
         FROM public.autousato_accessori_serie
         WHERE id_auto = :id
         ORDER BY descrizione
-    """), {"id": str(id_auto)}).fetchall()
+    """), {"id": str(id_auto)}).mappings().all()
+
 
     accessori_optional = db.execute(text("""
         SELECT id, codice, descrizione, macrogruppo, prezzo
         FROM public.autousato_accessori_optional
         WHERE id_auto = :id AND presente = true
         ORDER BY descrizione
-    """), {"id": str(id_auto)}).fetchall()
+    """), {"id": str(id_auto)}).mappings().all()
+
 
     pacchetti = db.execute(text("""
         SELECT descrizione, prezzo
         FROM public.autousato_accessori_pacchetti
         WHERE id_auto = :id
         ORDER BY descrizione
-    """), {"id": str(id_auto)}).fetchall()
+    """), {"id": str(id_auto)}).mappings().all()
+
 
     return {
         "auto": dict(auto),
