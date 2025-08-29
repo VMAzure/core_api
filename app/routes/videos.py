@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import List, Dict, Any
 import os, re, math, httpx
+from app.utils.video_jobs import refresh_videos_for_auto
+
 
 from app.database import get_db
 from app.models import (
@@ -376,3 +378,15 @@ async def refresh_videos(
     # opzionale: non cancelliamo, lasciamo pulizia manuale se serve
 
     return {"ok": True, "inserted": inserted, "updated": updated, "candidates": len(results)}
+
+@router.post("/admin/utils/force-video-refresh")
+def force_refresh_all(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    Authorize.jwt_required()
+    ids = [r.id for r in db.query(AZLeaseUsatoAuto.id).all()]
+    log = []
+    for aid in ids:
+        ins, upd, quota = refresh_videos_for_auto(db, aid)
+        db.commit()
+        log.append(dict(id=aid, inserted=ins, updated=upd, quota=quota))
+    return {"done": len(ids), "log": log}
+
