@@ -2,8 +2,11 @@
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import List, Dict, Any
-import os, re, math, httpx
+import os, re, math, httpx, logging
+
 from app.utils.video_jobs import refresh_videos_for_auto
+
+
 
 
 from app.database import get_db
@@ -379,14 +382,32 @@ async def refresh_videos(
 
     return {"ok": True, "inserted": inserted, "updated": updated, "candidates": len(results)}
 
+
 @router.post("/admin/utils/force-video-refresh")
-def force_refresh_all(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    Authorize.jwt_required()
-    ids = [r.id for r in db.query(AZLeaseUsatoAuto.id).all()]
-    log = []
-    for aid in ids:
-        ins, upd, quota = refresh_videos_for_auto(db, aid)
-        db.commit()
-        log.append(dict(id=aid, inserted=ins, updated=upd, quota=quota))
-    return {"done": len(ids), "log": log}
+def force_refresh_all_videos(db: Session = Depends(get_db)) -> dict:
+    """
+    Forza il refresh YT per tutte le auto presenti.
+    Restituisce: {"done": int, "log": List[...]}
+    """
+    from app.models import AZLeaseUsatoAuto
+
+    auto_ids = db.query(AZLeaseUsatoAuto.id).all()
+    auto_ids = [r.id for r in auto_ids]
+    log: List[Dict] = []
+    done = 0
+
+    for aid in auto_ids:
+        try:
+            ins, upd, quota = refresh_videos_for_auto(db, aid)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logging.warning(f"⚠️ Commit fallito per auto {aid}: {e}")
+            log.append({"id": aid, "inserted": 0, "updated": 0, "quota": 0, "error": str(e)})
+            continue
+
+        log.append({"id": aid, "inserted": ins, "updated": upd, "quota": quota})
+        done += 1
+
+    return {"done": done, "log": log}
 

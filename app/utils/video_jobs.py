@@ -509,20 +509,29 @@ def video_daily_batch() -> None:
         ids = _select_auto_for_batch(db, VIDEO_BATCH_SIZE)
         logging.info(f"video_daily_batch: {len(ids)} auto selezionate")
         quota_budget = YOUTUBE_DAILY_CAP
+
         for aid in ids:
-            ins, upd, quota = refresh_videos_for_auto(db, aid)
-            quota_budget -= quota
-            db.commit()
-            logging.info(f"[{aid}] inserted={ins} updated={upd} quota={quota} remaining={quota_budget}")
+            try:
+                ins, upd, quota = refresh_videos_for_auto(db, aid)
+                quota_budget -= quota
+                db.commit()
+                logging.info(f"[{aid}] inserted={ins} updated={upd} quota={quota} remaining={quota_budget}")
+            except Exception as e:
+                db.rollback()
+                logging.warning(f"⚠️ Commit fallito per auto {aid}: {e}")
+                continue
+
             if quota_budget <= 0:
                 logging.warning("Quota budget esaurito")
                 break
+
     except Exception as e:
         db.rollback()
         logging.exception(f"video_daily_batch error: {e}")
     finally:
         db.close()
         logging.info("🎞️ video_daily_batch end")
+
 
 
 def video_revalidate_existing() -> None:
@@ -540,16 +549,24 @@ def video_revalidate_existing() -> None:
     try:
         ids = _select_auto_for_revalidate(db, REVALIDATE_MAX_AGE_H, VIDEO_BATCH_SIZE * 2)
         logging.info(f"revalidate: {len(ids)} auto")
+
         for aid in ids:
-            upd, quota = revalidate_existing_for_auto(db, aid)
-            db.commit()
-            logging.info(f"[{aid}] revalidated={upd} quota={quota}")
+            try:
+                upd, quota = revalidate_existing_for_auto(db, aid)
+                db.commit()
+                logging.info(f"[{aid}] revalidated={upd} quota={quota}")
+            except Exception as e:
+                db.rollback()
+                logging.warning(f"⚠️ Revalidate fallita per auto {aid}: {e}")
+                continue
+
     except Exception as e:
         db.rollback()
         logging.exception(f"video_revalidate_existing error: {e}")
     finally:
         db.close()
         logging.info("♻️ video_revalidate_existing end")
+
 
 
 def video_weekly_sweep() -> None:
@@ -576,20 +593,29 @@ def video_weekly_sweep() -> None:
         ids = [r.id for r in rows]
         logging.info(f"weekly_sweep: {len(ids)} auto")
         quota_budget = YOUTUBE_DAILY_CAP
+
         for aid in ids:
-            ins, upd, quota = refresh_videos_for_auto(db, aid)
-            quota_budget -= quota
-            db.commit()
-            logging.info(f"[{aid}] inserted={ins} updated={upd} quota={quota} remaining={quota_budget}")
+            try:
+                ins, upd, quota = refresh_videos_for_auto(db, aid)
+                quota_budget -= quota
+                db.commit()
+                logging.info(f"[{aid}] inserted={ins} updated={upd} quota={quota} remaining={quota_budget}")
+            except Exception as e:
+                db.rollback()
+                logging.warning(f"⚠️ Commit fallito per auto {aid}: {e}")
+                continue
+
             if quota_budget <= 0:
                 logging.warning("Quota budget esaurito")
                 break
+
     except Exception as e:
         db.rollback()
         logging.exception(f"video_weekly_sweep error: {e}")
     finally:
         db.close()
         logging.info("🧹 video_weekly_sweep end")
+
 
 
 __all__ = [
