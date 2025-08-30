@@ -151,7 +151,11 @@ def _resolve_car_labels(db: Session, auto: AZLeaseUsatoAuto) -> Dict[str, str]:
         marca = mmu.marca_acronimo.strip()
 
     if mmu:
-        modello = (mmu.gamma_descrizione or mmu.descrizione or "").strip()
+        if hasattr(mmu, "gamma_descrizione") and mmu.gamma_descrizione:
+            modello = mmu.gamma_descrizione.strip()
+        elif mmu.descrizione:
+            modello = mmu.descrizione.strip()
+
 
     return {
         "marca": marca or "",
@@ -255,7 +259,8 @@ def refresh_videos_for_auto(db: Session, id_auto: str) -> Tuple[int, int, int]:
         quota_used += _quota_cost(search_calls=len(queries), video_count=0)
 
         if not video_ids:
-            return 0, 0, quota_used
+            return 0, 0, 0  # niente quota usata se nessuna fetch riuscita
+
 
         # Details
         results: List[Dict] = []
@@ -362,7 +367,12 @@ def refresh_videos_for_auto(db: Session, id_auto: str) -> Tuple[int, int, int]:
             existing.source_query = "; ".join(queries)[:1000]
             existing.audio_lang = item.get("audioLang") or existing.audio_lang
             existing.checked_at = now_naive
-            updated += 1
+            try:
+                db.flush()
+                updated += 1
+            except Exception as e:
+                logging.warning(f"⚠️ Flush fallito per video {item['videoId']} → {e}")
+                continue
 
     # Cleanup soft
     _keep_top_n_for_auto(db, id_auto, VIDEO_KEEP_PER_AUTO)
@@ -436,7 +446,12 @@ def revalidate_existing_for_auto(db: Session, id_auto: str) -> Tuple[int, int]:
                 if pub:
                     row.published_at = datetime.fromisoformat(pub.replace("Z", "+00:00"))
                 row.checked_at = _now_utc().replace(tzinfo=None)
-                updated += 1
+                try:
+                    db.flush()
+                    updated += 1
+                except Exception as e:
+                    logging.warning(f"⚠️ Flush fallito per video {vid} → {e}")
+                    continue
 
     return updated, quota_used
 
