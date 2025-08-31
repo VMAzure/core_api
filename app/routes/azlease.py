@@ -1455,9 +1455,9 @@ class ContattoUsatoInput(BaseModel):
 async def invia_contatto_usato(
     payload: ContattoUsatoInput,
     db: Session = Depends(get_db),
-    slug: Optional[str] = None,  # ignorato: risaliamo da id_auto
+    _slug: Optional[str] = None  # ignorato
 ):
-    # 1) Risali da id_auto → dealer_id, admin_id
+    # 1) Risali proprietario da id_auto
     owner = db.execute(text("""
         SELECT i.id           AS id_usatoin,
                i.dealer_id    AS dealer_id,
@@ -1472,24 +1472,24 @@ async def invia_contatto_usato(
     if not owner or not owner["visibile"] or owner["venduto_da"] is not None:
         raise HTTPException(404, "Auto non trovata o non disponibile")
 
-    dealer_id = owner["dealer_id"] or None
-    admin_id  = int(owner["admin_id"])
+    dealer_id = owner["dealer_id"]
+    admin_id = int(owner["admin_id"])
 
     # 2) SMTP dall’admin
     smtp_settings = get_smtp_settings(admin_id, db)
     if not smtp_settings:
         raise HTTPException(500, "SMTP non configurato per l'admin")
 
-    # 3) Email destinatario = dealer se presente, altrimenti admin
+    # 3) Destinatario: dealer se presente, altrimenti admin
     destinatario_id = dealer_id or admin_id
     destinatario = db.query(User).filter(User.id == destinatario_id).first()
     if not destinatario or not destinatario.email:
         raise HTTPException(404, "Email destinatario non trovata")
 
-    # 4) Salva lead “cliente_temp”
+    # 4) Salva lead
     nuovo = ClienteTemp(
         id=uuid4(),
-        dealer_id=dealer_id or admin_id,   # fallback su admin se auto senza dealer
+        dealer_id=dealer_id or admin_id,  # fallback admin se manca dealer
         nome=payload.nome.strip(),
         cognome=payload.cognome.strip(),
         email=payload.email.strip(),
@@ -1499,20 +1499,20 @@ async def invia_contatto_usato(
         data_creazione=datetime.utcnow()
     )
     db.add(nuovo)
+    db.commit()  # commit immediato del lead
 
-    # 4.b) Prova a incrementare il contatore leads sull’auto (se la colonna esiste)
+    # 5) Incrementa contatore leads dell’auto (best-effort, transazione separata)
     try:
         db.execute(text("""
             UPDATE azlease_usatoauto
             SET leads = COALESCE(leads, 0) + 1
             WHERE id = :id_auto
         """), {"id_auto": str(payload.id_auto)})
+        db.commit()
     except Exception:
-        pass  # compat con schema senza colonna
+        db.rollback()  # evita stato "aborted"
 
-    db.commit()
-
-    # 5) Invia email
+    # 6) Invia email
     subject = f"📬 Contatto usato • {payload.nome} {payload.cognome}"
     msg_html = (payload.messaggio or "").replace("\n", "<br>")
     html_body = f"""
@@ -1527,12 +1527,12 @@ async def invia_contatto_usato(
         </p>
     """
     try:
-        # usa la firma esistente: send_email(admin_id, to_email, subject, body_html)
+        # firma già prevista: admin_id → seleziona SMTP corretto
         send_email(admin_id=admin_id, to_email=destinatario.email, subject=subject, body=html_body)
     except Exception:
         raise HTTPException(500, "Errore invio email")
 
-    # 6) Notifica
+    # 7) Notifica al destinatario (non blocca il flow)
     try:
         inserisci_notifica(
             db=db,
@@ -1542,6 +1542,6 @@ async def invia_contatto_usato(
             cliente_id=nuovo.id
         )
     except Exception:
-        db.rollback()  # non blocca l’invio già avvenuto
+        db.rollback()
 
     return {"ok": True, "msg": "Contatto inviato correttamente"}
