@@ -352,7 +352,7 @@ async def aggiorna_optional_accessorio(
 
 
 
-@router.get("/public/usato/{id_auto}/dettagli-attivi", tags=["AZLease - Pubblico"])
+@router.get("/public/usato/{id_auto}/dettagli-attivi", tags=["Public AZLease"])
 async def get_dettaglio_attivo_pubblico(
     id_auto: UUID,
     db: Session = Depends(get_db)
@@ -1442,7 +1442,7 @@ from uuid import uuid4
 
 
 
-@router.post("/public/usato/{slug}/invia-contatto", tags=["Public AZLease"])
+@router.post("/usato-pubblico/{slug}/invia-contatto", tags=["Public AZLease"])
 async def invia_contatto_usato(
     slug: str,
     payload: dict = Body(...),

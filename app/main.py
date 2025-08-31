@@ -69,7 +69,17 @@ print("✅ DEBUG (main.py) - SUPABASE_URL:", os.getenv("SUPABASE_URL"))
 print("✅ DEBUG (main.py) - SUPABASE_KEY:", os.getenv("SUPABASE_KEY"))
 
 # ✅ Creazione dell'istanza di FastAPI
-app = FastAPI(title="CORE API", version="1.0")
+from fastapi.routing import APIRoute
+
+def gen_unique_id(route: APIRoute):
+    # Nome funzione + metodo + path → sempre univoco
+    return f"{route.name}_{'_'.join(route.methods)}_{route.path.replace('/', '_')}"
+
+app = FastAPI(
+    title="CORE API",
+    version="1.0",
+    generate_unique_id_function=gen_unique_id
+)
 
 
 # ✅ Avvia il cron job in un thread separato all'avvio dell'app
