@@ -1501,6 +1501,9 @@ async def invia_contatto_usato(
         raise HTTPException(404, "Email dealer non trovata")
 
     subject = f"📬 Contatto per veicolo usato - {nome} {cognome}"
+    # Prepara messaggio HTML safe
+    messaggio_html = messaggio.replace("\n", "<br>")
+
     html_body = f"""
         <h3>📬 Nuovo contatto dalla vetrina usato</h3>
         <p>
@@ -1508,9 +1511,10 @@ async def invia_contatto_usato(
             <strong>Email:</strong> {email}<br>
             <strong>Telefono:</strong> {telefono}<br>
             <strong>Messaggio:</strong><br>
-            {messaggio.replace('\n', '<br>')}
+            {messaggio_html}
         </p>
     """
+
     try:
         send_email(
             smtp_settings=smtp_settings,
