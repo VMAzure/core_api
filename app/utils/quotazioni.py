@@ -82,8 +82,7 @@ def calcola_quotazione(offerta, quotazione, current_user, db: Session, settings_
         except (TypeError, ValueError):
             prov_dealer = 0.0
        #     print("⚠️ prov_dealer fallback a 0.0")
-    else:
-        print("ℹ️ Nessuna provvigione dealer (stesso settings o null)")
+   
 
     slug_finale = settings_corrente.slug if settings_corrente else None
 
@@ -167,8 +166,7 @@ def calcola_quotazione_custom(offerta, durata, km, canone_base, current_user, db
         except (TypeError, ValueError):
             prov_dealer = 0.0
     #        print("⚠️ prov_dealer fallback a 0.0")
-    else:
-        print("ℹ️ Nessuna provvigione dealer (stesso settings o null)")
+    
 
     slug_finale = settings_corrente.slug if settings_corrente else None
 
