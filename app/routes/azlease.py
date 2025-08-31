@@ -1442,101 +1442,106 @@ from uuid import uuid4
 
 
 
-@router.post("/usato-pubblico/{slug}/invia-contatto", tags=["Public AZLease"])
+class ContattoUsatoInput(BaseModel):
+    id_auto: UUID
+    nome: str
+    cognome: str
+    email: str
+    telefono: str
+    messaggio: Optional[str] = ""
+
+# Supporta URL diversi: path con o senza slug
+@router.post("/usato-pubblico/invia-contatto", tags=["Public AZLease"])
 async def invia_contatto_usato(
-    slug: str,
-    payload: dict = Body(...),
-    db: Session = Depends(get_db)
+    payload: ContattoUsatoInput,
+    db: Session = Depends(get_db),
+    slug: Optional[str] = None,  # ignorato: risaliamo da id_auto
 ):
-    """
-    Invia un contatto al dealer per una proposta usato.
-    - Identifica il dealer via `slug`
-    - Invia mail via SMTP dell'admin
-    - Salva in clienti_temp
-    - Registra una notifica `contatto_usato`
-    """
-    # ✅ Carica dealer settings
-    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
-    if not settings:
-        raise HTTPException(404, "Slug non valido")
+    # 1) Risali da id_auto → dealer_id, admin_id
+    owner = db.execute(text("""
+        SELECT i.id           AS id_usatoin,
+               i.dealer_id    AS dealer_id,
+               i.admin_id     AS admin_id,
+               i.visibile     AS visibile,
+               i.venduto_da   AS venduto_da
+        FROM azlease_usatoauto a
+        JOIN azlease_usatoin i ON i.id = a.id_usatoin
+        WHERE a.id = :id_auto
+    """), {"id_auto": str(payload.id_auto)}).mappings().first()
 
-    if not settings.dealer_id:
-        raise HTTPException(400, "Lo slug non corrisponde a un dealer")
+    if not owner or not owner["visibile"] or owner["venduto_da"] is not None:
+        raise HTTPException(404, "Auto non trovata o non disponibile")
 
-    dealer_id = settings.dealer_id
-    admin_id = settings.admin_id
+    dealer_id = owner["dealer_id"] or None
+    admin_id  = int(owner["admin_id"])
+
+    # 2) SMTP dall’admin
     smtp_settings = get_smtp_settings(admin_id, db)
-
     if not smtp_settings:
-        raise HTTPException(500, "SMTP non configurato")
+        raise HTTPException(500, "SMTP non configurato per l'admin")
 
-    # ✅ Estrai campi dal body
-    nome = payload.get("nome", "").strip()
-    cognome = payload.get("cognome", "").strip()
-    email = payload.get("email", "").strip()
-    telefono = payload.get("telefono", "").strip()
-    messaggio = payload.get("messaggio", "").strip()
+    # 3) Email destinatario = dealer se presente, altrimenti admin
+    destinatario_id = dealer_id or admin_id
+    destinatario = db.query(User).filter(User.id == destinatario_id).first()
+    if not destinatario or not destinatario.email:
+        raise HTTPException(404, "Email destinatario non trovata")
 
-    if not (nome and cognome and email and telefono):
-        raise HTTPException(400, "Tutti i campi sono obbligatori")
-
-    # ✅ Salva in clienti_temp
+    # 4) Salva lead “cliente_temp”
     nuovo = ClienteTemp(
         id=uuid4(),
-        dealer_id=dealer_id,
-        nome=nome,
-        cognome=cognome,
-        email=email,
-        telefono=telefono,
-        messaggio=messaggio,
+        dealer_id=dealer_id or admin_id,   # fallback su admin se auto senza dealer
+        nome=payload.nome.strip(),
+        cognome=payload.cognome.strip(),
+        email=payload.email.strip(),
+        telefono=payload.telefono.strip(),
+        messaggio=(payload.messaggio or "").strip(),
         provenienza="contatto_usato",
         data_creazione=datetime.utcnow()
     )
     db.add(nuovo)
+
+    # 4.b) Prova a incrementare il contatore leads sull’auto (se la colonna esiste)
+    try:
+        db.execute(text("""
+            UPDATE azlease_usatoauto
+            SET leads = COALESCE(leads, 0) + 1
+            WHERE id = :id_auto
+        """), {"id_auto": str(payload.id_auto)})
+    except Exception:
+        pass  # compat con schema senza colonna
+
     db.commit()
 
-    # ✅ Invia email al dealer
-    dealer_user = db.query(User).filter(User.id == dealer_id).first()
-    if not dealer_user or not dealer_user.email:
-        raise HTTPException(404, "Email dealer non trovata")
-
-    subject = f"📬 Contatto per veicolo usato - {nome} {cognome}"
-    # Prepara messaggio HTML safe
-    messaggio_html = messaggio.replace("\n", "<br>")
-
+    # 5) Invia email
+    subject = f"📬 Contatto usato • {payload.nome} {payload.cognome}"
+    msg_html = (payload.messaggio or "").replace("\n", "<br>")
     html_body = f"""
         <h3>📬 Nuovo contatto dalla vetrina usato</h3>
         <p>
-            <strong>Nome:</strong> {nome} {cognome}<br>
-            <strong>Email:</strong> {email}<br>
-            <strong>Telefono:</strong> {telefono}<br>
+            <strong>Nome:</strong> {payload.nome} {payload.cognome}<br>
+            <strong>Email:</strong> {payload.email}<br>
+            <strong>Telefono:</strong> {payload.telefono}<br>
+            <strong>Auto ID:</strong> {payload.id_auto}<br>
             <strong>Messaggio:</strong><br>
-            {messaggio_html}
+            {msg_html}
         </p>
     """
-
     try:
-        send_email(
-            smtp_settings=smtp_settings,
-            to_email=dealer_user.email,
-            subject=subject,
-            html_body=html_body
-        )
-    except Exception as e:
-        print("❌ Errore invio mail contatto usato:", e)
+        # usa la firma esistente: send_email(admin_id, to_email, subject, body_html)
+        send_email(admin_id=admin_id, to_email=destinatario.email, subject=subject, body=html_body)
+    except Exception:
         raise HTTPException(500, "Errore invio email")
 
-    # ✅ Inserisci notifica per il dealer
+    # 6) Notifica
     try:
         inserisci_notifica(
             db=db,
-            utente_id=dealer_id,
+            utente_id=destinatario_id,
             tipo_codice="contatto_usato",
-            messaggio=f"{nome} {cognome} ha inviato un contatto dalla vetrina usato.",
+            messaggio=f"{payload.nome} {payload.cognome} ha inviato un contatto per l'auto {payload.id_auto}.",
             cliente_id=nuovo.id
         )
-    except Exception as e:
-        print("⚠️ Errore salvataggio notifica:", e)
-        db.rollback()
+    except Exception:
+        db.rollback()  # non blocca l’invio già avvenuto
 
     return {"ok": True, "msg": "Contatto inviato correttamente"}
