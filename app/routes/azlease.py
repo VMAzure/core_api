@@ -1314,7 +1314,7 @@ async def dettaglio_usato_pubblico(
     id_auto: str,
     db: Session = Depends(get_db)
 ):
-    # ✅ Recupera impostazioni sito
+    # ✅ Recupera impostazioni sito (dallo slug)
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings:
         raise HTTPException(404, f"Slug '{slug}' non trovato")
@@ -1325,14 +1325,15 @@ async def dettaglio_usato_pubblico(
     if not user:
         raise HTTPException(404, "Utente non trovato per questo slug")
 
-    # ✅ Recupera dati auto con descrizione inclusa
+    # ✅ Recupera dati auto (con visibilità + non venduta)
     auto = db.execute(text("""
         SELECT 
             a.*, 
             i.prezzo_vendita, 
             i.iva_esposta, 
             i.visibile,
-            i.descrizione
+            i.descrizione,
+            i.dealer_id
         FROM azlease_usatoauto a
         JOIN azlease_usatoin i ON i.id = a.id_usatoin
         WHERE a.id = :id_auto AND i.visibile = TRUE AND i.venduto_da IS NULL
@@ -1351,13 +1352,42 @@ async def dettaglio_usato_pubblico(
         SELECT * FROM mnet_dettagli_usato WHERE codice_motornet_uni = :codice
     """), {"codice": auto.codice_motornet}).fetchone()
 
-    # ✅ Response finale
+    # ✅ Dealer proprietario dell’auto (anche se admin sta visualizzando auto altrui)
+    dealer_id = auto.dealer_id
+
+    dealer_settings = None
+    if dealer_id:
+        dealer_settings = (
+            db.query(SiteAdminSettings)
+              .filter(SiteAdminSettings.dealer_id == dealer_id)
+              .first()
+        )
+
+    dealer_info = {
+        "slug": dealer_settings.slug if dealer_settings else settings.slug,
+        "ragione_sociale": dealer_settings.meta_title if dealer_settings else settings.meta_title,
+        "contact_address": dealer_settings.contact_address if dealer_settings else settings.contact_address,
+        "contact_email": dealer_settings.contact_email if dealer_settings else settings.contact_email,
+        "contact_phone": dealer_settings.contact_phone if dealer_settings else settings.contact_phone,
+        "piva": dealer_settings.piva if dealer_settings else settings.piva,
+        "logo_web": dealer_settings.logo_web if dealer_settings else settings.logo_web,
+        "site_url": dealer_settings.site_url if dealer_settings else settings.site_url,
+        "facebook_url": dealer_settings.facebook_url if dealer_settings else settings.facebook_url,
+        "instagram_url": dealer_settings.instagram_url if dealer_settings else settings.instagram_url,
+        "linkedin_url": dealer_settings.linkedin_url if dealer_settings else settings.linkedin_url,
+        "youtube_url": dealer_settings.youtube_url if dealer_settings else settings.youtube_url,
+        "whatsapp_url": dealer_settings.whatsapp_url if dealer_settings else settings.whatsapp_url,
+    }
+
+    # ✅ Response finale completa
     return {
         "auto": dict(auto._mapping),
         "descrizione": auto.descrizione,
         "immagini": [dict(i._mapping) for i in immagini],
-        "dettagli": dict(dettagli._mapping) if dettagli else {}
+        "dettagli": dict(dettagli._mapping) if dettagli else {},
+        "dealer_site_settings": dealer_info
     }
+
 
 
 @router.get("/usato-pubblico/{slug}/{id_auto}/foto", tags=["Public AZLease"])
