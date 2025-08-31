@@ -1434,3 +1434,105 @@ async def foto_usato_pubblico(
         ]
     }
 
+from app.routes.notifiche import inserisci_notifica
+from app.utils.email import get_smtp_settings,  send_email
+from app.models import ClienteTemp
+from uuid import uuid4
+
+
+
+
+@router.post("/public/usato/{slug}/invia-contatto", tags=["Public AZLease"])
+async def invia_contatto_usato(
+    slug: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Invia un contatto al dealer per una proposta usato.
+    - Identifica il dealer via `slug`
+    - Invia mail via SMTP dell'admin
+    - Salva in clienti_temp
+    - Registra una notifica `contatto_usato`
+    """
+    # ✅ Carica dealer settings
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
+    if not settings:
+        raise HTTPException(404, "Slug non valido")
+
+    if not settings.dealer_id:
+        raise HTTPException(400, "Lo slug non corrisponde a un dealer")
+
+    dealer_id = settings.dealer_id
+    admin_id = settings.admin_id
+    smtp_settings = get_smtp_settings(admin_id, db)
+
+    if not smtp_settings:
+        raise HTTPException(500, "SMTP non configurato")
+
+    # ✅ Estrai campi dal body
+    nome = payload.get("nome", "").strip()
+    cognome = payload.get("cognome", "").strip()
+    email = payload.get("email", "").strip()
+    telefono = payload.get("telefono", "").strip()
+    messaggio = payload.get("messaggio", "").strip()
+
+    if not (nome and cognome and email and telefono):
+        raise HTTPException(400, "Tutti i campi sono obbligatori")
+
+    # ✅ Salva in clienti_temp
+    nuovo = ClienteTemp(
+        id=uuid4(),
+        dealer_id=dealer_id,
+        nome=nome,
+        cognome=cognome,
+        email=email,
+        telefono=telefono,
+        messaggio=messaggio,
+        provenienza="contatto_usato",
+        data_creazione=datetime.utcnow()
+    )
+    db.add(nuovo)
+    db.commit()
+
+    # ✅ Invia email al dealer
+    dealer_user = db.query(User).filter(User.id == dealer_id).first()
+    if not dealer_user or not dealer_user.email:
+        raise HTTPException(404, "Email dealer non trovata")
+
+    subject = f"📬 Contatto per veicolo usato - {nome} {cognome}"
+    html_body = f"""
+        <h3>📬 Nuovo contatto dalla vetrina usato</h3>
+        <p>
+            <strong>Nome:</strong> {nome} {cognome}<br>
+            <strong>Email:</strong> {email}<br>
+            <strong>Telefono:</strong> {telefono}<br>
+            <strong>Messaggio:</strong><br>
+            {messaggio.replace('\n', '<br>')}
+        </p>
+    """
+    try:
+        send_email(
+            smtp_settings=smtp_settings,
+            to_email=dealer_user.email,
+            subject=subject,
+            html_body=html_body
+        )
+    except Exception as e:
+        print("❌ Errore invio mail contatto usato:", e)
+        raise HTTPException(500, "Errore invio email")
+
+    # ✅ Inserisci notifica per il dealer
+    try:
+        inserisci_notifica(
+            db=db,
+            utente_id=dealer_id,
+            tipo_codice="contatto_usato",
+            messaggio=f"{nome} {cognome} ha inviato un contatto dalla vetrina usato.",
+            cliente_id=nuovo.id
+        )
+    except Exception as e:
+        print("⚠️ Errore salvataggio notifica:", e)
+        db.rollback()
+
+    return {"ok": True, "msg": "Contatto inviato correttamente"}

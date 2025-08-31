@@ -1295,6 +1295,31 @@ class Notifica(Base):
         primaryjoin=lambda: NotificaType.id == Notifica.tipo_id
     )
 
+class ClienteTemp(Base):
+    __tablename__ = "clienti_temp"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # ➕ Collegamento al dealer
+    dealer_id = Column(Integer, ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False)
+
+    nome = Column(String, nullable=True)
+    cognome = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    telefono = Column(String, nullable=True)
+    messaggio = Column(Text, nullable=True)
+
+    provenienza = Column(String, nullable=True)  # es: "contatto_usato"
+    data_creazione = Column(DateTime, default=datetime.utcnow)
+
+    dealer = relationship(
+        "User",
+        backref="clienti_temp",
+        primaryjoin="ClienteTemp.dealer_id == User.id",
+        foreign_keys=[dealer_id]
+    )
+
 # --- Nuovo modello: AutousatoVideo ------------------------------------------
 
 class AutousatoVideo(Base):
