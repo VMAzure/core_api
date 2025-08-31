@@ -1369,7 +1369,6 @@ async def dettaglio_usato_pubblico(
         "contact_address": dealer_settings.contact_address if dealer_settings else settings.contact_address,
         "contact_email": dealer_settings.contact_email if dealer_settings else settings.contact_email,
         "contact_phone": dealer_settings.contact_phone if dealer_settings else settings.contact_phone,
-        "piva": dealer_settings.piva if dealer_settings else settings.piva,
         "logo_web": dealer_settings.logo_web if dealer_settings else settings.logo_web,
         "site_url": dealer_settings.site_url if dealer_settings else settings.site_url,
         "facebook_url": dealer_settings.facebook_url if dealer_settings else settings.facebook_url,
