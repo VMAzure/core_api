@@ -167,11 +167,9 @@ def _prefer_mp4(urls: list[str]) -> str:
 
 
 async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req: VideoHeroRequest) -> str:
-    # Normalizza model_id
     model = (req.model_id or "").upper()
 
     if model == "VEO3":
-        # Veo3 costa 4000 crediti
         data = {
             "prompt": prompt,
             "width": 1280,
@@ -179,15 +177,28 @@ async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req
             "resolution": "RESOLUTION_720",
             "model": "VEO3"
         }
+    elif model == "VEO3FAST":
+        data = {
+            "prompt": prompt,
+            "width": 1280,
+            "height": 720,
+            "resolution": "RESOLUTION_720",
+            "model": "VEO3FAST"
+        }
     elif model == "MOTION":
-        # Motion economico: 200 crediti
         data = {
             "prompt": prompt,
             "resolution": "RESOLUTION_480",
-            "model": "MOTION_VIDEO_GENERATION"
+            "model": "MOTION2"
+        }
+    elif model == "MOTIONFAST":
+        data = {
+            "prompt": prompt,
+            "resolution": "RESOLUTION_480",
+            "model": "MOTION2FAST"
         }
     else:
-        raise HTTPException(status_code=400, detail="model_id non valido. Usa 'VEO3' o 'MOTION'.")
+        raise HTTPException(status_code=400, detail="model_id non valido. Usa 'VEO3', 'VEO3FAST', 'MOTION', 'MOTIONFAST'.")
 
     r = await client.post(f"{LEONARDO_BASE_URL}/generations-text-to-video", json=data)
     if r.status_code == 402:
@@ -202,10 +213,7 @@ async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req
         or resp.get("id")
     )
     if not gen_id:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Leonardo: generationId non trovato. Response: {resp}"
-        )
+        raise HTTPException(status_code=502, detail=f"Leonardo: generationId non trovato. Response: {resp}")
     return gen_id
 
 
