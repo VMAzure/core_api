@@ -167,6 +167,7 @@ def _prefer_mp4(urls: list[str]) -> str:
 
 
 async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req: VideoHeroRequest) -> str:
+    
     payload = {
         "modelId": req.model_id,
         "prompt": prompt,
@@ -174,8 +175,8 @@ async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req
         "duration": req.duration_seconds,
         "fps": req.fps,
         "aspectRatio": req.aspect_ratio,
-        "public": False,
     }
+
     if req.seed is not None:
         payload["seed"] = req.seed
 
