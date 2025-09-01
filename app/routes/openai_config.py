@@ -97,7 +97,7 @@ LEONARDO_BASE_URL = os.getenv("LEONARDO_BASE_URL", "https://cloud.leonardo.ai/ap
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET_LEONARDO", "leonardo-video")
-LEONARDO_WEBHOOK_SECRET = LEONARDO_API_KEY  # usa la stessa key per autenticare i webhook
+LEONARDO_WEBHOOK_SECRET = os.getenv("LEONARDO_WEBHOOK_SECRET", "")
 
 
 def _sb_upload_and_sign(path: str, blob: bytes, content_type: str) -> tuple[str, str | None]:
