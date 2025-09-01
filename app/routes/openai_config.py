@@ -167,29 +167,31 @@ def _prefer_mp4(urls: list[str]) -> str:
 
 
 async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req: VideoHeroRequest) -> str:
-    # Mappa modello: accetta solo "VEO3" o "VEO3FAST"
-    model = (req.model_id or "veo-3").upper()
-    if model in ("VEO3", "VEO3FAST"):
-        model_val = model
-    else:
-        model_val = "VEO3"
+    # Normalizza model_id
+    model = (req.model_id or "").upper()
 
-    # Usa width/height standard 1280x720. (aspect_ratio, fps, duration NON inviati)
-    data = {
-        "prompt": prompt,
-        "width": 1280,
-        "height": 720,
-        "resolution": "RESOLUTION_720",
-        "model": model_val
-        # NON inviare: aspectRatio, fps, public, negativePrompt, duration
-    }
+    if model == "VEO3":
+        # Veo3 costa 4000 crediti
+        data = {
+            "prompt": prompt,
+            "width": 1280,
+            "height": 720,
+            "resolution": "RESOLUTION_720",
+            "model": "VEO3"
+        }
+    elif model == "MOTION":
+        # Motion economico: 200 crediti
+        data = {
+            "prompt": prompt,
+            "resolution": "RESOLUTION_480",
+            "model": "MOTION_VIDEO_GENERATION"
+        }
+    else:
+        raise HTTPException(status_code=400, detail="model_id non valido. Usa 'VEO3' o 'MOTION'.")
 
     r = await client.post(f"{LEONARDO_BASE_URL}/generations-text-to-video", json=data)
-
     if r.status_code == 402:
-        # crediti API insufficienti su Leonardo
         raise HTTPException(status_code=402, detail="Leonardo: crediti API insufficienti")
-
     if r.status_code >= 300:
         raise HTTPException(status_code=502, detail=f"Leonardo TTV error ({r.status_code}): {r.text}")
 
@@ -205,6 +207,7 @@ async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req
             detail=f"Leonardo: generationId non trovato. Response: {resp}"
         )
     return gen_id
+
 
 
 async def _leonardo_poll(client: httpx.AsyncClient, generation_id: str, timeout_s: int = 120) -> list[str]:
