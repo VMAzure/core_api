@@ -422,10 +422,10 @@ async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
     print(f"[WEBHOOK] X-API-Key ricevuta: {api_key}")
     print(f"[WEBHOOK] Attesa: {LEONARDO_WEBHOOK_SECRET}")
 
-    if not LEONARDO_WEBHOOK_SECRET:
-        raise HTTPException(500, "Webhook secret non configurato")
-    if api_key != LEONARDO_WEBHOOK_SECRET:
-        raise HTTPException(401, "X-API-Key non valida")
+    # Webhook senza autenticazione API key (aperto)
+    api_key = req.headers.get("x-api-key") or req.headers.get("X-API-Key")
+    print(f"[WEBHOOK] Ricevuto senza verifica API key. Header ricevuto: {api_key}")
+
 
 
     body = await req.json()
