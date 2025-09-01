@@ -1402,6 +1402,9 @@ class UsatoLeonardo(Base):
     storage_path = Column(Text, nullable=True)
     public_url = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
+    user_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
+    utente = relationship("User", backref="video_leonardo")
+
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

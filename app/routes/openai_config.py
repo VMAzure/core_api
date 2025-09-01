@@ -159,7 +159,7 @@ class VideoHeroResponse(BaseModel):
     success: bool
     id_auto: _UUID
     leonardo_generation_id: str
-    storage_path: str
+    storage_path: Optional[str] = None   # ← aggiungi = None
     public_url: Optional[str]
 
 def _assert_env():
@@ -384,8 +384,9 @@ async def genera_video_hero_openai(
         fps=payload.fps,
         aspect_ratio=payload.aspect_ratio,
         seed=payload.seed,
-        # user_id=user.id  ← opzionale se vuoi gestire l’addebito nel webhook
+        user_id=user.id 
     )
+
     db.add(rec)
     db.commit()
     db.refresh(rec)
@@ -477,5 +478,25 @@ async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
     rec.storage_path = full_path
     rec.public_url = public_url
     db.commit()
+
+    # 💳 Addebito crediti e notifica
+    if rec.user_id:
+        dealer = db.query(User).filter(User.id == rec.user_id).first()
+        if dealer and is_dealer_user(dealer) and LEONARDO_CREDIT_COST > 0:
+            dealer.credit = (dealer.credit or 0) - LEONARDO_CREDIT_COST
+            db.add(CreditTransaction(
+                dealer_id=dealer.id,
+                amount=-LEONARDO_CREDIT_COST,
+                transaction_type="USE",
+                note=f"Video hero Leonardo ({rec.model_id})"
+            ))
+            inserisci_notifica(
+                db=db,
+                utente_id=dealer.id,
+                tipo_codice="CREDITO_USATO",
+                messaggio=f"Hai utilizzato {LEONARDO_CREDIT_COST:g} crediti per la generazione video."
+            )
+            db.commit()
+
 
     return {"ok": True, "status": "completed", "public_url": public_url}
