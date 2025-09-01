@@ -1365,3 +1365,49 @@ Index(
 )
 
 
+from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, CheckConstraint
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
+from enum import Enum
+
+class VideoStatus(str, Enum):
+    queued = "queued"
+    processing = "processing"
+    completed = "completed"
+    failed = "failed"
+
+class UsatoLeonardo(Base):
+    __tablename__ = "usato_leonardo"
+    __table_args__ = (
+        {"schema": "public"},
+        CheckConstraint("status in ('queued','processing','completed','failed')", name="usato_leonardo_status_ck"),
+    )
+
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    id_auto = Column(PG_UUID(as_uuid=True), ForeignKey("public.azlease_usatoauto.id", ondelete="CASCADE"), nullable=False)
+
+    provider = Column(String, nullable=False, default="leonardo")
+    generation_id = Column(String, unique=True, nullable=True)
+
+    status = Column(String, nullable=False, default=VideoStatus.queued.value)
+
+    prompt = Column(Text, nullable=False)
+    negative_prompt = Column(Text, nullable=True)
+
+    model_id = Column(String, nullable=False)
+    duration_seconds = Column(Integer, nullable=True)
+    fps = Column(Integer, nullable=True)
+    aspect_ratio = Column(String, nullable=True)
+    seed = Column(Integer, nullable=True)
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+
+    storage_path = Column(Text, nullable=True)
+    public_url = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    auto = relationship("AZLeaseUsatoAuto", backref="video_leonardo")

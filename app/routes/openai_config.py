@@ -64,3 +64,300 @@ async def genera_testo(
 
     return {"success": True, "output": output}
 
+
+# --- VIDEO HERO LEONARDO (JWT + credito) -------------------------------------
+import os
+import asyncio
+import httpx
+from datetime import timedelta
+from uuid import UUID as _UUID
+from typing import Optional
+
+from fastapi import HTTPException, Depends
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models import (
+    User,
+    CreditTransaction,
+    AZLeaseUsatoAuto,
+    MnetDettaglioUsato,     # se il nome reale differisce, sostituisci
+    UsatoLeonardo,
+)
+from app.routes.notifiche import inserisci_notifica
+from app.auth_helpers import is_admin_user, is_dealer_user
+from fastapi_jwt_auth import AuthJWT
+
+# === ENV / CONFIG ===
+LEONARDO_API_KEY = os.getenv("LEONARDO_API_KEY", "")
+LEONARDO_BASE_URL = os.getenv("LEONARDO_BASE_URL", "https://cloud.leonardo.ai/api/rest/v1")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET_LEONARDO", "leonardo-video")
+# Costo crediti per Dealer (override da env)
+LEONARDO_CREDIT_COST = float(os.getenv("LEONARDO_CREDIT_COST", "5.0"))
+
+NEGATIVE = (
+    "low fidelity, inaccurate proportions, wrong branding, deformed wheels, "
+    "warped grille, extra headlights, motion glitches, text, watermark, logo artifacts, "
+    "incorrect color, aliasing, heavy noise"
+)
+
+class VideoHeroRequest(BaseModel):
+    id_auto: _UUID
+    model_id: str = Field(default="veo-3")      # "veo-3" o "motion-2"
+    duration_seconds: int = Field(default=5, ge=2, le=10)
+    fps: int = Field(default=24, ge=12, le=60)
+    aspect_ratio: str = Field(default="16:9")
+    seed: Optional[int] = None
+    prompt_override: Optional[str] = None  # opzionale
+
+class VideoHeroResponse(BaseModel):
+    success: bool
+    id_auto: _UUID
+    leonardo_generation_id: str
+    storage_path: str
+    public_url: Optional[str]
+
+def _assert_env():
+    if not LEONARDO_API_KEY:
+        raise HTTPException(500, "LEONARDO_API_KEY mancante")
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        raise HTTPException(500, "SUPABASE_URL/SUPABASE_SERVICE_KEY mancanti")
+
+def _build_prompt(marca: str, modello: str, anno: int, colore: Optional[str]) -> str:
+    c = f", color {colore}" if colore else ""
+    base = f"{marca} {modello} {anno}{c}"
+    return (
+        f"Photorealistic studio hero video of a {base}. "
+        "Precise factory proportions, trims and badging. 3/4 front angle. "
+        "Cinematic soft key light and subtle rim light. Neutral seamless background. "
+        "Tripod camera, no camera shake. 5-second clip suitable for website hero."
+    )
+
+async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req: VideoHeroRequest) -> str:
+    payload = {
+        "modelId": req.model_id,
+        "prompt": prompt,
+        "negativePrompt": NEGATIVE,
+        "duration": req.duration_seconds,
+        "fps": req.fps,
+        "aspectRatio": req.aspect_ratio,
+        "public": False,
+    }
+    if req.seed is not None:
+        payload["seed"] = req.seed
+
+    r = await client.post(f"{LEONARDO_BASE_URL}/generations-text-to-video", json=payload)
+    if r.status_code >= 300:
+        raise HTTPException(502, f"Leonardo TTV error: {r.text}")
+    data = r.json()
+    gen_id = (
+        data.get("sdGenerationJob", {}).get("generationId")
+        or data.get("generationId")
+        or data.get("id")
+    )
+    if not gen_id:
+        raise HTTPException(502, "Leonardo: generationId non trovato")
+    return gen_id
+
+async def _leonardo_poll(client: httpx.AsyncClient, generation_id: str, timeout_s: int = 120) -> list[str]:
+    elapsed, step = 0, 2
+    while elapsed <= timeout_s:
+        r = await client.get(f"{LEONARDO_BASE_URL}/generations/{generation_id}")
+        if r.status_code >= 300:
+            raise HTTPException(502, f"Leonardo status error: {r.text}")
+        j = r.json()
+        status = (j.get("sdGenerationJob", {}).get("status") or j.get("status") or "").lower()
+        if status in ("completed", "succeeded", "finished"):
+            assets = (
+                j.get("sdGenerationJob", {}).get("videoAssets")
+                or j.get("videoAssets")
+                or j.get("assets")
+                or []
+            )
+            urls = []
+            for a in assets:
+                u = a.get("url") or a.get("downloadUrl") or a.get("contentUrl")
+                if u:
+                    urls.append(u)
+            if not urls:
+                maybe = j.get("imageUrl") or j.get("videoUrl")
+                if maybe:
+                    urls = [maybe]
+            if not urls:
+                raise HTTPException(502, "Leonardo: nessun asset video")
+            return urls
+        if status in ("failed", "error"):
+            raise HTTPException(502, j.get("error") or j.get("message") or "Leonardo: generazione fallita")
+        await asyncio.sleep(step)
+        elapsed += step
+    raise HTTPException(504, "Timeout attesa video Leonardo")
+
+async def _download(client: httpx.AsyncClient, url: str) -> bytes:
+    r = await client.get(url)
+    if r.status_code >= 300:
+        raise HTTPException(502, f"Download asset fallito: {r.text}")
+    return r.content
+
+async def _supabase_upload_and_sign(path: str, blob: bytes, content_type: str) -> tuple[str, Optional[str]]:
+    put_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{path}"
+    headers = {
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Content-Type": content_type,
+        "x-upsert": "true",
+    }
+    async with httpx.AsyncClient(timeout=60) as c:
+        r = await c.put(put_url, content=blob, headers=headers)
+        if r.status_code >= 300:
+            raise HTTPException(502, f"Supabase upload error: {r.text}")
+
+        # firma 30 giorni
+        sign_url = f"{SUPABASE_URL}/storage/v1/object/sign/{SUPABASE_BUCKET}/{path}"
+        r2 = await c.post(sign_url, json={"expiresIn": int(timedelta(days=30).total_seconds())}, headers={
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Content-Type": "application/json",
+        })
+        public_url = None
+        if r2.status_code < 300:
+            signed_path = r2.json().get("signedURL") or r2.json().get("signedUrl")
+            if signed_path:
+                public_url = f"{SUPABASE_URL}{signed_path}" if signed_path.startswith("/storage") else f"{SUPABASE_URL}/storage/v1/{signed_path.lstrip('/')}"
+        return path, public_url
+
+def _prefer_mp4(urls: list[str]) -> str:
+    for u in urls:
+        if ".mp4" in u.split("?")[0].lower():
+            return u
+    return urls[0]
+
+@router.post("/openai/video-hero", response_model=VideoHeroResponse, tags=["OpenAI"])
+async def genera_video_hero_openai(
+    payload: VideoHeroRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    _assert_env()
+    Authorize.jwt_required()
+
+    # utente
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(403, "Utente non trovato")
+
+    dealer = is_dealer_user(user)
+    admin = is_admin_user(user)
+
+    # dealer → verifica credito
+    if dealer:
+        if user.credit is None or user.credit < LEONARDO_CREDIT_COST:
+            raise HTTPException(402, "Credito insufficiente")
+
+    # lookup auto
+    auto = db.query(AZLeaseUsatoAuto).filter(AZLeaseUsatoAuto.id == payload.id_auto).first()
+    if not auto:
+        raise HTTPException(404, "Auto non trovata")
+
+    det = None
+    if getattr(auto, "codice_motornet", None):
+        det = db.query(MnetDettaglioUsato)\
+                .filter(MnetDettaglioUsato.codice_motornet_uni == auto.codice_motornet)\
+                .first()
+
+    marca = (getattr(det, "marca_nome", None) or "").strip()
+    modello = (getattr(det, "modello", None) or "").strip()
+    anno = int(getattr(auto, "anno_immatricolazione", 0) or 0)
+    colore = (getattr(auto, "colore", None) or "").strip()
+
+    if not (marca and modello and anno > 0):
+        raise HTTPException(422, "Marca/Modello/Anno non disponibili")
+
+    prompt = payload.prompt_override or _build_prompt(marca, modello, anno, colore)
+
+    # crea record 'queued'
+    rec = UsatoLeonardo(
+        id_auto=payload.id_auto,
+        provider="leonardo",
+        generation_id=None,
+        status="queued",
+        prompt=prompt,
+        negative_prompt=NEGATIVE,
+        model_id=payload.model_id,
+        duration_seconds=payload.duration_seconds,
+        fps=payload.fps,
+        aspect_ratio=payload.aspect_ratio,
+        seed=payload.seed,
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+
+    headers = {"Authorization": f"Bearer {LEONARDO_API_KEY}"}
+
+    try:
+        # crea job e poll
+        async with httpx.AsyncClient(timeout=60, headers=headers) as client:
+            gen_id = await _leonardo_text_to_video(client, prompt=prompt, req=payload)
+            rec.generation_id = gen_id
+            rec.status = "processing"
+            db.commit()
+
+            urls = await _leonardo_poll(client, gen_id, timeout_s=120)
+            asset = _prefer_mp4(urls)
+            blob = await _download(client, asset)
+
+        # upload storage
+        ext = ".mp4" if ".mp4" in asset.split("?")[0].lower() else ".webm"
+        storage_path = f"{payload.id_auto}/{rec.id}{ext}"
+        full_path, public_url = await _supabase_upload_and_sign(
+            storage_path, blob, content_type="video/mp4" if ext == ".mp4" else "video/webm"
+        )
+
+        # aggiorna record
+        rec.status = "completed"
+        rec.storage_path = full_path
+        rec.public_url = public_url
+        db.commit()
+        db.refresh(rec)
+
+        # addebito crediti SOLO dealer e SOLO a successo
+        if dealer and LEONARDO_CREDIT_COST > 0:
+            user.credit = (user.credit or 0) - LEONARDO_CREDIT_COST
+            db.add(CreditTransaction(
+                dealer_id=user.id,
+                amount=-LEONARDO_CREDIT_COST,
+                transaction_type="USE",
+                note=f"Video hero Leonardo ({payload.model_id})"
+            ))
+            inserisci_notifica(
+                db=db,
+                utente_id=user.id,
+                tipo_codice="CREDITO_USATO",
+                messaggio=f"Hai utilizzato {LEONARDO_CREDIT_COST:g} crediti per la generazione video."
+            )
+            db.commit()
+
+        return VideoHeroResponse(
+            success=True,
+            id_auto=payload.id_auto,
+            leonardo_generation_id=rec.generation_id or "",
+            storage_path=rec.storage_path or "",
+            public_url=rec.public_url,
+        )
+
+    except HTTPException as e:
+        # marca come failed, non addebita
+        rec.status = "failed"
+        rec.error_message = str(e.detail) if hasattr(e, "detail") else str(e)
+        db.commit()
+        raise
+
+    except Exception as ex:
+        rec.status = "failed"
+        rec.error_message = str(ex)
+        db.commit()
+        raise HTTPException(502, "Errore non previsto durante la generazione video")
