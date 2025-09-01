@@ -134,7 +134,9 @@ NEGATIVE = (
     "aliasing, pixelation, heavy compression, "
     "oversaturated colors, neon glow, videogame graphics, "
     "cartoonish style, cgi look, plastic rendering, toon shading, "
-    "unrealistic render, hyper saturation, unrealistic neon lighting"
+    "unrealistic render, hyper saturation, unrealistic neon lighting,"
+    "rear view, back view, reverse gear, car in reverse, car driving backwards, camera behind the car"
+
 )
 
 
