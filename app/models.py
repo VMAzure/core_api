@@ -1377,10 +1377,8 @@ class VideoStatus(str, Enum):
 
 class UsatoLeonardo(Base):
     __tablename__ = "usato_leonardo"
-    __table_args__ = (
-        {"schema": "public"},
-        CheckConstraint("status in ('queued','processing','completed','failed')", name="usato_leonardo_status_ck"),
-    )
+    __table_args__ = {"schema": "public"}
+
 
     id = Column(PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     id_auto = Column(PG_UUID(as_uuid=True), ForeignKey("public.azlease_usatoauto.id", ondelete="CASCADE"), nullable=False)
