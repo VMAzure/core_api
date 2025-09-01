@@ -418,12 +418,15 @@ async def genera_video_hero_openai(
 
 @router.post("/webhooks/leonardo", tags=["Webhooks"])
 async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
-    # 3.1) Autenticazione semplice via header
+    api_key = req.headers.get("x-api-key") or req.headers.get("X-API-Key")
+    print(f"[WEBHOOK] X-API-Key ricevuta: {api_key}")
+    print(f"[WEBHOOK] Attesa: {LEONARDO_WEBHOOK_SECRET}")
+
     if not LEONARDO_WEBHOOK_SECRET:
         raise HTTPException(500, "Webhook secret non configurato")
-    api_key = req.headers.get("x-api-key") or req.headers.get("X-API-Key")
     if api_key != LEONARDO_WEBHOOK_SECRET:
         raise HTTPException(401, "X-API-Key non valida")
+
 
     body = await req.json()
 
