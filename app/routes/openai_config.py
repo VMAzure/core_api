@@ -4,11 +4,13 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi_jwt_auth import AuthJWT
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from app.database import get_db
+from app.database import get_db, supabase_client
 from app.models import User, PurchasedServices, Services, CreditTransaction
 from app.auth_helpers import is_admin_user, is_dealer_user
 from app.routes.notifiche import inserisci_notifica
 from app.openai_utils import genera_descrizione_gpt
+
+
 
 router = APIRouter()
 
@@ -95,6 +97,24 @@ LEONARDO_BASE_URL = os.getenv("LEONARDO_BASE_URL", "https://cloud.leonardo.ai/ap
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET_LEONARDO", "leonardo-video")
+
+def _sb_upload_and_sign(path: str, blob: bytes, content_type: str) -> tuple[str, str | None]:
+    # Upload con upsert usando l’SDK già autenticato (supabase_client)
+    supabase_client.storage.from_(SUPABASE_BUCKET).upload(
+        path=path,
+        file=blob,
+        file_options={"content-type": content_type, "upsert": "true"}
+    )
+    # URL firmata 30 giorni
+    res = supabase_client.storage.from_(SUPABASE_BUCKET).create_signed_url(
+        path=path,
+        expires_in=60 * 60 * 24 * 30
+    )
+    signed = res.get("signedURL") or res.get("signed_url") or res.get("signedUrl")
+    if signed and signed.startswith("/storage"):
+        base = os.getenv("SUPABASE_URL", "").rstrip("/")
+        signed = f"{base}{signed}"
+    return path, signed
 # Costo crediti per Dealer (override da env)
 LEONARDO_CREDIT_COST = float(os.getenv("LEONARDO_CREDIT_COST", "5.0"))
 
@@ -112,6 +132,8 @@ class VideoHeroRequest(BaseModel):
     aspect_ratio: str = Field(default="16:9")
     seed: Optional[int] = None
     scenario: Optional[str] = None   # 👈 nuovo campo per la descrizione
+    prompt_override: Optional[str] = None
+
 
 
 class VideoHeroResponse(BaseModel):
@@ -124,8 +146,7 @@ class VideoHeroResponse(BaseModel):
 def _assert_env():
     if not LEONARDO_API_KEY:
         raise HTTPException(500, "LEONARDO_API_KEY mancante")
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        raise HTTPException(500, "SUPABASE_URL/SUPABASE_SERVICE_KEY mancanti")
+    # Supabase è già configurato in app.database (supabase_client)
 
 def _build_prompt(marca: str, modello: str, anno: int, colore: Optional[str]) -> str:
     c = f", color {colore}" if colore else ""
@@ -136,6 +157,14 @@ def _build_prompt(marca: str, modello: str, anno: int, colore: Optional[str]) ->
         "Cinematic soft key light and subtle rim light. Neutral seamless background. "
         "Tripod camera, no camera shake. 5-second clip suitable for website hero."
     )
+
+def _prefer_mp4(urls: list[str]) -> str:
+    """Ritorna l'URL mp4 se esiste, altrimenti il primo asset disponibile."""
+    for u in urls:
+        if ".mp4" in u.split("?")[0].lower():
+            return u
+    return urls[0]
+
 
 async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req: VideoHeroRequest) -> str:
     payload = {
@@ -202,38 +231,6 @@ async def _download(client: httpx.AsyncClient, url: str) -> bytes:
         raise HTTPException(502, f"Download asset fallito: {r.text}")
     return r.content
 
-async def _supabase_upload_and_sign(path: str, blob: bytes, content_type: str) -> tuple[str, Optional[str]]:
-    put_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{path}"
-    headers = {
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Content-Type": content_type,
-        "x-upsert": "true",
-    }
-    async with httpx.AsyncClient(timeout=60) as c:
-        r = await c.put(put_url, content=blob, headers=headers)
-        if r.status_code >= 300:
-            raise HTTPException(502, f"Supabase upload error: {r.text}")
-
-        # firma 30 giorni
-        sign_url = f"{SUPABASE_URL}/storage/v1/object/sign/{SUPABASE_BUCKET}/{path}"
-        r2 = await c.post(sign_url, json={"expiresIn": int(timedelta(days=30).total_seconds())}, headers={
-            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-            "apikey": SUPABASE_SERVICE_KEY,
-            "Content-Type": "application/json",
-        })
-        public_url = None
-        if r2.status_code < 300:
-            signed_path = r2.json().get("signedURL") or r2.json().get("signedUrl")
-            if signed_path:
-                public_url = f"{SUPABASE_URL}{signed_path}" if signed_path.startswith("/storage") else f"{SUPABASE_URL}/storage/v1/{signed_path.lstrip('/')}"
-        return path, public_url
-
-def _prefer_mp4(urls: list[str]) -> str:
-    for u in urls:
-        if ".mp4" in u.split("?")[0].lower():
-            return u
-    return urls[0]
 
 @router.post("/openai/video-hero", response_model=VideoHeroResponse, tags=["OpenAI"])
 async def genera_video_hero_openai(
@@ -278,9 +275,11 @@ async def genera_video_hero_openai(
         raise HTTPException(422, "Marca/Modello/Anno non disponibili")
 
     if payload.scenario:
-        prompt = f"A cinematic {payload.scenario} of a {marca} {modello} {anno} in {colore}."
+        color_txt = f" in {colore}" if colore else ""
+        prompt = f"A cinematic {payload.scenario} of a {marca} {modello} {anno}{color_txt}."
     else:
         prompt = payload.prompt_override or _build_prompt(marca, modello, anno, colore)
+
 
     # crea record 'queued'
     rec = UsatoLeonardo(
@@ -304,7 +303,7 @@ async def genera_video_hero_openai(
 
     try:
         # crea job e poll
-        async with httpx.AsyncClient(timeout=60, headers=headers) as client:
+        async with httpx.AsyncClient(timeout=120, headers=headers) as client:
             gen_id = await _leonardo_text_to_video(client, prompt=prompt, req=payload)
             rec.generation_id = gen_id
             rec.status = "processing"
@@ -317,9 +316,10 @@ async def genera_video_hero_openai(
         # upload storage
         ext = ".mp4" if ".mp4" in asset.split("?")[0].lower() else ".webm"
         storage_path = f"{payload.id_auto}/{rec.id}{ext}"
-        full_path, public_url = await _supabase_upload_and_sign(
-            storage_path, blob, content_type="video/mp4" if ext == ".mp4" else "video/webm"
+        full_path, public_url = _sb_upload_and_sign(
+            storage_path, blob, "video/mp4" if ext == ".mp4" else "video/webm"
         )
+
 
         # aggiorna record
         rec.status = "completed"
