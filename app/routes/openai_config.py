@@ -9,6 +9,9 @@ from app.models import User, PurchasedServices, Services, CreditTransaction
 from app.auth_helpers import is_admin_user, is_dealer_user
 from app.routes.notifiche import inserisci_notifica
 from app.openai_utils import genera_descrizione_gpt
+
+from fastapi import APIRouter, Request, HTTPException, Depends
+from sqlalchemy.orm import Session
 import json
 
 
@@ -420,13 +423,13 @@ async def genera_video_hero_openai(
 
 @router.post("/webhooks/leonardo", tags=["Webhooks"])
 async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
-    # 🔐 Auth Bearer semplice
+    # 🔐 Auth Bearer
     auth_header = req.headers.get("authorization") or req.headers.get("Authorization") or ""
     if auth_header.strip() != f"Bearer {LEONARDO_WEBHOOK_SECRET}":
         print(f"[WEBHOOK] ❌ Authorization non valida: {auth_header}")
         raise HTTPException(status_code=401, detail="Authorization header non valido")
 
-    # 🔍 Parse JSON una sola volta
+    # 🔍 Parse JSON
     try:
         body = await req.json()
         print("[WEBHOOK] ✅ Payload JSON ricevuto:")
@@ -435,38 +438,52 @@ async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
         print("[WEBHOOK] ❌ Errore parsing JSON:", str(e))
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
-    # 🎯 Estrazione robusta del generationId
-    gen_id: Optional[str] = (
+    # 🎯 generationId
+    gen_id = (
         body.get("generationId")
+        or body.get("id")
         or body.get("sdGenerationJob", {}).get("generationId")
         or body.get("motionVideoGenerationJob", {}).get("generationId")
-        or body.get("data", {}).get("object", {}).get("generationId")
         or body.get("data", {}).get("generationId")
+        or body.get("data", {}).get("object", {}).get("generationId")
+        or body.get("data", {}).get("object", {}).get("id")
+        or body.get("data", {}).get("object", {}).get("generations_by_pk", {}).get("generationId")
+        or body.get("data", {}).get("object", {}).get("generations_by_pk", {}).get("id")
     )
-    if not gen_id or not isinstance(gen_id, str):
+    if not isinstance(gen_id, str) or not gen_id:
         print("[WEBHOOK] ❌ generationId mancante nel payload.")
         raise HTTPException(status_code=400, detail="generationId mancante")
 
-    # 🔎 Lookup record
-    rec = (
-        db.query(UsatoLeonardo)
-        .filter(UsatoLeonardo.generation_id == gen_id)
-        .first()
-    )
+    # 🔎 Lookup
+    rec = db.query(UsatoLeonardo).filter(UsatoLeonardo.generation_id == gen_id).first()
     if not rec:
         print(f"[WEBHOOK] ⚠️ generationId {gen_id} non trovato nel DB.")
         return {"ok": True, "note": "generation_id non associato"}
 
-    # 🔁 Idempotenza
     if rec.status == "completed" and rec.public_url:
         print(f"[WEBHOOK] 🔁 generationId {gen_id} già completato.")
         return {"ok": True, "status": "already_completed", "public_url": rec.public_url}
 
-    # 📥 Stato job + asset da Leonardo
+    # 🎞️ Asset dal payload (preferito) o fetch
+    asset_url = (
+        body.get("motionMP4URL")
+        or body.get("data", {}).get("object", {}).get("motionMP4URL")
+        or body.get("data", {}).get("object", {}).get("generations_by_pk", {}).get("motionMP4URL")
+        or body.get("data", {}).get("object", {}).get("motionGIFURL")
+        or body.get("data", {}).get("object", {}).get("generations_by_pk", {}).get("motionGIFURL")
+    )
+
     headers = {"Authorization": f"Bearer {LEONARDO_API_KEY}"}
-    try:
-        async with httpx.AsyncClient(timeout=120, headers=headers) as client:
-            status, urls = await _leonardo_fetch_job_once(client, gen_id)
+    async with httpx.AsyncClient(timeout=120, headers=headers) as client:
+        if asset_url:
+            blob = await _download(client, asset_url)
+        else:
+            try:
+                status, urls = await _leonardo_fetch_job_once(client, gen_id)
+            except Exception as e:
+                print(f"[WEBHOOK] ❌ Errore fetch Leonardo: {str(e)}")
+                raise HTTPException(status_code=502, detail="Errore recupero job da Leonardo")
+
             if status in {"failed", "error"}:
                 rec.status = "failed"
                 rec.error_message = "Leonardo: job failed (webhook)"
@@ -474,7 +491,6 @@ async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
                 return {"ok": True, "status": "failed"}
 
             if status not in {"completed", "succeeded", "finished"}:
-                # Non pronto: non fallire il webhook
                 return {"ok": True, "status": status}
 
             if not urls:
@@ -483,26 +499,23 @@ async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
                 db.commit()
                 return {"ok": True, "status": "no_assets"}
 
-            asset_url = _prefer_mp4(urls)  # usa .mp4 se disponibile
+            asset_url = _prefer_mp4(urls)
             blob = await _download(client, asset_url)
-    except Exception as e:
-        print(f"[WEBHOOK] ❌ Errore fetch/download Leonardo: {str(e)}")
-        raise HTTPException(status_code=502, detail="Errore recupero job da Leonardo")
 
     # 📤 Upload su Supabase
-    try:
-        base = asset_url.split("?", 1)[0].lower()
-        is_mp4 = base.endswith(".mp4")
-        ext = ".mp4" if is_mp4 else ".webm"
-        mime = "video/mp4" if is_mp4 else "video/webm"
+    base = asset_url.split("?", 1)[0].lower()
+    is_mp4 = base.endswith(".mp4")
+    ext = ".mp4" if is_mp4 else ".webm"
+    mime = "video/mp4" if is_mp4 else "video/webm"
 
-        storage_path = f"{rec.id_auto}/{rec.id}{ext}"
+    storage_path = f"{rec.id_auto}/{rec.id}{ext}"
+    try:
         full_path, public_url = _sb_upload_and_sign(storage_path, blob, mime)
     except Exception as e:
         print(f"[WEBHOOK] ❌ Errore upload Supabase: {str(e)}")
         raise HTTPException(status_code=502, detail="Errore upload storage")
 
-    # 🧾 Update DB atomico
+    # 🧾 Update DB (wrap corretto)
     try:
         rec.status = "completed"
         rec.storage_path = full_path
@@ -513,7 +526,7 @@ async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
         print(f"[WEBHOOK] ❌ Errore commit DB (update rec): {str(e)}")
         raise HTTPException(status_code=500, detail="Errore salvataggio DB")
 
-    # 💳 Addebito crediti + notifica (solo dealer)
+    # 💳 Addebito + notifica
     try:
         if rec.user_id and (rec.credit_cost or 0) > 0:
             dealer = db.query(User).filter(User.id == rec.user_id).first()
@@ -535,7 +548,6 @@ async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
                 db.commit()
     except Exception as e:
         db.rollback()
-        # Non fallire il webhook per problemi di contabilizzazione: logga e continua
         print(f"[WEBHOOK] ⚠️ Errore addebito/notifica: {str(e)}")
 
     print(f"[WEBHOOK] ✅ Video completato, URL: {public_url}")
