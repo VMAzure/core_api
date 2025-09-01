@@ -131,8 +131,12 @@ NEGATIVE = (
     "extra tires, extra headlights, duplicated parts, "
     "ghosting, double exposure, artifacts, "
     "text, captions, watermark, logo artifacts, UI overlays, "
-    "aliasing, pixelation, heavy compression, oversaturated colors"
+    "aliasing, pixelation, heavy compression, "
+    "oversaturated colors, neon glow, videogame graphics, "
+    "cartoonish style, cgi look, plastic rendering, toon shading, "
+    "unrealistic render, hyper saturation, unrealistic neon lighting"
 )
+
 
 class VideoHeroRequest(BaseModel):
     id_auto: _UUID
