@@ -1,6 +1,6 @@
 ﻿# app/routes/openai_config.py
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi_jwt_auth import AuthJWT
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -331,21 +331,17 @@ async def genera_video_hero_openai(
     _assert_env()
     Authorize.jwt_required()
 
-    # utente
+    # 1. Autenticazione utente
     user_email = Authorize.get_jwt_subject()
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(403, "Utente non trovato")
 
     dealer = is_dealer_user(user)
-    admin = is_admin_user(user)
+    if dealer and (user.credit is None or user.credit < LEONARDO_CREDIT_COST):
+        raise HTTPException(402, "Credito insufficiente")
 
-    # dealer → verifica credito
-    if dealer:
-        if user.credit is None or user.credit < LEONARDO_CREDIT_COST:
-            raise HTTPException(402, "Credito insufficiente")
-
-    # lookup auto
+    # 2. Lookup auto
     auto = db.query(AZLeaseUsatoAuto).filter(AZLeaseUsatoAuto.id == payload.id_auto).first()
     if not auto:
         raise HTTPException(404, "Auto non trovata")
@@ -358,20 +354,24 @@ async def genera_video_hero_openai(
 
     marca = (getattr(det, "marca_nome", None) or "").strip()
     modello = (getattr(det, "modello", None) or "").strip()
+    allestimento = (getattr(det, "allestimento", None) or "").strip() if det else None
     anno = int(getattr(auto, "anno_immatricolazione", 0) or 0)
     colore = (getattr(auto, "colore", None) or "").strip()
 
     if not (marca and modello and anno > 0):
         raise HTTPException(422, "Marca/Modello/Anno non disponibili")
 
-    if payload.scenario:
-        color_txt = f" in {colore}" if colore else ""
-        prompt = f"A cinematic {payload.scenario} of a {marca} {modello} {anno}{color_txt}."
-    else:
-        prompt = payload.prompt_override or _build_prompt(marca, modello, anno, colore)
+    # 3. Prompt finale
+    prompt = (
+        f"{payload.scenario.strip()} "
+        f"The vehicle is a {marca} {modello} {allestimento or ''} {anno} in {colore}. "
+        "Keep proportions, design and color factory-accurate. "
+        "No text, no subtitles, no Chinese or foreign characters visible."
+    ) if payload.scenario else (
+        payload.prompt_override or _build_prompt(marca, modello, anno, colore, allestimento)
+    )
 
-
-    # crea record 'queued'
+    # 4. Crea record DB
     rec = UsatoLeonardo(
         id_auto=payload.id_auto,
         provider="leonardo",
@@ -384,85 +384,36 @@ async def genera_video_hero_openai(
         fps=payload.fps,
         aspect_ratio=payload.aspect_ratio,
         seed=payload.seed,
+        # user_id=user.id  ← opzionale se vuoi gestire l’addebito nel webhook
     )
     db.add(rec)
     db.commit()
     db.refresh(rec)
 
+    # 5. Crea job su Leonardo
     headers = {"Authorization": f"Bearer {LEONARDO_API_KEY}"}
-
     try:
-        # crea job su Leonardo
         async with httpx.AsyncClient(timeout=60, headers=headers) as client:
             gen_id = await _leonardo_text_to_video(client, prompt=prompt, req=payload)
-
-            rec.generation_id = gen_id
-            rec.status = "processing"
-            db.commit()
-
-            # 🔁 poll fino a completamento (supporta sia VEO3 che MOTION2)
-            urls = await _leonardo_poll(client, gen_id, timeout_s=180)
-
-            # scegli asset .mp4 se disponibile
-            asset = _prefer_mp4(urls)
-
-            # scarica asset binario
-            blob = await _download(client, asset)
-
-        # 📤 upload su Supabase
-        ext = ".mp4" if ".mp4" in asset.split("?")[0].lower() else ".webm"
-        storage_path = f"{payload.id_auto}/{rec.id}{ext}"
-        full_path, public_url = _sb_upload_and_sign(
-            storage_path, blob, "video/mp4" if ext == ".mp4" else "video/webm"
-        )
-
-        # ✅ aggiorna record in DB
-        rec.status = "completed"
-        rec.storage_path = full_path
-        rec.public_url = public_url
-        db.commit()
-        db.refresh(rec)
-
-        # 💳 addebito crediti SOLO se dealer e SOLO a successo
-        if dealer and LEONARDO_CREDIT_COST > 0:
-            user.credit = (user.credit or 0) - LEONARDO_CREDIT_COST
-            db.add(CreditTransaction(
-                dealer_id=user.id,
-                amount=-LEONARDO_CREDIT_COST,
-                transaction_type="USE",
-                note=f"Video hero Leonardo ({payload.model_id})"
-            ))
-            inserisci_notifica(
-                db=db,
-                utente_id=user.id,
-                tipo_codice="CREDITO_USATO",
-                messaggio=f"Hai utilizzato {LEONARDO_CREDIT_COST:g} crediti per la generazione video."
-            )
-            db.commit()
-
-        return VideoHeroResponse(
-            success=True,
-            id_auto=payload.id_auto,
-            leonardo_generation_id=rec.generation_id or "",
-            storage_path=rec.storage_path or "",
-            public_url=rec.public_url,
-        )
-
-
-    except HTTPException as e:
-        # marca come failed, non addebita
+    except Exception as e:
         rec.status = "failed"
-        rec.error_message = str(e.detail) if hasattr(e, "detail") else str(e)
+        rec.error_message = str(e)
         db.commit()
         raise
 
-    except Exception as ex:
-        rec.status = "failed"
-        rec.error_message = str(ex)
-        db.commit()
-        raise HTTPException(502, "Errore non previsto durante la generazione video")
+    # 6. Aggiorna con generation_id
+    rec.generation_id = gen_id
+    rec.status = "processing"
+    db.commit()
 
-from fastapi import Request
+    # 7. Risposta immediata
+    return VideoHeroResponse(
+        success=True,
+        id_auto=payload.id_auto,
+        leonardo_generation_id=gen_id,
+        storage_path=None,
+        public_url=None
+    )
 
 @router.post("/webhooks/leonardo", tags=["Webhooks"])
 async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
