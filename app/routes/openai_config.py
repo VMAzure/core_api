@@ -106,12 +106,13 @@ NEGATIVE = (
 
 class VideoHeroRequest(BaseModel):
     id_auto: _UUID
-    model_id: str = Field(default="veo-3")      # "veo-3" o "motion-2"
+    model_id: str = Field(default="veo-3")
     duration_seconds: int = Field(default=5, ge=2, le=10)
     fps: int = Field(default=24, ge=12, le=60)
     aspect_ratio: str = Field(default="16:9")
     seed: Optional[int] = None
-    prompt_override: Optional[str] = None  # opzionale
+    scenario: Optional[str] = None   # 👈 nuovo campo per la descrizione
+
 
 class VideoHeroResponse(BaseModel):
     success: bool
@@ -276,7 +277,10 @@ async def genera_video_hero_openai(
     if not (marca and modello and anno > 0):
         raise HTTPException(422, "Marca/Modello/Anno non disponibili")
 
-    prompt = payload.prompt_override or _build_prompt(marca, modello, anno, colore)
+    if payload.scenario:
+        prompt = f"A cinematic {payload.scenario} of a {marca} {modello} {anno} in {colore}."
+    else:
+        prompt = payload.prompt_override or _build_prompt(marca, modello, anno, colore)
 
     # crea record 'queued'
     rec = UsatoLeonardo(
