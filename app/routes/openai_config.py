@@ -185,12 +185,25 @@ async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req
     }
 
     r = await client.post(f"{LEONARDO_BASE_URL}/generations-text-to-video", json=data)
+
+    if r.status_code == 402:
+        # crediti API insufficienti su Leonardo
+        raise HTTPException(status_code=402, detail="Leonardo: crediti API insufficienti")
+
     if r.status_code >= 300:
         raise HTTPException(status_code=502, detail=f"Leonardo TTV error ({r.status_code}): {r.text}")
+
     resp = r.json()
-    gen_id = resp.get("sdGenerationJob", {}).get("generationId") or resp.get("generationId") or resp.get("id")
+    gen_id = (
+        resp.get("sdGenerationJob", {}).get("generationId")
+        or resp.get("generationId")
+        or resp.get("id")
+    )
     if not gen_id:
-        raise HTTPException(status_code=502, detail=f"Leonardo: generationId non trovato. Response: {resp}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Leonardo: generationId non trovato. Response: {resp}"
+        )
     return gen_id
 
 
