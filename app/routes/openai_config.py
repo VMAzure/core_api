@@ -97,6 +97,8 @@ LEONARDO_BASE_URL = os.getenv("LEONARDO_BASE_URL", "https://cloud.leonardo.ai/ap
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET_LEONARDO", "leonardo-video")
+LEONARDO_WEBHOOK_SECRET = LEONARDO_API_KEY  # usa la stessa key per autenticare i webhook
+
 
 def _sb_upload_and_sign(path: str, blob: bytes, content_type: str) -> tuple[str, str | None]:
     # Upload con upsert usando l’SDK già autenticato (supabase_client)
@@ -165,15 +167,21 @@ def _assert_env():
         raise HTTPException(500, "LEONARDO_API_KEY mancante")
     # Supabase è già configurato in app.database (supabase_client)
 
-def _build_prompt(marca: str, modello: str, anno: int, colore: Optional[str]) -> str:
-    c = f", color {colore}" if colore else ""
-    base = f"{marca} {modello} {anno}{c}"
+def _build_prompt(marca: str, modello: str, anno: int, colore: Optional[str], allestimento: Optional[str] = None) -> str:
+    colore_txt = f" {colore}" if colore else ""
+    anno_txt = f" {anno}" if anno else ""
+    allest_txt = f" {allestimento}" if allestimento else ""
+    base = f"{marca} {modello}{allest_txt}{anno_txt}{colore_txt}"
     return (
-        f"Photorealistic studio hero video of a {base}. "
-        "Precise factory proportions, trims and badging. 3/4 front angle. "
-        "Cinematic soft key light and subtle rim light. Neutral seamless background. "
-        "Tripod camera, no camera shake. 5-second clip suitable for website hero."
+        f"Generate a cinematic video of a {base}. "
+        "Keep proportions, design and color factory-accurate. "
+        "Place the car in a modern urban night setting with neon lights and reflections on wet asphalt. "
+        "The car moves slowly forward while the camera orbits smoothly around it, showing close-up details "
+        "and a three-quarter front view (front and side visible). "
+        "Realistic style, cinematic quality, modern atmosphere, dynamic but natural motion. "
+        "No text, no subtitles, no Chinese or foreign characters visible."
     )
+
 
 def _prefer_mp4(urls: list[str]) -> str:
     """Ritorna l'URL mp4 se esiste, altrimenti il primo asset disponibile."""
@@ -297,6 +305,21 @@ async def _download(client: httpx.AsyncClient, url: str) -> bytes:
     if r.status_code >= 300:
         raise HTTPException(502, f"Download asset fallito: {r.text}")
     return r.content
+
+async def _leonardo_fetch_job_once(client: httpx.AsyncClient, generation_id: str) -> tuple[str, list[str]]:
+    r = await client.get(f"{LEONARDO_BASE_URL}/generations/{generation_id}")
+    if r.status_code >= 300:
+        raise HTTPException(status_code=502, detail=f"Leonardo status error: {r.text}")
+    j = r.json()
+    job = j.get("sdGenerationJob") or j.get("motionVideoGenerationJob") or {}
+    status = (job.get("status") or "").lower()
+    assets = job.get("videoAssets") or []
+    urls = []
+    for a in assets:
+        u = a.get("url") or a.get("downloadUrl") or a.get("contentUrl")
+        if u:
+            urls.append(u)
+    return status, urls
 
 
 @router.post("/openai/video-hero", response_model=VideoHeroResponse, tags=["OpenAI"])
@@ -438,3 +461,70 @@ async def genera_video_hero_openai(
         rec.error_message = str(ex)
         db.commit()
         raise HTTPException(502, "Errore non previsto durante la generazione video")
+
+from fastapi import Request
+
+@router.post("/webhooks/leonardo", tags=["Webhooks"])
+async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
+    # 3.1) Autenticazione semplice via header
+    if not LEONARDO_WEBHOOK_SECRET:
+        raise HTTPException(500, "Webhook secret non configurato")
+    api_key = req.headers.get("x-api-key") or req.headers.get("X-API-Key")
+    if api_key != LEONARDO_WEBHOOK_SECRET:
+        raise HTTPException(401, "X-API-Key non valida")
+
+    body = await req.json()
+
+    # 3.2) Estrai generationId da vari formati
+    gen_id = (
+        body.get("generationId")
+        or body.get("sdGenerationJob", {}).get("generationId")
+        or body.get("motionVideoGenerationJob", {}).get("generationId")
+    )
+    if not gen_id:
+        raise HTTPException(400, "generationId mancante")
+
+    rec = db.query(UsatoLeonardo).filter(UsatoLeonardo.generation_id == gen_id).first()
+    if not rec:
+        # Non conosciamo il job: rispondi ok per evitare retry loop
+        return {"ok": True, "note": "generation_id non associato"}
+
+    if rec.status == "completed":
+        return {"ok": True, "status": "already_completed", "public_url": rec.public_url}
+
+    headers = {"Authorization": f"Bearer {LEONARDO_API_KEY}"}
+    async with httpx.AsyncClient(timeout=120, headers=headers) as client:
+        status, urls = await _leonardo_fetch_job_once(client, gen_id)
+
+        if status in ("failed", "error"):
+            rec.status = "failed"
+            rec.error_message = "Leonardo: job failed (webhook)"
+            db.commit()
+            return {"ok": True, "status": "failed"}
+
+        if status not in ("completed", "succeeded", "finished"):
+            # Non ancora pronto: Leonardo richiamerà il webhook più avanti
+            return {"ok": True, "status": status}
+
+        if not urls:
+            rec.status = "failed"
+            rec.error_message = "Leonardo: nessun asset video (webhook)"
+            db.commit()
+            return {"ok": True, "status": "no_assets"}
+
+        # Scarica il migliore e carica su Supabase
+        asset = _prefer_mp4(urls)
+        blob = await _download(client, asset)
+
+    ext = ".mp4" if ".mp4" in asset.split("?")[0].lower() else ".webm"
+    storage_path = f"{rec.id_auto}/{rec.id}{ext}"
+    full_path, public_url = _sb_upload_and_sign(
+        storage_path, blob, "video/mp4" if ext == ".mp4" else "video/webm"
+    )
+
+    rec.status = "completed"
+    rec.storage_path = full_path
+    rec.public_url = public_url
+    db.commit()
+
+    return {"ok": True, "status": "completed", "public_url": public_url}
