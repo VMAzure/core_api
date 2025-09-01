@@ -119,9 +119,19 @@ def _sb_upload_and_sign(path: str, blob: bytes, content_type: str) -> tuple[str,
 LEONARDO_CREDIT_COST = float(os.getenv("LEONARDO_CREDIT_COST", "5.0"))
 
 NEGATIVE = (
-    "low fidelity, inaccurate proportions, wrong branding, deformed wheels, "
-    "warped grille, extra headlights, motion glitches, text, watermark, logo artifacts, "
-    "incorrect color, aliasing, heavy noise"
+    "low fidelity, low quality, blurry, noisy, distorted, "
+    "inaccurate proportions, wrong branding, off-model, "
+    "warped grille, deformed wheels, broken headlights, "
+    "unnatural motion, driving backwards, reversed movement, "
+    "car sliding sideways without reason, floating car, "
+    "car bouncing unrealistically, car stretching or bending, "
+    "camera jitter, jerky motion, sudden zooms, unnatural camera shake, "
+    "frame skipping, inconsistent lighting, "
+    "wrong reflections, mirrored logos, incorrect license plates, "
+    "extra tires, extra headlights, duplicated parts, "
+    "ghosting, double exposure, artifacts, "
+    "text, captions, watermark, logo artifacts, UI overlays, "
+    "aliasing, pixelation, heavy compression, oversaturated colors"
 )
 
 class VideoHeroRequest(BaseModel):
