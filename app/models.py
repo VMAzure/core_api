@@ -1324,10 +1324,8 @@ class ClienteTemp(Base):
 
 class AutousatoVideo(Base):
     __tablename__ = "autousato_videos"
-    __table_args__ = (
-        UniqueConstraint("id_auto", "video_id", name="autousato_videos_auto_vid_uniq"),
-        {"schema": "public"},
-    )
+    __table_args__ = {"schema": "public"}
+
 
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
