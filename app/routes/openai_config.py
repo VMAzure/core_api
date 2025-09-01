@@ -209,12 +209,17 @@ async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req
     resp = r.json()
     gen_id = (
         resp.get("sdGenerationJob", {}).get("generationId")
+        or resp.get("motionVideoGenerationJob", {}).get("generationId")
         or resp.get("generationId")
         or resp.get("id")
     )
     if not gen_id:
-        raise HTTPException(status_code=502, detail=f"Leonardo: generationId non trovato. Response: {resp}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Leonardo: generationId non trovato. Response: {resp}"
+        )
     return gen_id
+
 
 
 
