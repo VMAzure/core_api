@@ -224,16 +224,29 @@ async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req
 
 
 async def _leonardo_poll(client: httpx.AsyncClient, generation_id: str, timeout_s: int = 120) -> list[str]:
+    """
+    Polla lo stato di una generazione Leonardo finché non è completata o fallita.
+    Ritorna la lista di URL degli asset video.
+    """
     elapsed, step = 0, 2
+
     while elapsed <= timeout_s:
         r = await client.get(f"{LEONARDO_BASE_URL}/generations/{generation_id}")
         if r.status_code >= 300:
-            raise HTTPException(502, f"Leonardo status error: {r.text}")
+            raise HTTPException(status_code=502, detail=f"Leonardo status error: {r.text}")
         j = r.json()
-        status = (j.get("sdGenerationJob", {}).get("status") or j.get("status") or "").lower()
+
+        # estrai job per i due modelli
+        job = (
+            j.get("sdGenerationJob")
+            or j.get("motionVideoGenerationJob")
+            or {}
+        )
+        status = (job.get("status") or "").lower()
+
         if status in ("completed", "succeeded", "finished"):
             assets = (
-                j.get("sdGenerationJob", {}).get("videoAssets")
+                job.get("videoAssets")
                 or j.get("videoAssets")
                 or j.get("assets")
                 or []
@@ -248,13 +261,19 @@ async def _leonardo_poll(client: httpx.AsyncClient, generation_id: str, timeout_
                 if maybe:
                     urls = [maybe]
             if not urls:
-                raise HTTPException(502, "Leonardo: nessun asset video")
+                raise HTTPException(status_code=502, detail="Leonardo: nessun asset video in risposta")
             return urls
+
         if status in ("failed", "error"):
-            raise HTTPException(502, j.get("error") or j.get("message") or "Leonardo: generazione fallita")
+            err_msg = job.get("error") or job.get("message") or "Leonardo: generazione fallita"
+            raise HTTPException(status_code=502, detail=err_msg)
+
+        # ancora in coda/elaborazione → aspetto
         await asyncio.sleep(step)
         elapsed += step
-    raise HTTPException(504, "Timeout attesa video Leonardo")
+
+    raise HTTPException(status_code=504, detail="Timeout in attesa del video da Leonardo")
+
 
 async def _download(client: httpx.AsyncClient, url: str) -> bytes:
     r = await client.get(url)
@@ -333,33 +352,38 @@ async def genera_video_hero_openai(
     headers = {"Authorization": f"Bearer {LEONARDO_API_KEY}"}
 
     try:
-        # crea job e poll
-        async with httpx.AsyncClient(timeout=120, headers=headers) as client:
+        # crea job su Leonardo
+        async with httpx.AsyncClient(timeout=60, headers=headers) as client:
             gen_id = await _leonardo_text_to_video(client, prompt=prompt, req=payload)
+
             rec.generation_id = gen_id
             rec.status = "processing"
             db.commit()
 
-            urls = await _leonardo_poll(client, gen_id, timeout_s=120)
+            # 🔁 poll fino a completamento (supporta sia VEO3 che MOTION2)
+            urls = await _leonardo_poll(client, gen_id, timeout_s=180)
+
+            # scegli asset .mp4 se disponibile
             asset = _prefer_mp4(urls)
+
+            # scarica asset binario
             blob = await _download(client, asset)
 
-        # upload storage
+        # 📤 upload su Supabase
         ext = ".mp4" if ".mp4" in asset.split("?")[0].lower() else ".webm"
         storage_path = f"{payload.id_auto}/{rec.id}{ext}"
         full_path, public_url = _sb_upload_and_sign(
             storage_path, blob, "video/mp4" if ext == ".mp4" else "video/webm"
         )
 
-
-        # aggiorna record
+        # ✅ aggiorna record in DB
         rec.status = "completed"
         rec.storage_path = full_path
         rec.public_url = public_url
         db.commit()
         db.refresh(rec)
 
-        # addebito crediti SOLO dealer e SOLO a successo
+        # 💳 addebito crediti SOLO se dealer e SOLO a successo
         if dealer and LEONARDO_CREDIT_COST > 0:
             user.credit = (user.credit or 0) - LEONARDO_CREDIT_COST
             db.add(CreditTransaction(
@@ -383,6 +407,7 @@ async def genera_video_hero_openai(
             storage_path=rec.storage_path or "",
             public_url=rec.public_url,
         )
+
 
     except HTTPException as e:
         # marca come failed, non addebita
