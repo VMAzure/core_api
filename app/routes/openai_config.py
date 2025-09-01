@@ -174,9 +174,7 @@ async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req
         "negativePrompt": NEGATIVE,
         "duration": req.duration_seconds,
         "fps": req.fps,
-        "aspectRatio": req.aspect_ratio,
     }
-
     if req.seed is not None:
         payload["seed"] = req.seed
 
