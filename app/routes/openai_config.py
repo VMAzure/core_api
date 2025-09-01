@@ -122,22 +122,23 @@ NEGATIVE = (
     "low fidelity, low quality, blurry, noisy, distorted, "
     "inaccurate proportions, wrong branding, off-model, "
     "warped grille, deformed wheels, broken headlights, "
-    "unnatural motion, driving backwards, reversed movement, "
+    "unnatural motion, jerky or fast racing motion, "
+    "driving backwards, reverse gear, rear view, back view, "
     "car sliding sideways without reason, floating car, "
     "car bouncing unrealistically, car stretching or bending, "
-    "camera jitter, jerky motion, sudden zooms, unnatural camera shake, "
+    "camera jitter, sudden zooms, unnatural camera shake, "
     "frame skipping, inconsistent lighting, "
     "wrong reflections, mirrored logos, incorrect license plates, "
     "extra tires, extra headlights, duplicated parts, "
     "ghosting, double exposure, artifacts, "
-    "text, captions, watermark, logo artifacts, UI overlays, "
+    "text, captions, subtitles, watermark, logo artifacts, UI overlays, "
     "aliasing, pixelation, heavy compression, "
-    "oversaturated colors, neon glow, videogame graphics, "
-    "cartoonish style, cgi look, plastic rendering, toon shading, "
-    "unrealistic render, hyper saturation, unrealistic neon lighting,"
-    "rear view, back view, reverse gear, car in reverse, car driving backwards, camera behind the car"
-
+    "oversaturated colors, videogame graphics, cartoonish style, cgi look, "
+    "plastic rendering, toon shading, unrealistic render, "
+    "hyper saturation, unrealistic neon lighting with glow halos, "
+    "Chinese characters, Asian text, foreign writing"
 )
+
 
 
 class VideoHeroRequest(BaseModel):
@@ -204,13 +205,13 @@ async def _leonardo_text_to_video(client: httpx.AsyncClient, *, prompt: str, req
     elif model == "MOTION":
         data = {
             "prompt": prompt,
-            "resolution": "RESOLUTION_480",
+            "resolution": "RESOLUTION_720",
             "model": "MOTION2"
         }
     elif model == "MOTIONFAST":
         data = {
             "prompt": prompt,
-            "resolution": "RESOLUTION_480",
+            "resolution": "RESOLUTION_720",
             "model": "MOTION2FAST"
         }
     else:
