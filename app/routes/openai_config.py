@@ -418,47 +418,56 @@ async def genera_video_hero_openai(
 
 @router.post("/webhooks/leonardo", tags=["Webhooks"])
 async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
-    api_key = req.headers.get("x-api-key") or req.headers.get("X-API-Key")
-    print(f"[WEBHOOK] X-API-Key ricevuta: {api_key}")
-    print(f"[WEBHOOK] Attesa: {LEONARDO_WEBHOOK_SECRET}")
+    # 🔐 Autenticazione tramite Authorization: Bearer ...
+    auth_header = req.headers.get("authorization") or req.headers.get("Authorization")
+    expected = f"Bearer {LEONARDO_WEBHOOK_SECRET}"
+    if (auth_header or "").strip() != expected:
+        print(f"[WEBHOOK] ❌ Authorization header non valido: {auth_header}")
+        raise HTTPException(401, "Authorization header non valido")
 
-    # Webhook senza autenticazione API key (aperto)
-    api_key = req.headers.get("x-api-key") or req.headers.get("X-API-Key")
-    print(f"[WEBHOOK] Ricevuto senza verifica API key. Header ricevuto: {api_key}")
+    # 🔍 Parse payload
+    try:
+        body = await req.json()
+        print(f"[WEBHOOK] ✅ Payload ricevuto: {body}")
+    except Exception as e:
+        print(f"[WEBHOOK] ❌ Errore parsing JSON: {str(e)}")
+        raise HTTPException(400, "Invalid JSON payload")
 
-
-
-    body = await req.json()
-
-    # 3.2) Estrai generationId da vari formati
+    # 🎯 Estrai generationId (fallback multiplo)
     gen_id = (
         body.get("generationId")
         or body.get("sdGenerationJob", {}).get("generationId")
         or body.get("motionVideoGenerationJob", {}).get("generationId")
+        or body.get("data", {}).get("object", {}).get("generationId")
     )
     if not gen_id:
+        print("[WEBHOOK] ❌ generationId mancante nel payload.")
         raise HTTPException(400, "generationId mancante")
 
     rec = db.query(UsatoLeonardo).filter(UsatoLeonardo.generation_id == gen_id).first()
     if not rec:
-        # Non conosciamo il job: rispondi ok per evitare retry loop
+        print(f"[WEBHOOK] ⚠️ generationId {gen_id} non trovato nel DB.")
         return {"ok": True, "note": "generation_id non associato"}
 
     if rec.status == "completed":
+        print(f"[WEBHOOK] 🔁 generationId {gen_id} già completato.")
         return {"ok": True, "status": "already_completed", "public_url": rec.public_url}
 
     headers = {"Authorization": f"Bearer {LEONARDO_API_KEY}"}
     async with httpx.AsyncClient(timeout=120, headers=headers) as client:
-        status, urls = await _leonardo_fetch_job_once(client, gen_id)
+        try:
+            status, urls = await _leonardo_fetch_job_once(client, gen_id)
+        except Exception as e:
+            print(f"[WEBHOOK] ❌ Errore fetch Leonardo: {str(e)}")
+            raise HTTPException(502, "Errore recupero job da Leonardo")
 
         if status in ("failed", "error"):
             rec.status = "failed"
-            rec.error_message = "Leonardo: job failed (webhook)"
+            rec.error_message = f"Leonardo: job failed (webhook)"
             db.commit()
             return {"ok": True, "status": "failed"}
 
         if status not in ("completed", "succeeded", "finished"):
-            # Non ancora pronto: Leonardo richiamerà il webhook più avanti
             return {"ok": True, "status": status}
 
         if not urls:
@@ -467,29 +476,32 @@ async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
             db.commit()
             return {"ok": True, "status": "no_assets"}
 
-        # Scarica il migliore e carica su Supabase
+        # Scarica asset
         asset = _prefer_mp4(urls)
         blob = await _download(client, asset)
 
+    # 📤 Upload su Supabase
     ext = ".mp4" if ".mp4" in asset.split("?")[0].lower() else ".webm"
     storage_path = f"{rec.id_auto}/{rec.id}{ext}"
     full_path, public_url = _sb_upload_and_sign(
         storage_path, blob, "video/mp4" if ext == ".mp4" else "video/webm"
     )
 
+    # 🧾 Aggiorna DB
     rec.status = "completed"
     rec.storage_path = full_path
     rec.public_url = public_url
     db.commit()
 
-    # 💳 Addebito crediti e notifica
+    # 💳 Addebito + notifica
     if rec.user_id:
         dealer = db.query(User).filter(User.id == rec.user_id).first()
-        if dealer and is_dealer_user(dealer) and LEONARDO_CREDIT_COST > 0:
-            dealer.credit = (dealer.credit or 0) - LEONARDO_CREDIT_COST
+        credit_cost = rec.credit_cost or 0
+        if dealer and is_dealer_user(dealer) and credit_cost > 0:
+            dealer.credit = (dealer.credit or 0) - credit_cost
             db.add(CreditTransaction(
                 dealer_id=dealer.id,
-                amount=-LEONARDO_CREDIT_COST,
+                amount=-credit_cost,
                 transaction_type="USE",
                 note=f"Video hero Leonardo ({rec.model_id})"
             ))
@@ -497,9 +509,10 @@ async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
                 db=db,
                 utente_id=dealer.id,
                 tipo_codice="CREDITO_USATO",
-                messaggio=f"Hai utilizzato {LEONARDO_CREDIT_COST:g} crediti per la generazione video."
+                messaggio=f"Hai utilizzato {credit_cost:g} crediti per la generazione video."
             )
             db.commit()
 
-
+    print(f"[WEBHOOK] ✅ Video completato, URL: {public_url}")
     return {"ok": True, "status": "completed", "public_url": public_url}
+
