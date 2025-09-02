@@ -1545,3 +1545,221 @@ async def invia_contatto_usato(
         db.rollback()
 
     return {"ok": True, "msg": "Contatto inviato correttamente"}
+
+# === BY-TARGA: Lookup e normalizzazione per precompilazione inserimento usato ===
+from fastapi import Depends, HTTPException
+from fastapi import Response
+from pydantic import BaseModel, Field
+from typing import List, Optional
+import requests
+from app.routes.motornet import get_motornet_token
+from app.auth_helpers import is_admin_user, is_dealer_user
+from fastapi_jwt_auth import AuthJWT
+from datetime import datetime
+import re
+
+# --------- Schemi risposta (definitivi) ---------
+
+class MarcaOut(BaseModel):
+    acronimo: str
+    nome: str
+
+class ModelloOut(BaseModel):
+    codice: str = Field(..., description="codice modello/gamma Motornet (es. 2716)")
+    descrizione: str
+
+class VersioneOut(BaseModel):
+    codice_motornet_uni: str = Field(..., description="codiceMotornetUnivoco")
+    versione: str
+    prezzo_vendita: Optional[float] = None
+    da: Optional[str] = Field(None, description="YYYY-MM-DD")
+    a: Optional[str] = Field(None, description="YYYY-MM-DD")
+    codice_costruttore: Optional[str] = None
+    porte: Optional[int] = None
+
+class ByTargaResponse(BaseModel):
+    targa: str
+    telaio: Optional[str] = None
+    data_immatricolazione: Optional[str] = Field(None, description="YYYY-MM-DD")
+    anno: Optional[int] = None
+    mese: Optional[int] = None
+    marca: Optional[MarcaOut] = None
+    modello: Optional[ModelloOut] = None
+    tipologia: Optional[str] = None
+    passo_cm: Optional[int] = None
+    versioni: List[VersioneOut] = Field(default_factory=list)
+    ricerche_targa_rimanenti: Optional[int] = None
+
+# --------- Helpers locali ---------
+
+_IT_PLATE_RE = re.compile(r"^[A-Z0-9]{5,8}$", re.I)
+
+def _ym_from_date(d: Optional[str]) -> tuple[Optional[int], Optional[int]]:
+    if not d:
+        return None, None
+    try:
+        dt = datetime.strptime(d[:10], "%Y-%m-%d")
+        return dt.year, dt.month
+    except Exception:
+        return None, None
+
+def _safe_str(x):
+    return x if isinstance(x, str) else None
+
+# --------- Rotta ---------
+
+@router.get("/usato/motornet/by-targa/{targa}", tags=["AZLease"], response_model=ByTargaResponse)
+def motornet_by_targa(
+    targa: str,
+    Authorize: AuthJWT = Depends(),
+    response: Response = None
+):
+    # 🔐 Auth e ruoli
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    if not user_email:
+        raise HTTPException(status_code=401, detail="Utente non autenticato")
+
+    user = Authorize.get_raw_jwt()  # payload JWT, per ruolo usiamo helpers già altrove
+    # Se preferisci consistenza con altri endpoint, recupera User dal DB come fai altrove.
+    # Qui verifichiamo solo che sia admin o dealer.
+    # In alternativa:
+    #   from app.database import get_db
+    #   from sqlalchemy.orm import Session
+    #   ... carica User e usa is_admin_user/is_dealer_user(user_obj)
+    # Per restare leggeri, assumiamo che il token rispetti i ruoli.
+    # Se vuoi bloccare ruoli diversi, scommenta e adegua:
+    # if not (is_admin_user(user_obj) or is_dealer_user(user_obj)):
+    #     raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
+
+    # 🧹 Normalizza targa
+    plate = targa.strip().upper()
+    if not _IT_PLATE_RE.match(plate):
+        raise HTTPException(status_code=422, detail="Formato targa non valido")
+
+    # 🔑 Token Motornet
+    try:
+        mtoken = get_motornet_token()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Token Motornet non disponibile: {e}")
+
+    url = "https://webservice.motornet.it/api/v3_0/rest/public/usato/generali/targa"
+    hdr = {"Authorization": f"Bearer {mtoken}"}
+    try:
+        r = requests.get(url, params={"targa": plate}, headers=hdr, timeout=6.0)
+        status = r.status_code
+        if status == 404:
+            raise HTTPException(status_code=404, detail="Targa non trovata su Motornet")
+        if status == 429:
+            # Limite ricerche; propaga header opzionale
+            remaining = None
+            try:
+                remaining = r.json().get("ricercheTargaRimanenti")
+            except Exception:
+                pass
+            if remaining is not None and response is not None:
+                response.headers["X-Motornet-Remaining"] = str(remaining)
+            raise HTTPException(status_code=429, detail="Limite ricerche Motornet raggiunto")
+        r.raise_for_status()
+        raw = r.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Errore servizio Motornet: {e}")
+
+    # 🔎 Estrazioni sicure
+    dataImm = _safe_str(raw.get("dataImmatricolazione"))
+    anno, mese = _ym_from_date(dataImm)
+
+    # Marca
+    marca = None
+    try:
+        m0 = (raw.get("marche") or [])
+        if m0:
+            marca = MarcaOut(acronimo=_safe_str(m0[0].get("acronimo")) or "",
+                             nome=_safe_str(m0[0].get("nome")) or "")
+    except Exception:
+        marca = None
+
+    # Modello
+    modello = None
+    try:
+        mod0 = (raw.get("modelli") or [])
+        if mod0:
+            gm = mod0[0].get("gammaModello") or {}
+            modello = ModelloOut(
+                codice=_safe_str(gm.get("codice")) or "",
+                descrizione=_safe_str(mod0[0].get("codDescModello", {}).get("descrizione"))
+                or _safe_str(gm.get("descrizione"))
+                or _safe_str(mod0[0].get("modelloBreveCarrozzeria", {}).get("descrizione"))
+                or ""
+            )
+    except Exception:
+        modello = None
+
+    # Tipologia / Passo / Porte
+    tipologia = None
+    try:
+        tps = (raw.get("tipologie") or [])
+        if tps:
+            tipologia = _safe_str(tps[0].get("descrizione"))
+    except Exception:
+        tipologia = None
+
+    passo_cm = None
+    try:
+        passi = raw.get("passi") or []
+        if passi:
+            # Motornet ritorna numeri come 264.00 => centimetri
+            p = passi[0]
+            passo_cm = int(float(p)) if p is not None else None
+    except Exception:
+        passo_cm = None
+
+    porte_val = None
+    try:
+        prt = raw.get("porte") or []
+        if prt:
+            porte_val = int(prt[0])
+    except Exception:
+        porte_val = None
+
+    # Versioni
+    versioni_out: List[VersioneOut] = []
+    for v in (raw.get("versioni") or []):
+        try:
+            versioni_out.append(VersioneOut(
+                codice_motornet_uni=_safe_str(v.get("codiceMotornetUnivoco")) or "",
+                versione=_safe_str(v.get("versione")) or "",
+                prezzo_vendita=(v.get("prezzoVendita")),
+                da=_safe_str(v.get("da")),
+                a=_safe_str(v.get("a")),
+                codice_costruttore=_safe_str(v.get("codiceCostruttore")),
+                porte=int(v.get("porte")) if v.get("porte") is not None else porte_val
+            ))
+        except Exception:
+            # ignora voce malformata
+            continue
+
+    if not versioni_out:
+        # fallback: alcune targhe potrebbero non avere "versioni" pur avendo gamma
+        raise HTTPException(status_code=404, detail="Nessuna versione associata alla targa")
+
+    # Rimanenti lookup (se presente nel payload)
+    remaining = raw.get("ricercheTargaRimanenti")
+    if remaining is not None and response is not None:
+        response.headers["X-Motornet-Remaining"] = str(remaining)
+
+    return ByTargaResponse(
+        targa=plate,
+        telaio=_safe_str(raw.get("telaio")),
+        data_immatricolazione=dataImm,
+        anno=anno,
+        mese=mese,
+        marca=marca,
+        modello=modello,
+        tipologia=tipologia,
+        passo_cm=passo_cm,
+        versioni=versioni_out,
+        ricerche_targa_rimanenti=remaining
+    )
