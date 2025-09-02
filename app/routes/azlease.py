@@ -1764,8 +1764,6 @@ def motornet_by_targa(
         ricerche_targa_rimanenti=remaining
     )
 
-
-
 @router.post("/usato/{id_auto}/valutazione", tags=["AZLease"])
 async def valuta_auto_usata(
     id_auto: UUID,
@@ -1781,8 +1779,13 @@ async def valuta_auto_usata(
     if not (is_admin_user(user) or is_dealer_user(user)):
         raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
 
-    # 🔍 Recupera auto
-    auto = db.query(AZLeaseUsatoAuto).filter(AZLeaseUsatoAuto.id == id_auto).first()
+    # 🔍 Recupera auto usata + optional
+    auto = (
+        db.query(AZLeaseUsatoAuto)
+        .filter(AZLeaseUsatoAuto.id == id_auto)
+        .first()
+    )
+
     if not auto:
         raise HTTPException(status_code=404, detail="Auto non trovata")
 
@@ -1792,31 +1795,15 @@ async def valuta_auto_usata(
     if not auto.anno_immatricolazione or not auto.mese_immatricolazione:
         raise HTTPException(status_code=422, detail="Anno o mese immatricolazione mancanti")
 
-    # 🔍 Accessori optional selezionati (presente = true)
-    accessori = db.execute(text("""
-        SELECT id, prezzo
-        FROM public.autousato_accessori_optional
-        WHERE id_auto = :id AND presente = true
-    """), {"id": str(id_auto)}).mappings().all()
-
-    accessori_payload = [
+    # 🔎 Accessori optional con 'presente = true'
+    accessori = [
         {
-            "id": int(acc["id"]),
-            "prezzo": float(acc["prezzo"] or 0)
-        } for acc in accessori if acc.get("id") and acc.get("prezzo") is not None
-    ] if accessori else None
-
-    # 🔑 Token Motornet
-    try:
-        token = get_motornet_token()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Errore token Motornet: {str(e)}")
-
-    url = "https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/valutazione"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
+            "id": str(opt.id),  # Motornet accetta anche stringa
+            "prezzo": float(opt.prezzo or 0)
+        }
+        for opt in auto.accessori_optional
+        if opt.presente and opt.prezzo is not None
+    ]
 
     payload = {
         "codiceMotornetUnivoco": auto.codice_motornet,
@@ -1825,15 +1812,28 @@ async def valuta_auto_usata(
         "km": auto.km_certificati or 0
     }
 
-    if accessori_payload:
-        payload["accessori"] = accessori_payload
+    if accessori:
+        payload["accessori"] = accessori
+
+    # 🔑 Token Motornet
+    try:
+        token = get_motornet_token()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore token Motornet: {str(e)}")
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    url = "https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/valutazione"
 
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=6.0)
-        if response.status_code == 404:
+        r = requests.post(url, json=payload, headers=headers, timeout=6.0)
+        if r.status_code == 404:
             raise HTTPException(status_code=404, detail="Valutazione non trovata su Motornet")
-        response.raise_for_status()
+        r.raise_for_status()
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=502, detail=f"Errore chiamata Motornet: {str(e)}")
 
-    return response.json()
+    return r.json()
