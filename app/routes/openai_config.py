@@ -1085,7 +1085,7 @@ async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
     print(f"[WEBHOOK] ✅ Video completato, URL: {public_url}")
     return {"ok": True, "status": "completed", "public_url": public_url}
 
-from database import UUID
+from uuid import UUID
 
 @router.patch("/usato-leonardo/{id}/usa", tags=["Usato AI"])
 def usa_hero_media(id: UUID, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
