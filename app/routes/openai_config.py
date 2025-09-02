@@ -112,19 +112,40 @@ class GeminiVideoHeroRequest(BaseModel):
     scenario: Optional[str] = None
     prompt_override: Optional[str] = None
 
+
+
+class GeminiVideoStatusRequest(BaseModel):
+    operation_id: str
+
+class GeminiImageHeroRequest(BaseModel):
+    id_auto: _UUID
+    scenario: Optional[str] = None
+    prompt_override: Optional[str] = None
+
+
+# --- VIDEO VEO3 ---
 class GeminiVideoHeroResponse(BaseModel):
     success: bool
     id_auto: _UUID
     gemini_operation_id: str
     status: str
-
-class GeminiVideoStatusRequest(BaseModel):
-    operation_id: str
+    usato_leonardo_id: _UUID  # ← aggiunto
 
 class GeminiVideoStatusResponse(BaseModel):
     status: str
     public_url: Optional[str] = None
     error_message: Optional[str] = None
+    usato_leonardo_id: Optional[_UUID] = None  # ← opzionale, utile al FE
+
+# --- IMAGE ---
+class GeminiImageHeroResponse(BaseModel):
+    success: bool
+    id_auto: _UUID
+    status: str
+    public_url: Optional[str] = None
+    error_message: Optional[str] = None
+    usato_leonardo_id: _UUID  # ← aggiunto
+
 
 
 def _extract_video_uri(op: dict):
@@ -313,7 +334,9 @@ async def genera_video_hero_veo3(
         success=True,
         id_auto=payload.id_auto,
         gemini_operation_id=operation_id,
-        status="processing"
+        status="processing",
+        usato_leonardo_id=rec.id  
+
     )
 
 @router.post("/veo3/video-status", response_model=GeminiVideoStatusResponse, tags=["Gemini VEO 3"])
@@ -425,17 +448,7 @@ from pydantic import BaseModel
 # --- GEMINI IMAGE (sincrona) -------------------------------------------------
 GEMINI_IMG_CREDIT_COST = float(os.getenv("GEMINI_IMG_CREDIT_COST", "1.0"))
 
-class GeminiImageHeroRequest(BaseModel):
-    id_auto: _UUID
-    scenario: Optional[str] = None
-    prompt_override: Optional[str] = None
 
-class GeminiImageHeroResponse(BaseModel):
-    success: bool
-    id_auto: _UUID
-    status: str
-    public_url: Optional[str] = None
-    error_message: Optional[str] = None
 
 def _gemini_build_image_prompt(marca: str, modello: str, anno: int, colore: Optional[str], allestimento: Optional[str] = None) -> str:
     colore_txt = f" {colore}" if colore else ""
@@ -561,7 +574,7 @@ async def genera_image_hero(
         )
     db.commit()
 
-    return GeminiImageHeroResponse(success=True, id_auto=payload.id_auto, status="completed", public_url=public_url)
+    return GeminiImageHeroResponse(success=True, id_auto=payload.id_auto, status="completed", public_url=public_url, usato_leonardo_id=rec.id)
 
 # ⛔ deprecato: lo lasciamo per compatibilità, ma risponde subito
 class GeminiImageStatusRequest(BaseModel):
