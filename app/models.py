@@ -1375,10 +1375,18 @@ class VideoStatus(str, Enum):
     completed = "completed"
     failed = "failed"
 
+class MediaType(str, Enum):
+    video = "video"
+    image = "image"
+
 class UsatoLeonardo(Base):
     __tablename__ = "usato_leonardo"
-    __table_args__ = {"schema": "public"}
-
+    __table_args__ = (
+        {"schema": "public"},
+        CheckConstraint("media_type in ('video','image')", name="usato_leonardo_media_type_ck"),
+        Index("ix_usato_leonardo_auto_type_updated", "id_auto", "media_type", "updated_at"),
+        Index("ix_usato_leonardo_generation_id", "generation_id"),
+    )
 
     id = Column(PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     id_auto = Column(PG_UUID(as_uuid=True), ForeignKey("public.azlease_usatoauto.id", ondelete="CASCADE"), nullable=False)
@@ -1386,7 +1394,11 @@ class UsatoLeonardo(Base):
     provider = Column(String, nullable=False, default="leonardo")
     generation_id = Column(String, unique=True, nullable=True)
 
-    status = Column(String, nullable=False, default=VideoStatus.queued.value)
+    status = Column(String, nullable=False, default="queued")
+
+    # NEW
+    media_type = Column(String, nullable=False, default=MediaType.video.value)  # 'video' | 'image'
+    mime_type  = Column(String, nullable=True)  # es. 'video/mp4', 'image/png'
 
     prompt = Column(Text, nullable=False)
     negative_prompt = Column(Text, nullable=True)
@@ -1402,11 +1414,12 @@ class UsatoLeonardo(Base):
     storage_path = Column(Text, nullable=True)
     public_url = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
-    user_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
-    utente = relationship("User", backref="video_leonardo")
 
+    user_id = Column(Integer, ForeignKey("public.utenti.id"), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    auto = relationship("AZLeaseUsatoAuto", backref="video_leonardo")
+    # backref generici (non “video_”)
+    utente = relationship("User", backref="usato_media")
+    auto = relationship("AZLeaseUsatoAuto", backref="usato_media")

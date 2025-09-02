@@ -174,6 +174,20 @@ def _gemini_build_prompt(marca: str, modello: str, anno: int, colore: Optional[s
         "No text, no subtitles, no non-Latin characters."
     )
 
+def _gemini_build_image_prompt(marca: str, modello: str, anno: int, colore: Optional[str], allestimento: Optional[str] = None) -> str:
+    colore_txt = f" {colore}" if colore else ""
+    anno_txt = f" {anno}" if anno else ""
+    allest_txt = f" {allestimento}" if allestimento else ""
+    base = f"{marca} {modello}{allest_txt}{anno_txt}{colore_txt}"
+    return (
+        f"Create a high-quality professional photo of a {base}. "
+        "Show the car in a luxury urban setting at dusk with soft cinematic lighting and realistic reflections. "
+        "Three-quarter front angle (front and side visible). "
+        "Factory-accurate proportions, design, and color. "
+        "Photographic realism, crisp details, depth of field. "
+        "No text, no watermarks, no logos, no non-Latin characters."
+    )
+
 async def _download_bytes(url: str) -> bytes:
     headers = {"x-goog-api-key": GEMINI_API_KEY}
     async with httpx.AsyncClient(timeout=180, follow_redirects=True) as client:
@@ -285,6 +299,8 @@ async def genera_video_hero_veo3(
         seed=None,
         user_id=user.id
     )
+    rec.media_type = "video"
+    rec.mime_type = "video/mp4"
     db.add(rec); db.commit(); db.refresh(rec)
 
     try:
@@ -727,6 +743,8 @@ async def genera_video_hero_openai(
         seed=payload.seed,
         user_id=user.id 
     )
+    rec.media_type = "video"
+    rec.mime_type = "video/mp4"
 
     db.add(rec)
     db.commit()
