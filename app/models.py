@@ -1382,10 +1382,10 @@ class MediaType(str, Enum):
 class UsatoLeonardo(Base):
     __tablename__ = "usato_leonardo"
     __table_args__ = (
-        {"schema": "public"},
         CheckConstraint("media_type in ('video','image')", name="usato_leonardo_media_type_ck"),
         Index("ix_usato_leonardo_auto_type_updated", "id_auto", "media_type", "updated_at"),
         Index("ix_usato_leonardo_generation_id", "generation_id"),
+        {"schema": "public"},
     )
 
     id = Column(PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
