@@ -1457,6 +1457,17 @@ async def dettaglio_usato_pubblico(
         "youtube_url": dealer_settings.youtube_url if dealer_settings else settings.youtube_url,
         "whatsapp_url": dealer_settings.whatsapp_url if dealer_settings else settings.whatsapp_url,
     }
+    # ✅ Recupera media AI attivi (immagine + video)
+    media_ai = db.execute(text("""
+        SELECT media_type, public_url
+        FROM usato_leonardo
+        WHERE id_auto = :id_auto AND is_active = TRUE
+    """), {"id_auto": id_auto}).fetchall()
+
+    # Estrai URL
+    immagine_ai = next((m.public_url for m in media_ai if m.media_type == "image"), None)
+    video_ai = next((m.public_url for m in media_ai if m.media_type == "video"), None)
+
 
     # ✅ Response finale completa
     return {
@@ -1464,7 +1475,10 @@ async def dettaglio_usato_pubblico(
         "descrizione": auto.descrizione,
         "immagini": [dict(i._mapping) for i in immagini],
         "dettagli": dict(dettagli._mapping) if dettagli else {},
-        "dealer_site_settings": dealer_info
+        "dealer_site_settings": dealer_info,
+        "immagine_ai": immagine_ai,
+        "video_ai": video_ai
+
     }
 
 
