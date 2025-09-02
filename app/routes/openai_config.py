@@ -144,30 +144,40 @@ async def _gemini_start_video(prompt: str) -> str:
     if not GEMINI_API_KEY:
         raise HTTPException(500, "GEMINI_API_KEY non configurata")
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/veo-3.0:generateVideo?key={GEMINI_API_KEY}"
+    url = "https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-generate-preview:predictLongRunning"
     payload = {
-        "prompt": prompt,
-        "config": {
-            "durationSeconds": 5,
+        "instances": [{
+            "prompt": prompt
+        }],
+        "parameters": {
             "aspectRatio": "16:9"
+            # opzionale: "negativePrompt": "...", "personGeneration": "allow_adult"
         }
     }
 
     async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(url, json=payload)
+        r = await client.post(
+            url,
+            json=payload,
+            headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+        )
         if r.status_code >= 300:
             raise HTTPException(r.status_code, f"Errore Gemini: {r.text}")
         data = r.json()
-        return data.get("name")
+        op_name = data.get("name")
+        if not op_name:
+            raise HTTPException(502, f"Gemini: operation name mancante. Resp: {data}")
+        return op_name
 
 
 async def _gemini_get_operation(op_name: str) -> dict:
-    url = f"https://generativelanguage.googleapis.com/v1beta/{op_name}?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/{op_name}"
     async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.get(url)
+        r = await client.get(url, headers={"x-goog-api-key": GEMINI_API_KEY})
         if r.status_code >= 300:
             raise HTTPException(r.status_code, f"Errore polling Gemini: {r.text}")
         return r.json()
+
 
 
 @router.post("/veo3/video-hero", response_model=GeminiVideoHeroResponse, tags=["Gemini VEO 3"])
@@ -290,12 +300,18 @@ async def check_video_status(
         return GeminiVideoStatusResponse(status="processing")
 
     # risultato disponibile
-    result = op.get("response", {})
+    result = op.get("response", {})  # dict
+    vids = result.get("generatedVideos") or result.get("videos") or []
     uri = None
-    vids = result.get("generatedVideos", [])
     if vids:
-        first = vids[0]
-        uri = first.get("uri") or first.get("url")
+        v0 = vids[0]
+        # Possibili campi secondo docs/SDK:
+        # - v0.get("uri")
+        # - v0.get("video", {}).get("uri")
+        # - v0.get("videoUri")
+        video_obj = v0.get("video") or {}
+        uri = v0.get("uri") or video_obj.get("uri") or v0.get("videoUri")
+
 
 
     if not uri:
