@@ -233,7 +233,7 @@ async def genera_video_hero_veo3(
     db.add(rec); db.commit(); db.refresh(rec)
 
     try:
-        operation_id = _gemini_start_video(prompt)
+        operation_id = await _gemini_start_video(prompt)
     except Exception as e:
         rec.status = "failed"
         rec.error_message = str(e)
@@ -273,28 +273,30 @@ async def check_video_status(
     _gemini_assert_api()
 
     try:
-        op = _gemini_get_operation(payload.operation_id)
+        op = await _gemini_get_operation(payload.operation_id)
     except Exception:
         # errore transitorio → non marchiare failed
         return GeminiVideoStatusResponse(status="processing", error_message="Errore temporaneo polling")
 
     # compat: op.error, op.done, op.result
-    if getattr(op, "error", None):
+    # op è un dict JSON
+    if "error" in op:
         rec.status = "failed"
-        rec.error_message = getattr(op.error, "message", "Generazione fallita")
+        rec.error_message = op["error"].get("message", "Generazione fallita")
         db.commit()
         return GeminiVideoStatusResponse(status="failed", error_message=rec.error_message)
 
-    if not getattr(op, "done", False):
+    if not op.get("done", False):
         return GeminiVideoStatusResponse(status="processing")
 
-    result = getattr(op, "result", None)
+    # risultato disponibile
+    result = op.get("response", {})
     uri = None
-    if result:
-        vids = getattr(result, "generated_videos", None) or getattr(result, "videos", None) or []
-        if vids:
-            first = vids[0]
-            uri = getattr(first, "uri", None) or getattr(first, "url", None)
+    vids = result.get("generatedVideos", [])
+    if vids:
+        first = vids[0]
+        uri = first.get("uri") or first.get("url")
+
 
     if not uri:
         rec.status = "failed"
