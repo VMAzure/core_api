@@ -70,6 +70,307 @@ async def genera_testo(
     return {"success": True, "output": output}
 
 
+# --- VIDEO HERO GEMINI (JWT + credito) -------------------------------------
+
+
+import os
+import asyncio
+import httpx
+from datetime import timedelta
+from uuid import UUID as _UUID
+from typing import Optional
+
+from fastapi import APIRouter, Request, HTTPException, Depends
+from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
+
+import google.generativeai as genai
+from google.api_core.exceptions import GoogleAPIError
+
+from app.database import get_db, supabase_client
+from app.models import (
+    User,
+    CreditTransaction,
+    AZLeaseUsatoAuto,
+    MnetDettaglioUsato,
+    UsatoLeonardo, # Non la rinominiamo, la riutilizziamo per VEO3
+)
+from app.routes.notifiche import inserisci_notifica
+from app.auth_helpers import is_dealer_user
+from fastapi_jwt_auth import AuthJWT
+
+
+# === ENV / CONFIG ===
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET_LEONARDO", "leonardo-video")
+GEMINI_VEO3_CREDIT_COST = float(os.getenv("GEMINI_VEO3_CREDIT_COST", "5.0"))
+
+
+# Helper per l'upload su Supabase
+def _sb_upload_and_sign(path: str, blob: bytes, content_type: str) -> tuple[str, str | None]:
+    supabase_client.storage.from_(SUPABASE_BUCKET).upload(
+        path=path,
+        file=blob,
+        file_options={"content-type": content_type, "upsert": "true"}
+    )
+    res = supabase_client.storage.from_(SUPABASE_BUCKET).create_signed_url(
+        path=path,
+        expires_in=60 * 60 * 24 * 30
+    )
+    signed = res.get("signedURL") or res.get("signed_url") or res.get("signedUrl")
+    if signed and signed.startswith("/storage"):
+        base = os.getenv("SUPABASE_URL", "").rstrip("/")
+        signed = f"{base}{signed}"
+    return path, signed
+
+
+# Helper per la costruzione del prompt (la logica rimane invariata)
+def _build_prompt(marca: str, modello: str, anno: int, colore: Optional[str], allestimento: Optional[str] = None) -> str:
+    colore_txt = f" {colore}" if colore else ""
+    anno_txt = f" {anno}" if anno else ""
+    allest_txt = f" {allestimento}" if allestimento else ""
+    base = f"{marca} {modello}{allest_txt}{anno_txt}{colore_txt}"
+    return (
+        f"Generate a cinematic video of a {base}. "
+        "Keep proportions, design and color factory-accurate. "
+        "Place the car in a modern urban night setting with neon lights and reflections on wet asphalt. "
+        "The car moves slowly forward while the camera orbits smoothly around it, showing close-up details "
+        "and a three-quarter front view (front and side visible). "
+        "Realistic style, cinematic quality, modern atmosphere, dynamic but natural motion. "
+        "No text, no subtitles, no Chinese or foreign characters visible."
+    )
+
+
+# Helper per il download del video
+async def _download_video(url: str) -> bytes:
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.get(url)
+        if r.status_code >= 300:
+            raise HTTPException(502, f"Download video fallito da Gemini: {r.text}")
+        return r.content
+
+
+# Helper per avviare la generazione video con Gemini
+async def _gemini_start_video_generation(prompt: str) -> str:
+    if not GEMINI_API_KEY:
+        raise HTTPException(500, "GEMINI_API_KEY non configurata")
+
+    genai.configure(api_key=GEMINI_API_KEY)
+
+    try:
+        operation = genai.models.generate_videos(
+            model="veo-3.0-generate-preview",
+            prompt=prompt
+        )
+        return operation.name
+    except GoogleAPIError as e:
+        raise HTTPException(status_code=502, detail=f"Errore API Gemini: {str(e)}")
+
+
+# Models per le risposte
+class VideoHeroRequest(BaseModel):
+    id_auto: _UUID
+    scenario: Optional[str] = None
+    prompt_override: Optional[str] = None
+
+class VideoHeroResponse(BaseModel):
+    success: bool
+    id_auto: _UUID
+    gemini_operation_id: str
+    status: str
+    
+class VideoStatusResponse(BaseModel):
+    status: str
+    public_url: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+
+# app/routes/veo3_config.py
+
+@router.post("/veo3/video-hero", response_model=VideoHeroResponse, tags=["Gemini VEO 3"])
+async def genera_video_hero_veo3(
+    payload: VideoHeroRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(403, "Utente non trovato")
+
+    dealer = is_dealer_user(user)
+    if dealer and (user.credit is None or user.credit < GEMINI_VEO3_CREDIT_COST):
+        raise HTTPException(402, "Credito insufficiente")
+
+    # 2. Lookup auto (rimane invariato)
+    auto = db.query(AZLeaseUsatoAuto).filter(AZLeaseUsatoAuto.id == payload.id_auto).first()
+    if not auto:
+        raise HTTPException(404, "Auto non trovata")
+
+    det = None
+    if getattr(auto, "codice_motornet", None):
+        det = db.query(MnetDettaglioUsato)\
+            .filter(MnetDettaglioUsato.codice_motornet_uni == auto.codice_motornet)\
+            .first()
+
+    marca = (getattr(det, "marca_nome", None) or "").strip()
+    modello = (getattr(det, "modello", None) or "").strip()
+    allestimento = (getattr(det, "allestimento", None) or "").strip() if det else None
+    anno = int(getattr(auto, "anno_immatricolazione", 0) or 0)
+    colore = (getattr(auto, "colore", None) or "").strip()
+
+    if not (marca and modello and anno > 0):
+        raise HTTPException(422, "Marca/Modello/Anno non disponibili")
+
+    # 3. Prompt finale
+    prompt = (
+        f"{payload.scenario.strip()} "
+        f"The vehicle is a {marca} {modello} {allestimento or ''} {anno} in {colore}. "
+        "Keep proportions, design and color factory-accurate. "
+        "No text, no subtitles, no Chinese or foreign characters visible."
+    ) if payload.scenario else (
+        payload.prompt_override or _build_prompt(marca, modello, anno, colore, allestimento)
+    )
+
+    # 4. Crea record nel DB
+    rec = UsatoLeonardo(
+        id_auto=payload.id_auto,
+        provider="gemini",
+        generation_id=None,
+        status="queued",
+        prompt=prompt,
+        negative_prompt=None, # Gemini VEO 3 gestisce il negative prompt in modo diverso
+        model_id="veo-3.0-generate-preview",
+        duration_seconds=None,
+        fps=None,
+        aspect_ratio="16:9",
+        seed=None,
+        user_id=user.id
+    )
+
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+
+    # 5. Avvia la generazione con Gemini
+    try:
+        operation_id = await _gemini_start_video_generation(prompt)
+    except Exception as e:
+        rec.status = "failed"
+        rec.error_message = str(e)
+        db.commit()
+        raise
+
+    # 6. Aggiorna il record con l'ID dell'operazione
+    rec.generation_id = operation_id
+    rec.status = "processing"
+    db.commit()
+
+    return VideoHeroResponse(
+        success=True,
+        id_auto=payload.id_auto,
+        gemini_operation_id=operation_id,
+        status="processing"
+    )
+
+
+
+from google.generativeai.types.operations import Operation
+
+class VideoStatusRequest(BaseModel):
+    operation_id: str
+
+@router.post("/veo3/video-status", response_model=VideoStatusResponse, tags=["Gemini VEO 3"])
+async def check_video_status(
+    payload: VideoStatusRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    
+    if not user:
+        raise HTTPException(403, "Utente non trovato")
+
+    rec = db.query(UsatoLeonardo).filter(UsatoLeonardo.generation_id == payload.operation_id).first()
+    
+    if not rec:
+        raise HTTPException(404, "Operazione non trovata nel database.")
+
+    # Se il video è già completato, lo restituiamo immediatamente
+    if rec.status == "completed":
+        return VideoStatusResponse(status="completed", public_url=rec.public_url)
+    
+    genai.configure(api_key=GEMINI_API_KEY)
+    
+    try:
+        operation = genai.operations.get(payload.operation_id)
+        # Il tipo esatto potrebbe variare, assicurati di catturarlo correttamente
+        if not isinstance(operation, Operation):
+            raise TypeError("Risposta API non valida.")
+    except Exception as e:
+        rec.status = "failed"
+        rec.error_message = f"Errore recupero stato Gemini: {str(e)}"
+        db.commit()
+        raise HTTPException(status_code=502, detail="Errore recupero stato operazione Gemini")
+    
+    status = operation.metadata.state.name
+    
+    if status == "FAILED":
+        rec.status = "failed"
+        rec.error_message = operation.error.message if operation.error else "Generazione fallita"
+        db.commit()
+        return VideoStatusResponse(status="failed", error_message=rec.error_message)
+    
+    if status == "SUCCEEDED":
+        try:
+            video_uri = operation.result.generated_videos[0].uri
+            
+            # 📤 Download e upload su Supabase
+            video_blob = await _download_video(video_uri)
+            storage_path = f"{rec.id_auto}/{rec.id}.mp4"
+            full_path, public_url = _sb_upload_and_sign(storage_path, video_blob, "video/mp4")
+
+            # 🧾 Update DB
+            rec.status = "completed"
+            rec.storage_path = full_path
+            rec.public_url = public_url
+            rec.credit_cost = GEMINI_VEO3_CREDIT_COST
+            
+            # 💳 Addebito e notifica (con rollback se fallisce)
+            db.commit()
+            if is_dealer_user(user):
+                user.credit = (user.credit or 0) - GEMINI_VEO3_CREDIT_COST
+                db.add(CreditTransaction(
+                    dealer_id=user.id,
+                    amount=-GEMINI_VEO3_CREDIT_COST,
+                    transaction_type="USE",
+                    note=f"Video hero Gemini VEO 3"
+                ))
+                inserisci_notifica(
+                    db=db,
+                    utente_id=user.id,
+                    tipo_codice="CREDITO_USATO",
+                    messaggio=f"Hai utilizzato {GEMINI_VEO3_CREDIT_COST:g} crediti per la generazione video."
+                )
+            db.commit()
+            
+            return VideoStatusResponse(status="completed", public_url=public_url)
+
+        except Exception as e:
+            db.rollback()
+            rec.status = "failed"
+            rec.error_message = f"Errore nella finalizzazione del video: {str(e)}"
+            db.commit()
+            raise HTTPException(500, detail=rec.error_message)
+
+    return VideoStatusResponse(status="processing")
+
 # --- VIDEO HERO LEONARDO (JWT + credito) -------------------------------------
 import os
 import asyncio
