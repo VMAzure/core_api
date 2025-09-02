@@ -94,7 +94,7 @@ async def inserisci_auto_usata(
         "id": str(auto_id),
         "targa": payload.targa,
         "anno": payload.anno_immatricolazione,
-        "mese": getattr(payload, "mese_immatricolazione", None),
+        "mese": payload.mese_immatricolazione,
         "passaggio": payload.data_passaggio_proprieta,
         "km": payload.km_certificati,
         "intervento_data": payload.data_ultimo_intervento,

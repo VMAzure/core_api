@@ -417,6 +417,7 @@ class AZUsatoInsertRequest(BaseModel):
 
     targa: str
     anno_immatricolazione: int
+    mese_immatricolazione: Optional[int] = None  
     data_passaggio_proprieta: Optional[date]
     km_certificati: int
     data_ultimo_intervento: Optional[date]
