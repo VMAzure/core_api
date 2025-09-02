@@ -415,6 +415,7 @@ from uuid import UUID as _UUID
 from typing import Optional
 from pydantic import BaseModel
 
+# --- GEMINI IMAGE (sincrona) -------------------------------------------------
 GEMINI_IMG_CREDIT_COST = float(os.getenv("GEMINI_IMG_CREDIT_COST", "1.0"))
 
 class GeminiImageHeroRequest(BaseModel):
@@ -425,13 +426,6 @@ class GeminiImageHeroRequest(BaseModel):
 class GeminiImageHeroResponse(BaseModel):
     success: bool
     id_auto: _UUID
-    gemini_operation_id: str
-    status: str
-
-class GeminiImageStatusRequest(BaseModel):
-    operation_id: str
-
-class GeminiImageStatusResponse(BaseModel):
     status: str
     public_url: Optional[str] = None
     error_message: Optional[str] = None
@@ -449,66 +443,29 @@ def _gemini_build_image_prompt(marca: str, modello: str, anno: int, colore: Opti
         "No text, no watermarks, no non-Latin characters."
     )
 
-async def _gemini_start_image(prompt: str) -> str:
-    if not GEMINI_API_KEY:
-        raise HTTPException(500, "GEMINI_API_KEY non configurata")
-    url = "https://generativelanguage.googleapis.com/v1beta/models/imagegeneration:predictLongRunning"
+async def _gemini_generate_image_sync(prompt: str) -> bytes:
+    _gemini_assert_api()
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent"
     payload = {
-        "instances": [{"prompt": prompt}],
-        "parameters": {
-            "aspectRatio": "16:9"  # opzionale: "imageFormat": "PNG" | "JPEG"
-        }
+        "contents": [{"parts": [{"text": prompt}]}]
     }
-    async with httpx.AsyncClient(timeout=60) as client:
+    async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(url, json=payload, headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"})
         if r.status_code >= 300:
             raise HTTPException(r.status_code, f"Errore Gemini image: {r.text}")
         data = r.json()
-        op_name = data.get("name")
-        if not op_name:
-            raise HTTPException(502, f"Gemini image: operation name mancante. Resp: {data}")
-        return op_name
-
-async def _gemini_get_image_operation(op_name: str) -> dict:
-    if not GEMINI_API_KEY:
-        raise HTTPException(500, "GEMINI_API_KEY non configurata")
-    url = f"https://generativelanguage.googleapis.com/v1beta/{op_name}"
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.get(url, headers={"x-goog-api-key": GEMINI_API_KEY})
-        if r.status_code >= 300:
-            raise HTTPException(r.status_code, f"Errore polling Gemini image: {r.text}")
-        return r.json()
-
-def _extract_image_uri(op: dict) -> Optional[str]:
-    resp = op.get("response") or {}
-    # schema 1 (classico)
-    imgs = resp.get("generatedImages") or []
-    if isinstance(imgs, list) and imgs:
-        i0 = imgs[0]
-        if isinstance(i0, dict):
-            return i0.get("uri") or (i0.get("image") or {}).get("uri") or i0.get("url")
-    # schema 2 (come per video, ma images)
-    gen_resp = resp.get("generateImageResponse") or {}
-    samples = gen_resp.get("generatedSamples") or []
-    if isinstance(samples, list) and samples:
-        s0 = samples[0]
-        if isinstance(s0, dict):
-            img = s0.get("image") or {}
-            if isinstance(img, dict):
-                return img.get("uri") or img.get("url")
-    # fallback ricorsivo
-    stack = [resp]
-    while stack:
-        cur = stack.pop()
-        if isinstance(cur, dict):
-            if isinstance(cur.get("uri"), str):
-                return cur["uri"]
-            if isinstance(cur.get("url"), str) and cur["url"].startswith(("http://","https://")):
-                return cur["url"]
-            stack.extend(cur.values())
-        elif isinstance(cur, list):
-            stack.extend(cur)
-    return None
+        # Estrai la prima immagine da inline_data
+        parts = (
+            data.get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [])
+        )
+        for p in parts:
+            inline = p.get("inline_data") or p.get("inlineData")
+            if inline and inline.get("data"):
+                import base64
+                return base64.b64decode(inline["data"])
+        raise HTTPException(502, "Gemini image: nessuna immagine nel response")
 
 @router.post("/veo3/image-hero", response_model=GeminiImageHeroResponse, tags=["Gemini Image"])
 async def genera_image_hero(
@@ -531,64 +488,79 @@ async def genera_image_hero(
 
     det = None
     if getattr(auto, "codice_motornet", None):
-        det = db.query(MnetDettaglioUsato)\
-                .filter(MnetDettaglioUsato.codice_motornet_uni == auto.codice_motornet)\
-                .first()
+        det = db.query(MnetDettaglioUsato).filter(MnetDettaglioUsato.codice_motornet_uni == auto.codice_motornet).first()
 
     marca = (getattr(det, "marca_nome", None) or "").strip()
     modello = (getattr(det, "modello", None) or "").strip()
     allestimento = (getattr(det, "allestimento", None) or "").strip() if det else None
     anno = int(getattr(auto, "anno_immatricolazione", 0) or 0)
     colore = (getattr(auto, "colore", None) or "").strip()
-
     if not (marca and modello and anno > 0):
         raise HTTPException(422, "Marca/Modello/Anno non disponibili")
 
     prompt = (
-        f"{payload.scenario.strip()} "
-        f"The vehicle is a {marca} {modello} {allestimento or ''} {anno} in {colore}. "
-        "Keep proportions, design and color factory-accurate. "
-        "No text, no watermarks, no non-Latin characters."
+        f"{payload.scenario.strip()} The vehicle is a {marca} {modello} {allestimento or ''} {anno} in {colore}. "
+        "Keep proportions, design and color factory-accurate. No text, no watermarks, no non-Latin characters."
     ) if payload.scenario else (
         payload.prompt_override or _gemini_build_image_prompt(marca, modello, anno, colore, allestimento)
     )
 
-    # crea record DB
+    # 1) genera immagine sincrona
+    img_bytes = await _gemini_generate_image_sync(prompt)
+
+    # 2) salva su storage
+    storage_path = f"{payload.id_auto}/gemini-img-{os.urandom(4).hex()}.png"
+    full_path, public_url = _sb_upload_and_sign(storage_path, img_bytes, "image/png")
+
+    # 3) traccia su UsatoLeonardo
     rec = UsatoLeonardo(
         id_auto=payload.id_auto,
         provider="gemini-image",
-        generation_id=None,
-        status="queued",
+        generation_id="sync",
+        status="completed",
         prompt=prompt,
         negative_prompt=None,
-        model_id="imagegeneration",
+        model_id="gemini-2.5-flash-image-preview",
         duration_seconds=None,
         fps=None,
         aspect_ratio="16:9",
         seed=None,
-        user_id=user.id
+        user_id=user.id,
+        media_type="image",
+        mime_type="image/png",
+        storage_path=full_path,
+        public_url=public_url,
+        credit_cost=GEMINI_IMG_CREDIT_COST,
     )
-    db.add(rec); db.commit(); db.refresh(rec)
+    db.add(rec)
 
-    # start operazione
-    try:
-        op_name = await _gemini_start_image(prompt)
-    except HTTPException as e:
-        rec.status = "failed"
-        rec.error_message = str(e.detail) if hasattr(e, "detail") else str(e)
-        db.commit()
-        raise
-
-    rec.generation_id = op_name
-    rec.status = "processing"
+    # 4) addebito se dealer
+    if is_dealer_user(user):
+        user.credit = float(user.credit or 0) - GEMINI_IMG_CREDIT_COST
+        db.add(CreditTransaction(
+            dealer_id=user.id,
+            amount=-GEMINI_IMG_CREDIT_COST,
+            transaction_type="USE",
+            note="Immagine hero Gemini"
+        ))
+        inserisci_notifica(
+            db=db,
+            utente_id=user.id,
+            tipo_codice="CREDITO_USATO",
+            messaggio=f"Hai utilizzato {GEMINI_IMG_CREDIT_COST:g} crediti per la generazione immagine."
+        )
     db.commit()
 
-    return GeminiImageHeroResponse(
-        success=True,
-        id_auto=payload.id_auto,
-        gemini_operation_id=op_name,
-        status="processing"
-    )
+    return GeminiImageHeroResponse(success=True, id_auto=payload.id_auto, status="completed", public_url=public_url)
+
+# ⛔ deprecato: lo lasciamo per compatibilità, ma risponde subito
+class GeminiImageStatusRequest(BaseModel):
+    operation_id: str
+
+class GeminiImageStatusResponse(BaseModel):
+    status: str
+    public_url: Optional[str] = None
+    error_message: Optional[str] = None
 
 @router.post("/veo3/image-status", response_model=GeminiImageStatusResponse, tags=["Gemini Image"])
 async def check_image_status(
@@ -597,77 +569,23 @@ async def check_image_status(
     db: Session = Depends(get_db)
 ):
     Authorize.jwt_required()
-    user_email = Authorize.get_jwt_subject()
-    user = db.query(User).filter(User.email == user_email).first()
-    if not user:
-        raise HTTPException(403, "Utente non trovato")
 
     rec = db.query(UsatoLeonardo).filter(
-        UsatoLeonardo.generation_id == payload.operation_id,
-        UsatoLeonardo.provider == "gemini-image"
+        UsatoLeonardo.provider == "gemini-image",
+        UsatoLeonardo.generation_id == payload.operation_id
     ).first()
+
     if not rec:
-        raise HTTPException(404, "Operazione non trovata nel database.")
+        return GeminiImageStatusResponse(status="not_found", error_message="Operazione non trovata")
 
     if rec.status == "completed" and rec.public_url:
         return GeminiImageStatusResponse(status="completed", public_url=rec.public_url)
 
-    try:
-        op = await _gemini_get_image_operation(payload.operation_id)  # dict
-    except HTTPException as e:
-        if e.status_code == 429:
-            return GeminiImageStatusResponse(status="processing", error_message="Quota limit; retry later")
-        return GeminiImageStatusResponse(status="processing", error_message="Errore temporaneo polling")
+    if rec.status in {"failed", "error"}:
+        return GeminiImageStatusResponse(status="failed", error_message=(rec.error_message or "Errore generazione"))
 
-    if "error" in op:
-        rec.status = "failed"
-        rec.error_message = op["error"].get("message", "Generazione immagine fallita")
-        db.commit()
-        return GeminiImageStatusResponse(status="failed", error_message=rec.error_message)
+    return GeminiImageStatusResponse(status="processing")
 
-    if not op.get("done", False):
-        return GeminiImageStatusResponse(status="processing")
-
-    uri = _extract_image_uri(op)
-    if not uri:
-        return GeminiImageStatusResponse(status="processing", error_message="URI non ancora disponibile")
-
-    # download + upload
-    try:
-        blob = await _download_bytes(uri)  # usa header x-goog-api-key e follow_redirects=True
-        storage_path = f"{rec.id_auto}/{rec.id}.png"
-        full_path, public_url = _sb_upload_and_sign(storage_path, blob, "image/png")
-
-        rec.status = "completed"
-        rec.storage_path = full_path
-        rec.public_url = public_url
-        rec.credit_cost = GEMINI_IMG_CREDIT_COST
-        db.commit()
-
-        if is_dealer_user(user):
-            user.credit = float(user.credit or 0) - GEMINI_IMG_CREDIT_COST
-            db.add(CreditTransaction(
-                dealer_id=user.id,
-                amount=-GEMINI_IMG_CREDIT_COST,
-                transaction_type="USE",
-                note="Immagine hero Gemini"
-            ))
-            inserisci_notifica(
-                db=db,
-                utente_id=user.id,
-                tipo_codice="CREDITO_USATO",
-                messaggio=f"Hai utilizzato {GEMINI_IMG_CREDIT_COST:g} crediti per la generazione immagine."
-            )
-            db.commit()
-
-        return GeminiImageStatusResponse(status="completed", public_url=public_url)
-
-    except Exception as e:
-        db.rollback()
-        rec.status = "failed"
-        rec.error_message = f"Errore finalizzazione immagine: {str(e)}"
-        db.commit()
-        raise HTTPException(500, detail=rec.error_message)
 
 
 
