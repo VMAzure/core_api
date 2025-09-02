@@ -1410,6 +1410,8 @@ class UsatoLeonardo(Base):
     seed = Column(Integer, nullable=True)
     width = Column(Integer, nullable=True)
     height = Column(Integer, nullable=True)
+    credit_cost = Column(Numeric(10, 2), nullable=True)
+
 
     storage_path = Column(Text, nullable=True)
     public_url = Column(Text, nullable=True)

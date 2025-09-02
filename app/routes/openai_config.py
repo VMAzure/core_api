@@ -286,9 +286,15 @@ async def genera_video_hero_veo3(
         seed=None,
         user_id=user.id
     )
+
+    # imposta attributi non presenti nel costruttore (solo se esistono nel modello DB)
     rec.media_type = "video"
     rec.mime_type = "video/mp4"
-    db.add(rec); db.commit(); db.refresh(rec)
+    # rec.credit_cost = GEMINI_IMG_CREDIT_COST  ← SOLO se esiste nel modello
+
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
 
     try:
         operation_id = await _gemini_start_video(prompt)
