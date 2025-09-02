@@ -175,11 +175,13 @@ def _gemini_build_prompt(marca: str, modello: str, anno: int, colore: Optional[s
     )
 
 async def _download_bytes(url: str) -> bytes:
-    async with httpx.AsyncClient(timeout=120) as client:
-        r = await client.get(url)
-        if r.status_code >= 300:
+    headers = {"x-goog-api-key": GEMINI_API_KEY}
+    async with httpx.AsyncClient(timeout=180, follow_redirects=True) as client:
+        r = await client.get(url, headers=headers)
+        if r.status_code >= 400:
             raise HTTPException(502, f"Download video fallito: {r.text}")
         return r.content
+
 
 import httpx
 
