@@ -10,6 +10,7 @@ from app.auth_helpers import is_admin_user, is_dealer_user
 from app.routes.notifiche import inserisci_notifica
 from app.openai_utils import genera_descrizione_gpt
 from typing import Optional, Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Request, HTTPException, Depends
 from sqlalchemy.orm import Session
@@ -525,7 +526,7 @@ async def genera_image_hero(
     rec = UsatoLeonardo(
         id_auto=payload.id_auto,
         provider="gemini-image",
-        generation_id="sync",
+        generation_id=f"sync-{uuid4()}",
         status="completed",
         prompt=prompt,
         negative_prompt=None,
