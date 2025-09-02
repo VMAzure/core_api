@@ -187,7 +187,6 @@ class VideoStatusResponse(BaseModel):
 
 
 
-# app/routes/veo3_config.py
 
 @router.post("/veo3/video-hero", response_model=VideoHeroResponse, tags=["Gemini VEO 3"])
 async def genera_video_hero_veo3(
@@ -279,7 +278,7 @@ async def genera_video_hero_veo3(
 
 
 
-from google.generativeai.types.operations import Operation
+from google.generativeai.types import Operation
 
 class VideoStatusRequest(BaseModel):
     operation_id: str
