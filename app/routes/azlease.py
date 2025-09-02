@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db, supabase_client, SUPABASE_URL
 from app.models import AZLeaseUsatoAuto, User, AZUsatoInsertRequest, AZLeaseQuotazioni, SiteAdminSettings
+from app.models import AutousatoAccessoriOptional
+
 from app.schemas import AutoUsataCreate
 from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
 import uuid
@@ -1770,52 +1772,47 @@ async def valuta_auto_usata(
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
-    # 🔐 Autenticazione e ruolo
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
     user = db.query(User).filter(User.email == user_email).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Utente non trovato")
-    if not (is_admin_user(user) or is_dealer_user(user)):
-        raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
+    if not user or not (is_admin_user(user) or is_dealer_user(user)):
+        raise HTTPException(status_code=403, detail="Utente non autorizzato")
 
-    # 🔍 Recupera auto usata + optional
-    auto = (
-        db.query(AZLeaseUsatoAuto)
-        .filter(AZLeaseUsatoAuto.id == id_auto)
-        .first()
-    )
-
+    auto = db.query(AZLeaseUsatoAuto).filter(AZLeaseUsatoAuto.id == id_auto).first()
     if not auto:
         raise HTTPException(status_code=404, detail="Auto non trovata")
 
     if not auto.codice_motornet:
         raise HTTPException(status_code=400, detail="Codice Motornet mancante")
 
-    if not auto.anno_immatricolazione or not auto.mese_immatricolazione:
-        raise HTTPException(status_code=422, detail="Anno o mese immatricolazione mancanti")
-
-    # 🔎 Accessori optional con 'presente = true'
-    accessori = [
-        {
-            "id": str(opt.id),  # Motornet accetta anche stringa
-            "prezzo": float(opt.prezzo or 0)
-        }
-        for opt in auto.accessori_optional
-        if opt.presente and opt.prezzo is not None
-    ]
+    try:
+        anno = int(auto.anno_immatricolazione)
+        mese = int(auto.mese_immatricolazione)
+        km = int(auto.km_certificati or 0)
+    except Exception:
+        raise HTTPException(status_code=422, detail="Anno, mese o km invalidi")
 
     payload = {
         "codiceMotornetUnivoco": auto.codice_motornet,
-        "anno": auto.anno_immatricolazione,
-        "mese": auto.mese_immatricolazione,
-        "km": auto.km_certificati or 0
+        "anno": anno,
+        "mese": mese,
+        "km": km
     }
 
-    if accessori:
-        payload["accessori"] = accessori
+    # 🔍 Somma accessori presenti
+    accessori = (
+        db.query(AutousatoAccessoriOptional)
+        .filter(
+            AutousatoAccessoriOptional.id_auto == id_auto,
+            AutousatoAccessoriOptional.presente == True,
+            AutousatoAccessoriOptional.prezzo.isnot(None)
+        )
+        .all()
+    )
 
-    # 🔑 Token Motornet
+    prezzo_accessori = sum(float(opt.prezzo or 0) for opt in accessori)
+
+    # 🔐 Token Motornet
     try:
         token = get_motornet_token()
     except Exception as e:
@@ -1828,12 +1825,36 @@ async def valuta_auto_usata(
 
     url = "https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/valutazione"
 
+    # 🔍 Log payload
+    import logging
+    logging.info(f"[Valutazione Motornet] Payload: {payload}")
+
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=6.0)
-        if r.status_code == 404:
-            raise HTTPException(status_code=404, detail="Valutazione non trovata su Motornet")
         r.raise_for_status()
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=502, detail=f"Errore chiamata Motornet: {str(e)}")
 
-    return r.json()
+    result = r.json()
+    valutazione = result.get("valutazione", {})
+
+    q_blu_km = valutazione.get("quotazioneEurotaxBluKm") or valutazione.get("quotazioneEurotaxBlu")
+    q_giallo_km = valutazione.get("quotazioneEurotaxGialloKm") or valutazione.get("quotazioneEurotaxGiallo")
+
+    try:
+        q_blu_km = float(q_blu_km)
+    except (TypeError, ValueError):
+        q_blu_km = None
+
+    try:
+        q_giallo_km = float(q_giallo_km)
+    except (TypeError, ValueError):
+        q_giallo_km = None
+
+    return {
+        "valutazione": valutazione,
+        "prezzo_accessori": round(prezzo_accessori, 2),
+        "valutazione_blu_finale": round(q_blu_km + prezzo_accessori, 2) if q_blu_km is not None else None,
+        "valutazione_gialla_finale": round(q_giallo_km + prezzo_accessori, 2) if q_giallo_km is not None else None
+    }
+
