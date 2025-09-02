@@ -505,11 +505,14 @@ async def genera_image_hero(
         raise HTTPException(422, "Marca/Modello/Anno non disponibili")
 
     prompt = (
-        f"{payload.scenario.strip()} The vehicle is a {marca} {modello} {allestimento or ''} {anno} in {colore}. "
-        "Keep proportions, design and color factory-accurate. No text, no watermarks, no non-Latin characters."
-    ) if payload.scenario else (
-        payload.prompt_override or _gemini_build_image_prompt(marca, modello, anno, colore, allestimento)
+        f"Create a high-quality photo of a {marca} {modello} {allestimento or ''} {anno} in {colore}. "
+        "Factory-accurate proportions, design, and color. "
+        "Luxury urban setting at dusk with cinematic lighting and realistic reflections. "
+        "Three-quarter front view. Wide horizontal composition (16:9). "
+        "Photographic realism, crisp details, depth of field. "
+        "No license plate, no text, no watermarks, no logos, no non-Latin characters."
     )
+
 
     # 1) genera immagine sincrona
     img_bytes = await _gemini_generate_image_sync(prompt)
