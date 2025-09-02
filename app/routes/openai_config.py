@@ -348,27 +348,25 @@ async def check_video_status(
         return GeminiVideoStatusResponse(status="processing")
 
     # risultato disponibile
-    result = op.get("response", {})  # dict
-    vids = result.get("generatedVideos") or result.get("videos") or result.get("videoPreviews") or []
+    result = op.get("response", {})
     uri = None
+
+    # Caso standard documented da Google
+    vids = result.get("generatedVideos") or result.get("videos") or []
     if vids:
         v0 = vids[0]
         video_obj = v0.get("video") or {}
-        uri = (
-            v0.get("uri")
-            or v0.get("videoUri")
-            or video_obj.get("uri")
-            or v0.get("url")
-        )
+        uri = v0.get("uri") or video_obj.get("uri") or v0.get("videoUri")
 
+    # ✅ Caso reale che hai ottenuto
     if not uri:
-        rec.status = "failed"
-        rec.error_message = "Gemini: risultato senza URI video"
-        db.commit()
-        return GeminiVideoStatusResponse(
-            status="failed",
-            error_message=rec.error_message
-        )
+        generate_resp = result.get("generateVideoResponse", {})
+        samples = generate_resp.get("generatedSamples") or []
+        if samples:
+            first = samples[0]
+            video = first.get("video") or {}
+            uri = video.get("uri")
+
 
 
     try:
