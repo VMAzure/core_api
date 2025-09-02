@@ -138,20 +138,37 @@ async def _download_bytes(url: str) -> bytes:
             raise HTTPException(502, f"Download video fallito: {r.text}")
         return r.content
 
-def _gemini_start_video(prompt: str) -> str:
-    """
-    Avvia la generazione video con VEO 3.
-    Ritorna il nome dell'operazione da usare per il polling.
-    """
-    op = genai.generate_video(model="veo-3.0", prompt=prompt)
-    # compat: alcune versioni usano op.name, altre op.operation.name
-    op_name = getattr(op, "name", None) or getattr(getattr(op, "operation", None), "name", None)
-    if not op_name:
-        raise HTTPException(502, "Gemini: nome operazione mancante nella risposta")
-    return op_name
+import httpx
 
-def _gemini_get_operation(op_name: str):
-    return genai.get_operation(op_name)
+async def _gemini_start_video(prompt: str) -> str:
+    if not GEMINI_API_KEY:
+        raise HTTPException(500, "GEMINI_API_KEY non configurata")
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/veo-3.0:generateVideo?key={GEMINI_API_KEY}"
+    payload = {
+        "prompt": prompt,
+        "config": {
+            "durationSeconds": 5,
+            "aspectRatio": "16:9"
+        }
+    }
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.post(url, json=payload)
+        if r.status_code >= 300:
+            raise HTTPException(r.status_code, f"Errore Gemini: {r.text}")
+        data = r.json()
+        return data.get("name")
+
+
+async def _gemini_get_operation(op_name: str) -> dict:
+    url = f"https://generativelanguage.googleapis.com/v1beta/{op_name}?key={GEMINI_API_KEY}"
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.get(url)
+        if r.status_code >= 300:
+            raise HTTPException(r.status_code, f"Errore polling Gemini: {r.text}")
+        return r.json()
+
 
 @router.post("/veo3/video-hero", response_model=GeminiVideoHeroResponse, tags=["Gemini VEO 3"])
 async def genera_video_hero_veo3(
