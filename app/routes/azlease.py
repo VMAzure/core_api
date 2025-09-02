@@ -1337,6 +1337,23 @@ async def lista_usato_pubblico(
             ORDER BY principale DESC, id ASC
         """), {"id_auto": auto["id_auto"]}).fetchall()
 
+        # Immagine AI attiva
+        img_ai = db.execute(text("""
+            SELECT public_url
+            FROM usato_leonardo
+            WHERE id_auto = :id_auto AND media_type = 'image' AND is_active = true
+            ORDER BY id DESC LIMIT 1
+        """), {"id_auto": auto["id_auto"]}).fetchone()
+
+        # Video AI attivo
+        vid_ai = db.execute(text("""
+            SELECT public_url
+            FROM usato_leonardo
+            WHERE id_auto = :id_auto AND media_type = 'video' AND is_active = true
+            ORDER BY id DESC LIMIT 1
+        """), {"id_auto": auto["id_auto"]}).fetchone()
+
+
         dettagli = db.execute(text("""
             SELECT 
                 alimentazione, cambio, trazione, hp, kw, cilindrata,
@@ -1363,6 +1380,9 @@ async def lista_usato_pubblico(
             "dealer_logo": info["logo"],
             "dealer_nome": info["nome"],
             "dealer_indirizzo": info["indirizzo"],
+            "immagine_ai": img_ai.public_url if img_ai else None,
+            "video_ai": vid_ai.public_url if vid_ai else None,
+
         })
 
     return risultato
