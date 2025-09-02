@@ -9,10 +9,22 @@ from app.models import User, PurchasedServices, Services, CreditTransaction
 from app.auth_helpers import is_admin_user, is_dealer_user
 from app.routes.notifiche import inserisci_notifica
 from app.openai_utils import genera_descrizione_gpt
+from typing import Optional, Any
 
 from fastapi import APIRouter, Request, HTTPException, Depends
 from sqlalchemy.orm import Session
 import json
+
+import logging, json, os
+GEMINI_DEBUG = os.getenv("GEMINI_DEBUG", "0") == "1"
+
+def _log_op(op: dict):
+    if GEMINI_DEBUG:
+        try:
+            logging.warning("[Gemini op]%s", json.dumps(op, ensure_ascii=False)[:12000])
+        except Exception:
+            logging.warning("[Gemini op]<non-serializzabile>")
+
 
 
 router = APIRouter()
@@ -112,6 +124,41 @@ class GeminiVideoStatusResponse(BaseModel):
     status: str
     public_url: Optional[str] = None
     error_message: Optional[str] = None
+
+
+def _extract_video_uri(op: dict) -> Optional[str]:
+    resp = op.get("response") or {}
+
+    # A) principali
+    for key in ("generatedVideos", "videos", "videoPreviews", "previews", "outputs", "assets"):
+        arr = resp.get(key)
+        if isinstance(arr, list) and arr:
+            v0 = arr[0] if isinstance(arr[0], dict) else None
+            if v0:
+                uri = (
+                    v0.get("uri")
+                    or v0.get("videoUri")
+                    or (v0.get("video") or {}).get("uri")
+                    or (v0.get("asset") or {}).get("uri")
+                    or (v0.get("content") or {}).get("uri")
+                )
+                if isinstance(uri, str): 
+                    return uri
+
+    # B) fallback ricorsivo: prima 'uri' poi 'url'
+    stack: list[Any] = [resp]
+    while stack:
+        cur = stack.pop()
+        if isinstance(cur, dict):
+            if isinstance(cur.get("uri"), str):
+                return cur["uri"]
+            if isinstance(cur.get("url"), str) and ("http://" in cur["url"] or "https://" in cur["url"]):
+                return cur["url"]
+            stack.extend(cur.values())
+        elif isinstance(cur, list):
+            stack.extend(cur)
+
+    return None
 
 def _gemini_assert_api():
     if not GEMINI_API_KEY:
@@ -286,39 +333,47 @@ async def check_video_status(
         op = await _gemini_get_operation(payload.operation_id)
     except Exception:
         # errore transitorio → non marchiare failed
-        return GeminiVideoStatusResponse(status="processing", error_message="Errore temporaneo polling")
+        return GeminiVideoStatusResponse(
+            status="processing",
+            error_message="Errore temporaneo polling"
+        )
 
-    # compat: op.error, op.done, op.result
-    # op è un dict JSON
+    # op è un dict JSON dalla REST API
     if "error" in op:
         rec.status = "failed"
         rec.error_message = op["error"].get("message", "Generazione fallita")
         db.commit()
-        return GeminiVideoStatusResponse(status="failed", error_message=rec.error_message)
+        return GeminiVideoStatusResponse(
+            status="failed",
+            error_message=rec.error_message
+        )
 
     if not op.get("done", False):
         return GeminiVideoStatusResponse(status="processing")
 
     # risultato disponibile
     result = op.get("response", {})  # dict
-    vids = result.get("generatedVideos") or result.get("videos") or []
+    vids = result.get("generatedVideos") or result.get("videos") or result.get("videoPreviews") or []
     uri = None
     if vids:
         v0 = vids[0]
-        # Possibili campi secondo docs/SDK:
-        # - v0.get("uri")
-        # - v0.get("video", {}).get("uri")
-        # - v0.get("videoUri")
         video_obj = v0.get("video") or {}
-        uri = v0.get("uri") or video_obj.get("uri") or v0.get("videoUri")
-
-
+        uri = (
+            v0.get("uri")
+            or v0.get("videoUri")
+            or video_obj.get("uri")
+            or v0.get("url")
+        )
 
     if not uri:
         rec.status = "failed"
         rec.error_message = "Gemini: risultato senza URI video"
         db.commit()
-        return GeminiVideoStatusResponse(status="failed", error_message=rec.error_message)
+        return GeminiVideoStatusResponse(
+            status="failed",
+            error_message=rec.error_message
+        )
+
 
     try:
         blob = await _download_bytes(uri)
