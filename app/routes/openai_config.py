@@ -126,11 +126,9 @@ class GeminiVideoStatusResponse(BaseModel):
     error_message: Optional[str] = None
 
 
-def _extract_video_uri(op: dict) -> Optional[str]:
+def _extract_video_uri(op: dict):
     resp = op.get("response") or {}
-
-    # A) principali
-    for key in ("generatedVideos", "videos", "videoPreviews", "previews", "outputs", "assets"):
+    for key in ("generatedVideos","videos","videoPreviews","previews","outputs","assets"):
         arr = resp.get(key)
         if isinstance(arr, list) and arr:
             v0 = arr[0] if isinstance(arr[0], dict) else None
@@ -141,24 +139,22 @@ def _extract_video_uri(op: dict) -> Optional[str]:
                     or (v0.get("video") or {}).get("uri")
                     or (v0.get("asset") or {}).get("uri")
                     or (v0.get("content") or {}).get("uri")
+                    or v0.get("url")
                 )
-                if isinstance(uri, str): 
+                if isinstance(uri, str):
                     return uri
-
-    # B) fallback ricorsivo: prima 'uri' poi 'url'
-    stack: list[Any] = [resp]
+    # fallback ricorsivo
+    stack=[resp]
     while stack:
-        cur = stack.pop()
+        cur=stack.pop()
         if isinstance(cur, dict):
-            if isinstance(cur.get("uri"), str):
-                return cur["uri"]
-            if isinstance(cur.get("url"), str) and ("http://" in cur["url"] or "https://" in cur["url"]):
-                return cur["url"]
+            if isinstance(cur.get("uri"), str): return cur["uri"]
+            if isinstance(cur.get("url"), str) and cur["url"].startswith(("http://","https://")): return cur["url"]
             stack.extend(cur.values())
         elif isinstance(cur, list):
             stack.extend(cur)
-
     return None
+
 
 def _gemini_assert_api():
     if not GEMINI_API_KEY:
