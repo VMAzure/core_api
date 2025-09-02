@@ -608,6 +608,65 @@ def get_foto_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = D
             } for img in immagini
         ]
     }
+
+from fastapi import Depends
+from fastapi_jwt_auth import AuthJWT
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.models import UsatoLeonardo
+
+from fastapi import APIRouter
+
+router = APIRouter()
+
+@router.get("/usato/leonardo-attivi/{auto_id}", tags=["AZLease"])
+def get_media_ai_attivi(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    Authorize.jwt_required()
+
+    records = db.query(UsatoLeonardo)\
+        .filter(UsatoLeonardo.id_auto == auto_id, UsatoLeonardo.is_active == True)\
+        .order_by(UsatoLeonardo.media_type.asc())\
+        .all()
+
+    return {
+        "auto_id": auto_id,
+        "media": [
+            {
+                "id": str(m.id),
+                "media_type": m.media_type,        # "image" o "video"
+                "mime_type": m.mime_type,          # "image/png", "video/mp4", ecc.
+                "public_url": m.public_url,
+                "provider": m.provider,
+                "model_id": m.model_id,
+                "created_at": getattr(m, "created_at", None)  # opzionale
+            }
+            for m in records
+        ]
+    }
+
+@router.patch("/usato/leonardo/{id}/usa", tags=["AZLease"])
+def usa_media_leonardo(id: UUID, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    Authorize.jwt_required()
+
+    record = db.query(UsatoLeonardo).filter(UsatoLeonardo.id == id).first()
+
+    if not record:
+        raise HTTPException(status_code=404, detail="Media non trovato")
+
+    id_auto = record.id_auto
+    media_type = record.media_type  # "image" o "video"
+
+    # 1️⃣ Disattiva gli altri dello stesso tipo su quella auto
+    db.query(UsatoLeonardo)\
+        .filter(UsatoLeonardo.id_auto == id_auto, UsatoLeonardo.media_type == media_type)\
+        .update({UsatoLeonardo.is_active: False})
+
+    # 2️⃣ Attiva questo record
+    record.is_active = True
+
+    db.commit()
+
+    return {"success": True, "id": str(id), "media_type": media_type, "id_auto": str(id_auto)}
 @router.put("/foto-usato/{id_foto}/principale", tags=["AZLease"])
 def imposta_foto_principale(id_foto: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()

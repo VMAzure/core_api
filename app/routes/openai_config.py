@@ -1084,3 +1084,26 @@ async def leonardo_webhook(req: Request, db: Session = Depends(get_db)):
 
     print(f"[WEBHOOK] ✅ Video completato, URL: {public_url}")
     return {"ok": True, "status": "completed", "public_url": public_url}
+
+from database import UUID
+
+@router.patch("/usato-leonardo/{id}/usa", tags=["Usato AI"])
+def usa_hero_media(id: UUID, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    rec = db.query(UsatoLeonardo).filter(UsatoLeonardo.id == id).first()
+    if not rec:
+        raise HTTPException(404, "Record non trovato")
+
+    # Disattiva gli altri media dello stesso tipo per l’auto
+    db.query(UsatoLeonardo).filter(
+        UsatoLeonardo.id_auto == rec.id_auto,
+        UsatoLeonardo.media_type == rec.media_type
+    ).update({UsatoLeonardo.is_active: False})
+
+    # Attiva questo
+    rec.is_active = True
+    db.commit()
+    return {"success": True}
+

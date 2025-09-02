@@ -1391,6 +1391,8 @@ class UsatoLeonardo(Base):
 
     id = Column(PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     id_auto = Column(PG_UUID(as_uuid=True), ForeignKey("public.azlease_usatoauto.id", ondelete="CASCADE"), nullable=False)
+    is_active = Column(Boolean, default=False, nullable=False)
+
 
     provider = Column(String, nullable=False, default="leonardo")
     generation_id = Column(String, unique=True, nullable=True)
