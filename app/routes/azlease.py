@@ -617,7 +617,6 @@ from app.models import UsatoLeonardo
 
 from fastapi import APIRouter
 
-router = APIRouter()
 
 @router.get("/usato/leonardo-attivi/{auto_id}", tags=["AZLease"])
 def get_media_ai_attivi(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
