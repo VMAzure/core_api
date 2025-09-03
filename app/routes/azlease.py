@@ -807,19 +807,25 @@ async def get_id_auto_usata(targa: Optional[str] = None, Authorize: AuthJWT = De
         return {"id_auto": [r.id for r in result]}
 
 @router.get("/usato/all", tags=["AZLease"])
-async def get_id_auto_anche_non_visibili(targa: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+async def get_id_auto_anche_non_visibili(
+    targa: str,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
     Authorize.jwt_required()
+    targa = targa.strip().upper()
 
     result = db.execute(text("""
         SELECT a.id FROM azlease_usatoauto a
         JOIN azlease_usatoin i ON a.id_usatoin = i.id
-        WHERE a.targa = :targa
+        WHERE UPPER(a.targa) = :targa
     """), {"targa": targa}).fetchone()
 
     if not result:
         raise HTTPException(status_code=404, detail="Auto non trovata")
 
     return {"id_auto": result.id}
+
 
 @router.get("/lista-auto", tags=["AZLease"])
 async def lista_auto_usate(
