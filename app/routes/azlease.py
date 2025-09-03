@@ -105,13 +105,12 @@ async def inserisci_auto_usata(
         "colore": payload.colore,
         "usatoin_id": str(usatoin_id)
     })
-
+   
     # === SYNC DETTAGLI MOTORNET se mancanti ===
-
     try:
         codice = payload.codice_motornet
         if codice:
-            # Verifica se già presente
+            # Verifica se il dettaglio già esiste
             exists = db.execute(text("""
                 SELECT 1 FROM mnet_dettagli_usato
                 WHERE codice_motornet_uni = :c
@@ -132,6 +131,44 @@ async def inserisci_auto_usata(
                 if not modello:
                     print(f"⚠️ Nessun modello restituito da Motornet per {codice}")
                 else:
+                    marca = modello.get("marca") or {}
+                    gamma = modello.get("gammaModello") or {}
+
+                    # 1. Inserisci marca se mancante
+                    if marca.get("acronimo") and marca.get("nome"):
+                        db.execute(text("""
+                            INSERT INTO mnet_marche_usato (acronimo, nome)
+                            VALUES (:acronimo, :nome)
+                            ON CONFLICT (acronimo) DO NOTHING
+                        """), {
+                            "acronimo": marca.get("acronimo"),
+                            "nome": marca.get("nome")
+                        })
+
+                    # 2. Inserisci modello se mancante
+                    if gamma.get("codice"):
+                        db.execute(text("""
+                            INSERT INTO mnet_modelli_usato (marca_acronimo, codice_desc_modello, descrizione)
+                            VALUES (:acronimo, :codice, :descrizione)
+                            ON CONFLICT (marca_acronimo, codice_desc_modello) DO NOTHING
+                        """), {
+                            "acronimo": marca.get("acronimo"),
+                            "codice": gamma.get("codice"),
+                            "descrizione": gamma.get("descrizione") or modello.get("modello") or ""
+                        })
+
+                    # 3. Inserisci allestimento se mancante
+                    db.execute(text("""
+                        INSERT INTO mnet_allestimenti_usato (codice_motornet_uni, codice_desc_modello, acronimo_marca)
+                        VALUES (:codice, :codice_desc, :acronimo)
+                        ON CONFLICT (codice_motornet_uni) DO NOTHING
+                    """), {
+                        "codice": codice,
+                        "codice_desc": gamma.get("codice"),
+                        "acronimo": marca.get("acronimo")
+                    })
+
+                    # 4. Inserisci dettagli completi
                     db.execute(text("""
                         INSERT INTO mnet_dettagli_usato (
                             codice_motornet_uni, modello, allestimento,
@@ -154,10 +191,10 @@ async def inserisci_auto_usata(
                         "codice": codice,
                         "modello": modello.get("modello"),
                         "allestimento": modello.get("allestimento"),
-                        "marca_nome": (modello.get("marca") or {}).get("nome"),
-                        "marca_acronimo": (modello.get("marca") or {}).get("acronimo"),
-                        "gamma_codice": (modello.get("gammaModello") or {}).get("codice"),
-                        "gamma_descrizione": (modello.get("gammaModello") or {}).get("descrizione"),
+                        "marca_nome": marca.get("nome"),
+                        "marca_acronimo": marca.get("acronimo"),
+                        "gamma_codice": gamma.get("codice"),
+                        "gamma_descrizione": gamma.get("descrizione"),
                         "alimentazione": (modello.get("alimentazione") or {}).get("descrizione"),
                         "cambio": (modello.get("cambio") or {}).get("descrizione"),
                         "trazione": (modello.get("trazione") or {}).get("descrizione"),
@@ -170,9 +207,10 @@ async def inserisci_auto_usata(
                         "descrizione_motore": modello.get("descrizioneMotore"),
                         "euro": modello.get("euro")
                     })
-                    print(f"✅ Dettagli Motornet importati per {codice}")
+                    print(f"✅ Dettagli Motornet completati per {codice}")
     except Exception as e:
         print(f"❌ Errore sync dettagli Motornet per {payload.codice_motornet}: {e}")
+
 
     # 🔗 I dettagli sono già presenti nella tabella mnet_dettagli_usato
     db.commit()
