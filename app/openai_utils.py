@@ -27,6 +27,8 @@ async def genera_descrizione_gpt(
             if not model.endswith("-search-preview"):
                 raise ValueError("web_research richiede un modello search-preview")
             kwargs["web_search_options"] = {}
+            kwargs.pop("temperature", None)  # ⬅️ rimuovi temperatura
+
 
         response = await client.chat.completions.create(**kwargs)
         return response.choices[0].message.content.strip()
