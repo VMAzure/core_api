@@ -35,6 +35,10 @@ GPT_COSTO_CREDITO = 0.5
 class PromptRequest(BaseModel):
     prompt: str
     max_tokens: int = 300
+    temperature: float = 0.4
+    model: Optional[str] = None
+    web_research: bool = False
+
 
 
 @router.post("/openai/genera", tags=["OpenAI"])
