@@ -106,6 +106,74 @@ async def inserisci_auto_usata(
         "usatoin_id": str(usatoin_id)
     })
 
+    # === SYNC DETTAGLI MOTORNET se mancanti ===
+
+    try:
+        codice = payload.codice_motornet
+        if codice:
+            # Verifica se già presente
+            exists = db.execute(text("""
+                SELECT 1 FROM mnet_dettagli_usato
+                WHERE codice_motornet_uni = :c
+            """), {"c": codice}).fetchone()
+
+            if not exists:
+                print(f"📡 Dettagli Motornet assenti per {codice}, provo a importarli...")
+                from app.routes.motornet import get_motornet_token
+                headers = {
+                    "Authorization": f"Bearer {get_motornet_token()}",
+                    "Content-Type": "application/json"
+                }
+                url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/dettaglio?codice_motornet_uni={codice}"
+                r = requests.get(url, headers=headers)
+                r.raise_for_status()
+                modello = r.json().get("modello")
+
+                if not modello:
+                    print(f"⚠️ Nessun modello restituito da Motornet per {codice}")
+                else:
+                    db.execute(text("""
+                        INSERT INTO mnet_dettagli_usato (
+                            codice_motornet_uni, modello, allestimento,
+                            marca_nome, marca_acronimo,
+                            gamma_codice, gamma_descrizione,
+                            alimentazione, cambio, trazione,
+                            hp, kw, cilindrata,
+                            segmento, categoria, tipo,
+                            descrizione_motore, euro
+                        ) VALUES (
+                            :codice, :modello, :allestimento,
+                            :marca_nome, :marca_acronimo,
+                            :gamma_codice, :gamma_descrizione,
+                            :alimentazione, :cambio, :trazione,
+                            :hp, :kw, :cilindrata,
+                            :segmento, :categoria, :tipo,
+                            :descrizione_motore, :euro
+                        )
+                    """), {
+                        "codice": codice,
+                        "modello": modello.get("modello"),
+                        "allestimento": modello.get("allestimento"),
+                        "marca_nome": (modello.get("marca") or {}).get("nome"),
+                        "marca_acronimo": (modello.get("marca") or {}).get("acronimo"),
+                        "gamma_codice": (modello.get("gammaModello") or {}).get("codice"),
+                        "gamma_descrizione": (modello.get("gammaModello") or {}).get("descrizione"),
+                        "alimentazione": (modello.get("alimentazione") or {}).get("descrizione"),
+                        "cambio": (modello.get("cambio") or {}).get("descrizione"),
+                        "trazione": (modello.get("trazione") or {}).get("descrizione"),
+                        "hp": modello.get("hp"),
+                        "kw": modello.get("kw"),
+                        "cilindrata": modello.get("cilindrata"),
+                        "segmento": (modello.get("segmento") or {}).get("descrizione"),
+                        "categoria": (modello.get("categoria") or {}).get("descrizione"),
+                        "tipo": (modello.get("tipo") or {}).get("descrizione"),
+                        "descrizione_motore": modello.get("descrizioneMotore"),
+                        "euro": modello.get("euro")
+                    })
+                    print(f"✅ Dettagli Motornet importati per {codice}")
+    except Exception as e:
+        print(f"❌ Errore sync dettagli Motornet per {payload.codice_motornet}: {e}")
+
     # 🔗 I dettagli sono già presenti nella tabella mnet_dettagli_usato
     db.commit()
 
