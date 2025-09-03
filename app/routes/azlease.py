@@ -338,7 +338,7 @@ class OptionalBatchSet(BaseModel):
     accessori: List[AccessorioOptionalItem]
 
 
-@router.post("/usato/optional/batch-set", tags=["AZLease"])
+@router.post("api/azlease/usato/optional/batch-set", tags=["AZLease"])
 async def batch_set_optional(
     data: OptionalBatchSet,
     Authorize: AuthJWT = Depends(),

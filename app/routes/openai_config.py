@@ -36,7 +36,82 @@ class PromptRequest(BaseModel):
     prompt: str
     max_tokens: int = 300
 
+
 @router.post("/openai/genera", tags=["OpenAI"])
+async def genera_testo(
+    payload: PromptRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=403, detail="Utente non trovato")
+
+    is_dealer = is_dealer_user(user)
+
+    # ——————————————————————————————————————
+    # Scelta modello
+    model = (
+        "gpt-4o-search-preview" if payload.web_research
+        else (payload.model or "gpt-4o")
+    )
+
+    # Costo per modello (USD) → puoi convertirlo in crediti come vuoi
+    MODEL_COSTO_CREDITO = {
+        "gpt-4o": 0.5,
+        "gpt-4o-mini": 0.25,
+        "gpt-4o-search-preview": 0.75,  # ↑ browsing + citazioni
+        "gpt-4o-mini-search-preview": 0.4
+    }
+
+    costo_credito = MODEL_COSTO_CREDITO.get(model, 0.5)
+
+    # DEALER: verifica credito
+    if is_dealer:
+        if user.credit is None or user.credit < costo_credito:
+            raise HTTPException(status_code=402, detail="Credito insufficiente")
+
+    # ——————————————————————————————————————
+    # Prompt LLM
+    try:
+        output = await genera_descrizione_gpt(
+            prompt=payload.prompt,
+            max_tokens=payload.max_tokens,
+            temperature=payload.temperature,
+            model=model,
+            web_research=payload.web_research
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore LLM: {e}")
+
+    # ——————————————————————————————————————
+    # DEALER: scala credito e notifica
+    if is_dealer:
+        user.credit -= costo_credito
+
+        db.add(CreditTransaction(
+            dealer_id=user.id,
+            amount=-costo_credito,
+            transaction_type="USE",
+            note=f"Generazione GPT ({model})"
+        ))
+
+        inserisci_notifica(
+            db=db,
+            utente_id=user.id,
+            tipo_codice="CREDITO_USATO",
+            messaggio=f"Hai utilizzato {costo_credito} crediti per la generazione GPT ({model})."
+        )
+
+        db.commit()
+
+    return {"success": True, "output": output}
+
+
+@router.post("/openai/genera_old", tags=["OpenAI"])
 async def genera_testo(
     payload: PromptRequest,
     Authorize: AuthJWT = Depends(),
