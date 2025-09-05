@@ -479,6 +479,29 @@ async def batch_set_optional(
     db.commit()
     return {"success": True, "aggiornati": updated}
 
+class OptionalUpdateItem(BaseModel):
+    codice: str
+    presente: bool
+    prezzo: float
+
+class OptionalBatchUpdateRequest(BaseModel):
+    id_auto: UUID
+    accessori: List[OptionalUpdateItem]
+
+@router.patch("/usato/optional/batch-update")
+async def update_optional_accessories(payload: OptionalBatchUpdateRequest, db: Session = Depends(get_db)):
+    for acc in payload.accessori:
+        result = db.query(AutousatoAccessoriOptional).filter_by(
+            id_auto=payload.id_auto,
+            codice=acc.codice
+        ).first()
+
+        if result:
+            result.presente = acc.presente
+            result.prezzo = acc.prezzo
+
+    db.commit()
+    return {"success": True, "updated": len(payload.accessori)}
 
 @router.post("/usato/pacchetti/batch-set", tags=["AZLease"])
 async def batch_set_pacchetti(
@@ -521,6 +544,33 @@ async def batch_set_pacchetti(
     return {"success": True, "aggiornati": updated}
 
 
+class PacchettoUpdateItem(BaseModel):
+    codice: str
+    presente: bool
+    prezzo: float
+
+class PacchettoBatchUpdateRequest(BaseModel):
+    id_auto: UUID
+    pacchetti: List[PacchettoUpdateItem]
+
+
+from app.models import AutousatoAccessoriPacchetti
+
+
+@router.patch("/usato/pacchetti/batch-update")
+async def update_pacchetti(payload: PacchettoBatchUpdateRequest, db: Session = Depends(get_db)):
+    for p in payload.pacchetti:
+        result = db.query(AutousatoAccessoriPacchetti).filter_by(
+            id_auto=payload.id_auto,
+            codice=p.codice
+        ).first()
+
+        if result:
+            result.presente = p.presente
+            result.prezzo = p.prezzo
+
+    db.commit()
+    return {"success": True, "updated": len(payload.pacchetti)}
 
 @router.put("/usato/optional/{id_optional}", tags=["AZLease"])
 async def aggiorna_optional_accessorio(
