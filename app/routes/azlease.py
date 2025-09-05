@@ -924,7 +924,7 @@ from app.models import UsatoLeonardo
 from fastapi import APIRouter
 
 
-@router.get("/api/azlease/usato/leonardo-attivi/{id_auto}", tags=["AZLease Media"])
+@router.get("/leonardo-attivi/{id_auto}", tags=["AZLease Media"])
 def elenco_media_ai(
     id_auto: UUID,
     only_active: bool = False,
