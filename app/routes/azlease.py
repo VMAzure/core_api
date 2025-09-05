@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db, supabase_client, SUPABASE_URL
-from app.models import AZLeaseUsatoAuto, User, AZUsatoInsertRequest, AZLeaseQuotazioni, SiteAdminSettings
+from app.models import AZLeaseUsatoAuto, AZLeaseUsatoIn, User, AZUsatoInsertRequest, AZLeaseQuotazioni, SiteAdminSettings
 from app.models import AutousatoAccessoriOptional
 
 from app.schemas import AutoUsataCreate
@@ -222,6 +222,28 @@ async def inserisci_auto_usata(
     }
 
 
+@router.patch("/usato/{id_auto}", tags=["AZLease Usato"])
+async def patch_auto_usata(
+    id_auto: UUID,
+    body: dict = Body(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    auto = db.query(AZLeaseUsatoAuto).filter(AZLeaseUsatoAuto.id == id_auto).first()
+    usatoin = db.query(AZLeaseUsatoIn).filter(AZLeaseUsatoIn.id == auto.id_usatoin).first()
+
+    if not auto or not usatoin:
+        raise HTTPException(status_code=404, detail="Auto non trovata")
+
+    # Aggiorna solo i campi presenti nel body
+    for field, value in body.items():
+        if hasattr(auto, field):
+            setattr(auto, field, value)
+        elif hasattr(usatoin, field):
+            setattr(usatoin, field, value)
+
+    db.commit()
+    return {"success": True, "id_auto": str(auto.id)}
 
 @router.put("/usato/{id_auto}", tags=["AZLease"])
 async def aggiorna_auto_usata(
@@ -488,7 +510,7 @@ class OptionalBatchUpdateRequest(BaseModel):
     id_auto: UUID
     accessori: List[OptionalUpdateItem]
 
-@router.patch("/usato/optional/batch-update")
+@router.patch("/usato/optional/batch-update", tags=["AZLease"])
 async def update_optional_accessories(payload: OptionalBatchUpdateRequest, db: Session = Depends(get_db)):
     for acc in payload.accessori:
         result = db.query(AutousatoAccessoriOptional).filter_by(
@@ -557,7 +579,7 @@ class PacchettoBatchUpdateRequest(BaseModel):
 from app.models import AutousatoAccessoriPacchetti
 
 
-@router.patch("/usato/pacchetti/batch-update")
+@router.patch("/usato/pacchetti/batch-update", tags=["AZLease"])
 async def update_pacchetti(payload: PacchettoBatchUpdateRequest, db: Session = Depends(get_db)):
     for p in payload.pacchetti:
         result = db.query(AutousatoAccessoriPacchetti).filter_by(
