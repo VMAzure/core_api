@@ -926,7 +926,7 @@ from fastapi import APIRouter
 
 @router.get("/api/azlease/usato/leonardo-attivi/{id_auto}", tags=["AZLease Media"])
 def elenco_media_ai(
-    id_auto: _UUID,
+    id_auto: UUID,
     only_active: bool = False,
     db: Session = Depends(get_db)
 ):
@@ -959,7 +959,7 @@ class UsaMediaRequest(BaseModel):
 
 @router.patch("/usato-leonardo/{media_id}/usa", tags=["AZLease Media"])
 def usa_media_hero(
-    media_id: _UUID,
+    media_id: UUID,
     body: UsaMediaRequest = Body(...),
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db),
