@@ -222,13 +222,20 @@ async def inserisci_auto_usata(
     }
 
 
+
 @router.patch("/usato/{id_auto}", tags=["AZLease Usato"])
 async def patch_auto_usata(
     id_auto: UUID,
     body: dict = Body(...),
-    db: Session = Depends(get_db),
-    user=Depends(get_current_user)  # ✅ JWT obbligatorio
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
 ):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
     # Trova auto
     auto = db.query(AZLeaseUsatoAuto).filter(AZLeaseUsatoAuto.id == id_auto).first()
     if not auto:
