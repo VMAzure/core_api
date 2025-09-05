@@ -227,22 +227,42 @@ async def patch_auto_usata(
     id_auto: UUID,
     body: dict = Body(...),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user)
+    user=Depends(get_current_user)  # ✅ JWT obbligatorio
 ):
+    # Trova auto
     auto = db.query(AZLeaseUsatoAuto).filter(AZLeaseUsatoAuto.id == id_auto).first()
-    usatoin = db.query(AZLeaseUsatoIn).filter(AZLeaseUsatoIn.id == auto.id_usatoin).first()
-
-    if not auto or not usatoin:
+    if not auto:
         raise HTTPException(status_code=404, detail="Auto non trovata")
 
-    # Aggiorna solo i campi presenti nel body
-    for field, value in body.items():
-        if hasattr(auto, field):
-            setattr(auto, field, value)
-        elif hasattr(usatoin, field):
-            setattr(usatoin, field, value)
+    # Trova record di inserimento
+    ins = db.query(AZLeaseUsatoIn).filter(AZLeaseUsatoIn.id == auto.id_usatoin).first()
+    if not ins:
+        raise HTTPException(status_code=404, detail="Dati inserimento non trovati")
 
+    # === Aggiorna campi dell'auto ===
+    auto_fields = [
+        "targa", "anno_immatricolazione", "mese_immatricolazione",
+        "data_passaggio_proprieta", "km_certificati",
+        "data_ultimo_intervento", "descrizione_ultimo_intervento",
+        "cronologia_tagliandi", "doppie_chiavi", "codice_motornet", "colore"
+    ]
+    for field in auto_fields:
+        if field in body:
+            setattr(auto, field, body[field])
+
+    # === Aggiorna campi di inserimento (AZLeaseUsatoIn) ===
+    in_fields = [
+        "prezzo_costo", "prezzo_vendita", "visibile",
+        "opzionato_da", "opzionato_il", "venduto_da", "venduto_il",
+        "iva_esposta", "descrizione"
+    ]
+    for field in in_fields:
+        if field in body:
+            setattr(ins, field, body[field])
+
+    # Commit
     db.commit()
+
     return {"success": True, "id_auto": str(auto.id)}
 
 @router.put("/usato/{id_auto}", tags=["AZLease"])
