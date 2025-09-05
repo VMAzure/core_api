@@ -924,30 +924,62 @@ from app.models import UsatoLeonardo
 from fastapi import APIRouter
 
 
-@router.get("/usato/leonardo-attivi/{auto_id}", tags=["AZLease"])
-def get_media_ai_attivi(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    Authorize.jwt_required()
+@router.get("/api/azlease/usato/leonardo-attivi/{id_auto}", tags=["AZLease Media"])
+def elenco_media_ai(
+    id_auto: _UUID,
+    only_active: bool = False,
+    db: Session = Depends(get_db)
+):
+    q = db.query(UsatoLeonardo).filter(
+        UsatoLeonardo.id_auto == id_auto,
+        UsatoLeonardo.status == "completed",
+    )
+    if only_active:
+        q = q.filter(UsatoLeonardo.is_active.is_(True))
 
-    records = db.query(UsatoLeonardo)\
-        .filter(UsatoLeonardo.id_auto == auto_id, UsatoLeonardo.is_active == True)\
-        .order_by(UsatoLeonardo.media_type.asc())\
-        .all()
+    rows = q.order_by(UsatoLeonardo.created_at.desc()).all()
 
     return {
-        "auto_id": auto_id,
         "media": [
             {
-                "id": str(m.id),
-                "media_type": m.media_type,        # "image" o "video"
-                "mime_type": m.mime_type,          # "image/png", "video/mp4", ecc.
-                "public_url": m.public_url,
-                "provider": m.provider,
-                "model_id": m.model_id,
-                "created_at": getattr(m, "created_at", None)  # opzionale
+                "id": str(r.id),
+                "tipo": r.media_type,
+                "public_url": r.public_url,
+                "is_active": r.is_active,
+                "created_at": r.created_at.isoformat(),
+                "prompt": r.prompt[:300] if r.prompt else None,
+                "model": r.model_id
             }
-            for m in records
+            for r in rows
         ]
     }
+
+class UsaMediaRequest(BaseModel):
+    exclusive: bool = True  # se True, disattiva gli altri
+
+@router.patch("/usato-leonardo/{media_id}/usa", tags=["AZLease Media"])
+def usa_media_hero(
+    media_id: _UUID,
+    body: UsaMediaRequest = Body(...),
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db),
+):
+    Authorize.jwt_required()
+
+    rec = db.query(UsatoLeonardo).filter(UsatoLeonardo.id == media_id).first()
+    if not rec:
+        raise HTTPException(404, "Media non trovato")
+
+    if body.exclusive:
+        db.query(UsatoLeonardo).filter(
+            UsatoLeonardo.id_auto == rec.id_auto,
+            UsatoLeonardo.media_type == rec.media_type
+        ).update({UsatoLeonardo.is_active: False})
+
+    rec.is_active = True
+    db.commit()
+    return {"ok": True}
+
 
 @router.patch("/usato/leonardo/{id}/usa", tags=["AZLease"])
 def usa_media_leonardo(id: UUID, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
