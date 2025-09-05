@@ -221,6 +221,107 @@ async def inserisci_auto_usata(
         "id_inserimento": str(usatoin_id)
     }
 
+
+
+@router.put("/usato/{id_auto}", tags=["AZLease"])
+async def aggiorna_auto_usata(
+    id_auto: UUID,
+    payload: AZUsatoInsertRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
+    if not (is_admin_user(user) or is_dealer_user(user)):
+        raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
+
+    # Recupera auto e inserimento associato
+    auto = db.execute(text("""
+        SELECT id_usatoin FROM azlease_usatoauto WHERE id = :id_auto
+    """), {"id_auto": str(id_auto)}).fetchone()
+
+    if not auto:
+        raise HTTPException(status_code=404, detail="Auto non trovata")
+
+    id_usatoin = auto.id_usatoin
+    now = datetime.utcnow()
+
+    # === Aggiorna blocco "azlease_usatoin" ===
+    db.execute(text("""
+        UPDATE azlease_usatoin
+        SET
+            data_ultima_modifica = :now,
+            prezzo_costo = :prezzo_costo,
+            prezzo_vendita = :prezzo_vendita,
+            visibile = :visibile,
+            opzionato_da = :opzionato_da,
+            opzionato_il = :opzionato_il,
+            venduto_da = :venduto_da,
+            venduto_il = :venduto_il,
+            iva_esposta = :iva_esposta,
+            descrizione = :descrizione
+        WHERE id = :id_usatoin
+    """), {
+        "now": now,
+        "prezzo_costo": payload.prezzo_costo,
+        "prezzo_vendita": payload.prezzo_vendita,
+        "visibile": payload.visibile,
+        "opzionato_da": payload.opzionato_da,
+        "opzionato_il": payload.opzionato_il,
+        "venduto_da": payload.venduto_da,
+        "venduto_il": payload.venduto_il,
+        "iva_esposta": getattr(payload, "iva_esposta", False),
+        "descrizione": payload.descrizione or "",
+        "id_usatoin": str(id_usatoin)
+    })
+
+    # === Aggiorna blocco "azlease_usatoauto" ===
+    data_passaggio = payload.data_passaggio_proprieta or datetime.utcnow().date()
+
+    db.execute(text("""
+        UPDATE azlease_usatoauto
+        SET
+            targa = :targa,
+            anno_immatricolazione = :anno,
+            mese_immatricolazione = :mese,
+            data_passaggio_proprieta = :passaggio,
+            km_certificati = :km,
+            data_ultimo_intervento = :intervento_data,
+            descrizione_ultimo_intervento = :intervento_desc,
+            cronologia_tagliandi = :tagliandi,
+            doppie_chiavi = :chiavi,
+            codice_motornet = :codice,
+            colore = :colore
+        WHERE id = :id_auto
+    """), {
+        "targa": payload.targa,
+        "anno": payload.anno_immatricolazione,
+        "mese": payload.mese_immatricolazione,
+        "passaggio": data_passaggio,
+        "km": payload.km_certificati,
+        "intervento_data": payload.data_ultimo_intervento,
+        "intervento_desc": payload.descrizione_ultimo_intervento,
+        "tagliandi": payload.cronologia_tagliandi,
+        "chiavi": payload.doppie_chiavi,
+        "codice": payload.codice_motornet,
+        "colore": payload.colore,
+        "id_auto": str(id_auto)
+    })
+
+    db.commit()
+
+    return {
+        "message": "Auto aggiornata correttamente",
+        "id_auto": str(id_auto),
+        "id_inserimento": str(id_usatoin)
+    }
+
+
 class AccessorioColore(BaseModel):
     descrizione: str
     tipo: Optional[str] = None
