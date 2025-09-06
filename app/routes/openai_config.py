@@ -117,7 +117,7 @@ async def genera_testo(
 
 
 @router.post("/openai/genera_old", tags=["OpenAI"])
-async def genera_testo(
+async def genera_testo_old(
     payload: PromptRequest,
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
