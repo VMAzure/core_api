@@ -666,9 +666,11 @@ class GeminiImageStatusRequest(BaseModel):
     operation_id: str
 
 class GeminiImageStatusResponse(BaseModel):
-    status: str
+    status: str  # "processing" | "completed" | "failed" | "not_found"
     public_url: Optional[str] = None
     error_message: Optional[str] = None
+    usato_leonardo_id: Optional[str] = None
+
 
 @router.post("/veo3/image-status", response_model=GeminiImageStatusResponse, tags=["Gemini Image"])
 async def check_image_status(
@@ -679,8 +681,7 @@ async def check_image_status(
     Authorize.jwt_required()
 
     rec = db.query(UsatoLeonardo).filter(
-        UsatoLeonardo.provider == "gemini-image",
-        UsatoLeonardo.generation_id == payload.operation_id
+        UsatoLeonardo.generation_id == payload.generation_id  # ✅ usa campo corretto
     ).first()
 
     if not rec:
@@ -693,6 +694,7 @@ async def check_image_status(
         return GeminiImageStatusResponse(status="failed", error_message=(rec.error_message or "Errore generazione"))
 
     return GeminiImageStatusResponse(status="processing")
+
 
 
 
