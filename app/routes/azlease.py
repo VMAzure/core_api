@@ -516,10 +516,10 @@ OUTPUT: scrivi SOLO un numero intero in euro, senza simboli, punti, virgole o te
         img_id = getattr(img_res, "usato_leonardo_id", None) or (img_res.get("usato_leonardo_id") if isinstance(img_res, dict) else None)
         if img_id:
             try:
-                await usa_media_leonardo(img_id, Authorize=Authorize, db=db)
+                await usa_media_media(img_id, Authorize=Authorize, db=db)
             except TypeError:
                 # se la funzione è sync nel tuo progetto
-                usa_media_leonardo(img_id, Authorize=Authorize, db=db)
+                usa_media_media(img_id, Authorize=Authorize, db=db)
 
         if image_url:
             await patch_auto_usata(id_auto=str(id_auto), body={"visibile": True}, Authorize=Authorize, db=db)
