@@ -221,6 +221,212 @@ async def inserisci_auto_usata(
         "id_inserimento": str(usatoin_id)
     }
 
+# rotta boost per inserimento usato
+
+# --- BOOST ORCHESTRATOR (usa funzioni esistenti) ---
+from uuid import UUID
+from datetime import date
+import asyncio, httpx, os, re
+from pydantic import BaseModel
+from typing import Optional
+
+COREAPI_SELF_URL = os.getenv("COREAPI_SELF_URL", "http://127.0.0.1:8000").rstrip("/")
+
+class BoostRequest(BaseModel):
+    targa: str
+    km_certificati: int
+    colore: str
+    codice_motornet_univoco: str  # obbligatorio: scelto dall'utente nel modale
+
+class BoostResponse(BaseModel):
+    id_auto: UUID
+    visibile: bool
+    prezzo_vendita: float
+    image_url: Optional[str] = None
+    video_status: str
+
+@router.post("/usato/boost", tags=["AZLease"], response_model=BoostResponse)
+async def crea_boost(
+    body: BoostRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user or not (is_admin_user(user) or is_dealer_user(user)):
+        raise HTTPException(403, "Ruolo non autorizzato")
+
+    dealer_id = get_dealer_id(user) if is_dealer_user(user) else None
+    admin_id = get_admin_id(user)
+
+    # 1) Targa valida
+    plate = body.targa.strip().upper()
+    if not re.match(r"^[A-Z0-9]{5,8}$", plate):
+        raise HTTPException(422, "Formato targa non valido")
+
+    # 2) Blocco duplicati già pubblicati per stesso owner
+    dup = db.execute(text("""
+        SELECT 1
+        FROM azlease_usatoauto a
+        JOIN azlease_usatoin i ON i.id = a.id_usatoin
+        WHERE UPPER(a.targa) = :targa
+          AND i.visibile = TRUE
+          AND (i.dealer_id = :dealer OR (:dealer IS NULL AND i.admin_id = :admin))
+        LIMIT 1
+    """), {"targa": plate, "dealer": dealer_id, "admin": admin_id}).fetchone()
+    if dup:
+        raise HTTPException(409, "AUTO_GIÀ_PUBBLICATA")
+
+    # 3) Deriva anno/mese dal lookup targa (funzione/rotta esistente)
+    #    NB: il FE ha già scelto l'allestimento → ci arriva il codice_univoco
+    resp = Response()
+    by_targa = motornet_by_targa(plate, Authorize=Authorize, response=resp)  # funzione già presente
+    anno = by_targa.anno
+    mese = by_targa.mese
+    if not anno or not mese:
+        raise HTTPException(422, "Anno/mese non determinabili dalla targa")
+
+    codice_uni = body.codice_motornet_univoco.strip()
+    if not codice_uni:
+        raise HTTPException(422, "Allestimento obbligatorio")
+
+    # metadati per prompt
+    marca = (by_targa.marca.nome if by_targa.marca else "") or ""
+    modello = (by_targa.modello.descrizione if by_targa.modello else "") or ""
+    allestimento = ""
+    for v in by_targa.versioni or []:
+        if (v.codice_motornet_uni or "").strip() == codice_uni:
+            allestimento = v.versione or ""
+            break
+
+    # 4) Inserimento record con service ESISTENTE /usato (visibile=false, prezzo_costo=0)
+    insert_payload = AZUsatoInsertRequest(
+        targa=plate,
+        anno_immatricolazione=anno,
+        mese_immatricolazione=mese,
+        data_passaggio_proprieta=date.today(),
+        km_certificati=int(body.km_certificati),
+        data_ultimo_intervento=None,
+        descrizione_ultimo_intervento=None,
+        cronologia_tagliandi=False,
+        doppie_chiavi=False,
+        codice_motornet=codice_uni,
+        colore=body.colore.strip(),
+        prezzo_costo=0.0,
+        prezzo_vendita=0.0,
+        immagini=[],
+        danni=[],
+        opzionato_da=None,
+        opzionato_il=None,
+        venduto_da=None,
+        venduto_il=None,
+        visibile=False,
+        iva_esposta=False,
+        descrizione=""
+    )
+    created = await inserisci_auto_usata(insert_payload, Authorize=Authorize, db=db)
+    id_auto = UUID(created["id_auto"])
+
+    # 5) In parallelo: prezzo web + descrizione AI
+    async def get_prezzo():
+        prompt = (
+            "Trova online un prezzo medio di vendita in Italia per questo veicolo usato.\n"
+            f"Marca: {marca}\nModello: {modello}\nVersione/Allestimento: {allestimento}\n"
+            f"Anno immatricolazione: {anno}\nChilometraggio: {int(body.km_certificati)} km\n"
+            "Limita la ricerca al ±1 anno. Ritorna un valore consigliato in euro."
+        )
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.post(
+                f"{COREAPI_SELF_URL}/openai/genera",
+                headers={"Authorization": f"Bearer {Authorize._token}", "Content-Type": "application/json"},
+                json={"prompt": prompt, "model": "gpt-4o-search-preview", "web_research": True, "max_tokens": 600, "temperature": 0.2}
+            )
+            r.raise_for_status()
+            out = (r.json() or {}).get("output", "") or ""
+        m = re.search(r"€\s?([0-9]{1,3}(?:[.,][0-9]{3})*)", out)
+        return float(m.group(1).replace(".", "").replace(",", "")) if m else 0.0
+
+    async def get_descrizione():
+        prompt = (
+            "Scrivi una descrizione breve e commerciale per un'auto usata.\n"
+            f"Marca: {marca}\nModello: {modello}\nAllestimento: {allestimento}\n"
+            f"Anno: {anno}\nKM: {int(body.km_certificati)}\nColore: {body.colore.strip()}\n"
+            "Tono chiaro, concreto, 3-5 frasi, senza superlativi inutili."
+        )
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            r = await client.post(
+                f"{COREAPI_SELF_URL}/openai/genera",
+                headers={"Authorization": f"Bearer {Authorize._token}", "Content-Type": "application/json"},
+                json={"prompt": prompt, "model": "gpt-4o", "max_tokens": 220, "temperature": 0.4}
+            )
+            r.raise_for_status()
+            return (r.json() or {}).get("output", "") or ""
+
+    prezzo, descrizione = await asyncio.gather(get_prezzo(), get_descrizione())
+
+    # 6) Unico PATCH con service ESISTENTE
+    await patch_auto_usata(
+        id_auto=id_auto,
+        body={
+            "prezzo_costo": 0.0,
+            "prezzo_vendita": float(prezzo or 0.0),
+            "visibile": False,
+            "iva_esposta": False,
+            "descrizione": descrizione or ""
+        },
+        Authorize=Authorize,
+        db=db
+    )
+
+    # 7) Immagine AI sincrona → attiva → publish
+    image_url = None
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        r = await client.post(
+            f"{COREAPI_SELF_URL}/veo3/image-hero",
+            headers={"Authorization": f"Bearer {Authorize._token}", "Content-Type": "application/json"},
+            json={"id_auto": str(id_auto), "prompt_override": ""}  # prompt già gestito server-side
+        )
+        r.raise_for_status()
+        jj = r.json()
+        if jj.get("status") == "completed":
+            image_url = jj.get("public_url")
+            leonardo_id = jj.get("usato_leonardo_id")
+            if leonardo_id:
+                await client.patch(
+                    f"{COREAPI_SELF_URL}/usato/leonardo/{leonardo_id}/usa",
+                    headers={"Authorization": f"Bearer {Authorize._token}"}
+                )
+
+    visibile = False
+    if image_url:
+        await patch_auto_usata(
+            id_auto=id_auto,
+            body={"visibile": True},
+            Authorize=Authorize,
+            db=db
+        )
+        visibile = True
+
+    # 8) Video AI asincrono (non blocca)
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            await client.post(
+                f"{COREAPI_SELF_URL}/veo3/video-hero",
+                headers={"Authorization": f"Bearer {Authorize._token}", "Content-Type": "application/json"},
+                json={"id_auto": str(id_auto), "prompt_override": ""}
+            )
+        video_status = "processing"
+    except Exception:
+        video_status = "failed"
+
+    return BoostResponse(
+        id_auto=id_auto,
+        visibile=visibile,
+        prezzo_vendita=float(prezzo or 0.0),
+        image_url=image_url,
+        video_status=video_status
+    )
 
 
 @router.patch("/usato/{id_auto}", tags=["AZLease Usato"])
