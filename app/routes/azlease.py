@@ -228,7 +228,7 @@ async def inserisci_auto_usata(
 
 
 # usa funzioni/DTO già esistenti
-from app.models import AZUsatoInsertRequest
+from app.models import AZUsatoInsertRequest, MnetDettaglioUsato           
 from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
 from app.routes.openai_config import (
     PromptRequest,
@@ -237,7 +237,8 @@ from app.routes.openai_config import (
     genera_image_hero_veo3,
     GeminiVideoHeroRequest,
     genera_video_hero_veo3,
-    
+    usa_hero_media,
+    usa_media_leonardo
 )
 
 class BoostRequest(BaseModel):
@@ -283,12 +284,12 @@ async def crea_boost(
     dealer_id = get_dealer_id(user) if is_dealer_user(user) else None
     admin_id = get_admin_id(user)
 
-    # 1) Targa valida
+    # 1) Targa
     plate = (body.targa or "").strip().upper()
     if not re.match(r"^[A-Z0-9]{5,8}$", plate):
         raise HTTPException(422, "Formato targa non valido")
 
-    # 2) Blocco duplicati già pubblicati per stesso owner
+    # 2) Duplicati pubblicati
     dup = db.execute(text("""
         SELECT 1
         FROM azlease_usatoauto a
@@ -301,7 +302,7 @@ async def crea_boost(
     if dup:
         raise HTTPException(409, "AUTO_GIÀ_PUBBLICATA")
 
-    # 3) Deriva anno/mese da by-targa (funzione già presente in questo file)
+    # 3) by-targa → anno/mese
     bt = motornet_by_targa(plate, Authorize=Authorize, response=None)
     anno = getattr(bt, "anno", None)
     mese = getattr(bt, "mese", None)
@@ -312,45 +313,36 @@ async def crea_boost(
     if not codice_uni:
         raise HTTPException(422, "Allestimento obbligatorio")
 
-    # Metadati per prompt
-    marca = (bt.marca.nome if getattr(bt, "marca", None) else "") or ""
-    modello = (bt.modello.descrizione if getattr(bt, "modello", None) else "") or ""
-
-    allestimento = ""
-    for v in (getattr(bt, "versioni", []) or []):
-        # robust read: attr o dict, tutte le varianti nome campo
-        code = (
-            getattr(v, "codice_motornet_univoco", None)
-            or getattr(v, "codice_motornet_uni", None)
-            or getattr(v, "codiceMotornetUnivoco", None)
-            or (v.get("codice_motornet_univoco") if isinstance(v, dict) else None)
-            or (v.get("codice_motornet_uni") if isinstance(v, dict) else None)
-            or (v.get("codiceMotornetUnivoco") if isinstance(v, dict) else None)
-        )
-        if (code or "").strip() == codice_uni:
-            allestimento = (
-                getattr(v, "versione", None)
-                or (v.get("versione") if isinstance(v, dict) else None)
-                or ""
-            )
-            break
-
-    # Fallback se ancora vuoto: usa dettagli o modello
+    # 3.1 Marca + Allestimento "vero" (da mnet_dettagli_usato)
+    det = db.query(MnetDettaglioUsato).filter(MnetDettaglioUsato.codice_motornet_uni == codice_uni).first()
+    marca = ((det.marca_nome if det else None) or (bt.marca.nome if getattr(bt, "marca", None) else "") or "").strip()
+    allestimento = (
+        (det.allestimento if det and det.allestimento else None)
+        or (det.descrizione_breve if det and det.descrizione_breve else None)
+        or ""
+    ).strip()
     if not allestimento:
-        det = getattr(bt, "dettagli", None) or {}
-        allestimento = (
-            getattr(det, "descrizione_breve", None)
-            or (det.get("descrizione_breve") if isinstance(det, dict) else None)
-            or getattr(det, "allestimento", None)
-            or (det.get("allestimento") if isinstance(det, dict) else None)
-            or modello
-            or ""
-        )
+        # fallback su versioni[].versione se serve
+        for v in (getattr(bt, "versioni", []) or []):
+            code = (
+                getattr(v, "codice_motornet_univoco", None)
+                or getattr(v, "codice_motornet_uni", None)
+                or getattr(v, "codiceMotornetUnivoco", None)
+                or (v.get("codice_motornet_univoco") if isinstance(v, dict) else None)
+                or (v.get("codice_motornet_uni") if isinstance(v, dict) else None)
+                or (v.get("codiceMotornetUnivoco") if isinstance(v, dict) else None)
+            )
+            if (code or "").strip() == codice_uni:
+                allestimento = (
+                    getattr(v, "versione", None)
+                    or (v.get("versione") if isinstance(v, dict) else None)
+                    or ""
+                ).strip()
+                break
+    if not allestimento:
+        raise HTTPException(422, "Allestimento non risolto")
 
-    allestimento = allestimento.strip()
-
-
-    # 4) Inserimento record con il service ESISTENTE (visibile=false; prezzo_costo=0)
+    # 4) Insert base (visibile=false; prezzo_costo=0)
     insert_payload = AZUsatoInsertRequest(
         targa=plate,
         anno_immatricolazione=anno,
@@ -376,48 +368,109 @@ async def crea_boost(
         descrizione=""
     )
     created = await inserisci_auto_usata(insert_payload, Authorize=Authorize, db=db)
-    id_auto_str = (
-        getattr(created, "id_auto", None)
-        or (created.get("id_auto") if isinstance(created, dict) else None)
-    )
+    id_auto_str = getattr(created, "id_auto", None) or (created.get("id_auto") if isinstance(created, dict) else None)
     if not id_auto_str:
         raise HTTPException(500, "id_auto mancante dalla risposta di inserisci_auto_usata")
     id_auto = UUID(str(id_auto_str))
 
-    # 5) In parallelo: prezzo web + descrizione AI (riuso /openai/genera → funzioni locali)
+    # 5) In parallelo: prezzo (solo numero, browsing) + descrizione
     async def _get_prezzo():
         price_prompt = (
             f"""Trova online il prezzo di vendita consigliato in Italia per questo veicolo usato.
-        Cerca SOLO su site:autoscout24.it.
-        Usa come chiavi: "{marca} {allestimento}".
-        Filtra per anno ≈ {anno} (±1) e chilometraggio comparabile a {int(body.km_certificati)} km.
-        Per marche con accenti usa anche la variante senza accento (es. Citroën/Citroen).
+Cerca SOLO su site:autoscout24.it.
+Usa come chiavi: "{marca} {allestimento}".
+Filtra per anno ≈ {anno} (±1) e chilometraggio comparabile a {int(body.km_certificati)} km.
+Per marche con accenti usa anche la variante senza accento (es. Citroën/Citroen).
 
-        OUTPUT: scrivi SOLO un numero intero in euro, senza simboli, punti, virgole o testo. Esempio: 18490
-
-        Marca: {marca}
-        Allestimento: {allestimento}
-        Anno immatricolazione: {anno}
-        Chilometraggio: {int(body.km_certificati)} km
-        """
+OUTPUT: scrivi SOLO un numero intero in euro, senza simboli, punti, virgole o testo. Esempio: 18490
+"""
         )
-
-
-
         resp = await genera_testo(
             payload=PromptRequest(
                 prompt=price_prompt,
-                model="gpt-4o-search-preview",   # <-- browsing
-                web_research=True,               # <-- browsing ON
-                max_tokens=12,                   # <-- solo numero
+                model="gpt-4o-search-preview",
+                web_research=True,
+                max_tokens=12,
                 temperature=0.0
             ),
             Authorize=Authorize,
             db=db
         )
-        out = getattr(resp, "output", None) or (resp.get("output") if isinstance(resp, dict) else "")
+        out = (getattr(resp, "output", None) or (resp.get("output") if isinstance(resp, dict) else "") or "").strip()
         m = re.search(r"\d{3,7}", out)
         return int(m.group(0)) if m else 0
+
+    async def _get_descrizione():
+        prompt = (
+            "Scrivi una descrizione breve e commerciale per un'auto usata.\n"
+            f"Marca: {marca}\nAllestimento: {allestimento}\n"
+            f"Anno: {anno}\nKM: {int(body.km_certificati)}\nColore: {body.colore.strip()}\n"
+            "Tono chiaro, concreto, 3-5 frasi, senza superlativi inutili."
+        )
+        resp = await genera_testo(
+            payload=PromptRequest(prompt=prompt, model="gpt-4o", web_research=False, max_tokens=220, temperature=0.4),
+            Authorize=Authorize,
+            db=db
+        )
+        return getattr(resp, "output", None) or (resp.get("output") if isinstance(resp, dict) else "") or ""
+
+    prezzo_vendita, descr = await asyncio.gather(_get_prezzo(), _get_descrizione())
+
+    # 6) PATCH unico (prezzo + descrizione, visibile=false)
+    await patch_auto_usata(
+        id_auto=str(id_auto),
+        body={
+            "prezzo_costo": 0.0,
+            "prezzo_vendita": float(prezzo_vendita or 0.0),
+            "visibile": False,
+            "iva_esposta": False,
+            "descrizione": descr
+        },
+        Authorize=Authorize,
+        db=db
+    )
+
+    # 7) Immagine AI sincrona → attiva → publish
+    visibile = False
+    image_url = None
+    try:
+        img_res = await genera_image_hero_veo3(
+            payload=GeminiImageHeroRequest(id_auto=id_auto, prompt_override=None),
+            Authorize=Authorize,
+            db=db
+        )
+        image_url = getattr(img_res, "public_url", None) or (img_res.get("public_url") if isinstance(img_res, dict) else None)
+        img_id = getattr(img_res, "usato_leonardo_id", None) or (img_res.get("usato_leonardo_id") if isinstance(img_res, dict) else None)
+        if img_id:
+            # route function sync: chiamala senza await
+            usa_hero_media(img_id, Authorize=Authorize, db=db)
+        if image_url:
+            await patch_auto_usata(id_auto=str(id_auto), body={"visibile": True}, Authorize=Authorize, db=db)
+            visibile = True
+    except Exception:
+        image_url = None  # non bloccare
+
+    # 8) Video AI asincrono
+    try:
+        vid_res = await genera_video_hero_veo3(
+            payload=GeminiVideoHeroRequest(id_auto=id_auto, prompt_override=None),
+            Authorize=Authorize,
+            db=db
+        )
+        video_status = "processing" if (
+            getattr(vid_res, "gemini_operation_id", None)
+            or (isinstance(vid_res, dict) and vid_res.get("gemini_operation_id"))
+        ) else "failed"
+    except Exception:
+        video_status = "failed"
+
+    return BoostResponse(
+        id_auto=id_auto,
+        visibile=visibile,
+        prezzo_vendita=float(prezzo_vendita or 0.0),
+        image_url=image_url,
+        video_status=video_status
+    )
 
 
 
