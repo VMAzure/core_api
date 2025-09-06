@@ -15,6 +15,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Request, HTTPException, Depends
 from sqlalchemy.orm import Session
 import json
+import requests
 
 import logging, json, os
 GEMINI_DEBUG = os.getenv("GEMINI_DEBUG", "0") == "1"
@@ -674,28 +675,80 @@ class GeminiImageStatusResponse(BaseModel):
     usato_leonardo_id: Optional[str] = None
 
 
+
+
 @router.post("/veo3/image-status", response_model=GeminiImageStatusResponse, tags=["Gemini Image"])
 async def check_image_status(
     payload: GeminiImageStatusRequest,
-    Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
-    Authorize.jwt_required()
-
+    # 1. Recupera il record dal DB
     rec = db.query(UsatoLeonardo).filter(
-        UsatoLeonardo.generation_id == payload.generation_id  # ✅ usa campo corretto
+        UsatoLeonardo.generation_id == payload.generation_id
     ).first()
 
     if not rec:
-        return GeminiImageStatusResponse(status="not_found", error_message="Operazione non trovata")
+        return GeminiImageStatusResponse(status="not_found", error_message="Record non trovato")
 
     if rec.status == "completed" and rec.public_url:
-        return GeminiImageStatusResponse(status="completed", public_url=rec.public_url)
+        return GeminiImageStatusResponse(
+            status="completed",
+            public_url=rec.public_url,
+            usato_leonardo_id=str(rec.id)
+        )
 
     if rec.status in {"failed", "error"}:
-        return GeminiImageStatusResponse(status="failed", error_message=(rec.error_message or "Errore generazione"))
+        return GeminiImageStatusResponse(
+            status="failed",
+            error_message=rec.error_message or "Errore generazione",
+            usato_leonardo_id=str(rec.id)
+        )
 
-    return GeminiImageStatusResponse(status="processing")
+    # 2. Poll Gemini API
+    try:
+        headers = {
+            "Authorization": f"Bearer {GEMINI_API_KEY}"
+        }
+        url = f"https://generativelanguage.googleapis.com/v1beta/{payload.generation_id}"
+        r = requests.get(url, headers=headers, timeout=6)
+        r.raise_for_status()
+        data = r.json()
+
+        if data.get("done") and "response" in data:
+            image_uri = data["response"].get("imageUri") or data["response"].get("uri")
+            if not image_uri:
+                return GeminiImageStatusResponse(status="failed", error_message="imageUri mancante")
+
+            # ✅ Aggiorna DB
+            rec.public_url = image_uri
+            rec.status = "completed"
+            db.commit()
+
+            return GeminiImageStatusResponse(
+                status="completed",
+                public_url=image_uri,
+                usato_leonardo_id=str(rec.id)
+            )
+
+        elif data.get("error"):
+            rec.status = "failed"
+            rec.error_message = data["error"].get("message")
+            db.commit()
+            return GeminiImageStatusResponse(
+                status="failed",
+                error_message=rec.error_message,
+                usato_leonardo_id=str(rec.id)
+            )
+
+        return GeminiImageStatusResponse(status="processing", usato_leonardo_id=str(rec.id))
+
+    except Exception as e:
+        return GeminiImageStatusResponse(
+            status="failed",
+            error_message=str(e),
+            usato_leonardo_id=str(rec.id)
+        )
+
 
 
 
