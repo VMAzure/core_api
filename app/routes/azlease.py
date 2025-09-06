@@ -357,31 +357,32 @@ async def crea_boost(
     async def _get_prezzo():
         price_prompt = (
             f"""Trova online il prezzo di vendita consigliato in Italia per questo veicolo usato.
-        Considera solo annunci comparabili (±1 anno, stesso allestimento).
-        OUTPUT: scrivi SOLO un numero intero in euro, senza simboli, punti, virgole o testo. Esempio: 18490
+    Considera solo annunci comparabili (±1 anno, stesso allestimento).
+    OUTPUT: scrivi SOLO un numero intero in euro, senza simboli, punti, virgole o testo. Esempio: 18490
 
-        Marca: {marca}
-        Modello: {modello}
-        Versione/Allestimento: {allestimento}
-        Anno immatricolazione: {anno}
-        Chilometraggio: {int(body.km_certificati)} km
-        """
+    Marca: {marca}
+    Modello: {modello}
+    Versione/Allestimento: {allestimento}
+    Anno immatricolazione: {anno}
+    Chilometraggio: {int(body.km_certificati)} km
+    """
         )
-
-
         resp = await genera_testo(
             payload=PromptRequest(
                 prompt=price_prompt,
-                model="gpt-4o-search-preview",
-                web_research=True,
-                max_tokens=600,
-                temperature=0.2
+                model="gpt-4o-search-preview",   # <-- browsing
+                web_research=True,               # <-- browsing ON
+                max_tokens=12,                   # <-- solo numero
+                temperature=0.0
             ),
             Authorize=Authorize,
             db=db
         )
+        out = getattr(resp, "output", None) or (resp.get("output") if isinstance(resp, dict) else "")
+        m = re.search(r"\d{3,7}", out)
+        return int(m.group(0)) if m else 0
 
-        return _parse_euro(getattr(resp, "output", None) or (resp.get("output") if isinstance(resp, dict) else ""))
+
 
     async def _get_descrizione():
         prompt = (
@@ -401,7 +402,7 @@ async def crea_boost(
 
     # 6) PATCH unico (service esistente)
     await patch_auto_usata(
-        id_auto=id_auto,
+        id_auto=str(id_auto),                 # <-- stringa, non UUID
         body={
             "prezzo_costo": 0.0,
             "prezzo_vendita": float(prezzo_vendita or 0.0),
@@ -412,6 +413,7 @@ async def crea_boost(
         Authorize=Authorize,
         db=db
     )
+
 
     # 7) Immagine AI sincrona → attiva → publish
     image_url = None
@@ -438,10 +440,6 @@ async def crea_boost(
     except Exception:
         image_url = None  # non bloccare
 
-    visibile = False
-    if image_url:
-        patch_auto_usata(id_auto=id_auto, body={"visibile": True}, Authorize=Authorize, db=db)
-        visibile = True
 
     # 8) Video AI asincrono (job + webhook) – avvio e stop
     try:
