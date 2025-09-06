@@ -1,4 +1,4 @@
-﻿from fastapi import Depends, HTTPException, APIRouter, UploadFile, File, status, Body, Form, Query
+﻿from fastapi import Depends, HTTPException, APIRouter, UploadFile, File, status, Body, Form, Query, Request
 from sqlalchemy.orm import Session
 from fastapi_jwt_auth import AuthJWT
 from app.database import get_db, supabase_client, SUPABASE_URL
@@ -245,17 +245,35 @@ class BoostResponse(BaseModel):
     image_url: Optional[str] = None
     video_status: str
 
+# === BOOST ORCHESTRATOR ===
+
+COREAPI_SELF_URL = os.getenv("COREAPI_SELF_URL", "").rstrip("/")
+
+class BoostRequest(BaseModel):
+    targa: str
+    km_certificati: int
+    colore: str
+    codice_motornet_univoco: str  # allestimento scelto dall’utente
+
+class BoostResponse(BaseModel):
+    id_auto: UUID
+    visibile: bool
+    prezzo_vendita: float
+    image_url: Optional[str] = None
+    video_status: str
+
 @router.post("/usato/boost", tags=["AZLease"], response_model=BoostResponse)
 async def crea_boost(
     body: BoostRequest,
     Authorize: AuthJWT = Depends(),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    request: Request = None
 ):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
     user = db.query(User).filter(User.email == user_email).first()
     if not user or not (is_admin_user(user) or is_dealer_user(user)):
-        raise HTTPException(403, "Ruolo non autorizzato")
+        raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
 
     dealer_id = get_dealer_id(user) if is_dealer_user(user) else None
     admin_id = get_admin_id(user)
@@ -265,7 +283,7 @@ async def crea_boost(
     if not re.match(r"^[A-Z0-9]{5,8}$", plate):
         raise HTTPException(422, "Formato targa non valido")
 
-    # 2) Blocco duplicati già pubblicati per stesso owner
+    # 2) Blocco duplicati: stessa targa già visibile per lo stesso owner → 409
     dup = db.execute(text("""
         SELECT 1
         FROM azlease_usatoauto a
@@ -278,12 +296,10 @@ async def crea_boost(
     if dup:
         raise HTTPException(409, "AUTO_GIÀ_PUBBLICATA")
 
-    # 3) Deriva anno/mese dal lookup targa (funzione/rotta esistente)
-    #    NB: il FE ha già scelto l'allestimento → ci arriva il codice_univoco
-    resp = Response()
-    by_targa = motornet_by_targa(plate, Authorize=Authorize, response=resp)  # funzione già presente
-    anno = by_targa.anno
-    mese = by_targa.mese
+    # 3) Deriva anno/mese dal lookup targa (funzione esistente)
+    by_targa = motornet_by_targa(plate, Authorize=Authorize, response=None)  # sync def
+    anno = getattr(by_targa, "anno", None)
+    mese = getattr(by_targa, "mese", None)
     if not anno or not mese:
         raise HTTPException(422, "Anno/mese non determinabili dalla targa")
 
@@ -291,16 +307,16 @@ async def crea_boost(
     if not codice_uni:
         raise HTTPException(422, "Allestimento obbligatorio")
 
-    # metadati per prompt
-    marca = (by_targa.marca.nome if by_targa.marca else "") or ""
-    modello = (by_targa.modello.descrizione if by_targa.modello else "") or ""
+    # Metadati per prompt
+    marca = (by_targa.marca.nome if getattr(by_targa, "marca", None) else "") or ""
+    modello = (by_targa.modello.descrizione if getattr(by_targa, "modello", None) else "") or ""
     allestimento = ""
-    for v in by_targa.versioni or []:
+    for v in getattr(by_targa, "versioni", []) or []:
         if (v.codice_motornet_uni or "").strip() == codice_uni:
             allestimento = v.versione or ""
             break
 
-    # 4) Inserimento record con service ESISTENTE /usato (visibile=false, prezzo_costo=0)
+    # 4) Inserimento record usando il service ESISTENTE (visibile=false; prezzo_costo=0)
     insert_payload = AZUsatoInsertRequest(
         targa=plate,
         anno_immatricolazione=anno,
@@ -328,7 +344,11 @@ async def crea_boost(
     created = await inserisci_auto_usata(insert_payload, Authorize=Authorize, db=db)
     id_auto = UUID(created["id_auto"])
 
-    # 5) In parallelo: prezzo web + descrizione AI
+    # 5) In parallelo: prezzo web + descrizione AI (chiamate esistenti a /openai/genera)
+    bearer = request.headers.get("authorization", "")
+    base = (COREAPI_SELF_URL or f"{request.url.scheme}://{request.headers.get('host')}").rstrip("/")
+    headers_json = {"Authorization": bearer, "Content-Type": "application/json"}
+
     async def get_prezzo():
         prompt = (
             "Trova online un prezzo medio di vendita in Italia per questo veicolo usato.\n"
@@ -337,15 +357,22 @@ async def crea_boost(
             "Limita la ricerca al ±1 anno. Ritorna un valore consigliato in euro."
         )
         async with httpx.AsyncClient(timeout=60.0) as client:
-            r = await client.post(
-                f"{COREAPI_SELF_URL}/openai/genera",
-                headers={"Authorization": f"Bearer {Authorize._token}", "Content-Type": "application/json"},
-                json={"prompt": prompt, "model": "gpt-4o-search-preview", "web_research": True, "max_tokens": 600, "temperature": 0.2}
-            )
+            r = await client.post(f"{base}/openai/genera", headers=headers_json,
+                                  json={"prompt": prompt, "model": "gpt-4o-search-preview",
+                                        "web_research": True, "max_tokens": 600, "temperature": 0.2})
             r.raise_for_status()
             out = (r.json() or {}).get("output", "") or ""
-        m = re.search(r"€\s?([0-9]{1,3}(?:[.,][0-9]{3})*)", out)
-        return float(m.group(1).replace(".", "").replace(",", "")) if m else 0.0
+        # parser robusto
+        m = re.search(r"prezzo consigliato.*?€\s*([0-9]{1,3}(?:[.,][0-9]{3})+)", out, re.I)
+        if m:
+            return float(m.group(1).replace(".", "").replace(",", ""))
+        euros = [int(x.replace(".", "").replace(",", ""))
+                 for x in re.findall(r"€\s*([0-9]{1,3}(?:[.,][0-9]{3})+)", out)]
+        if euros:
+            euros.sort()
+            mid = len(euros) // 2
+            return float(euros[mid]) if len(euros) % 2 == 1 else float((euros[mid - 1] + euros[mid]) / 2)
+        return 0.0
 
     async def get_descrizione():
         prompt = (
@@ -355,17 +382,14 @@ async def crea_boost(
             "Tono chiaro, concreto, 3-5 frasi, senza superlativi inutili."
         )
         async with httpx.AsyncClient(timeout=45.0) as client:
-            r = await client.post(
-                f"{COREAPI_SELF_URL}/openai/genera",
-                headers={"Authorization": f"Bearer {Authorize._token}", "Content-Type": "application/json"},
-                json={"prompt": prompt, "model": "gpt-4o", "max_tokens": 220, "temperature": 0.4}
-            )
+            r = await client.post(f"{base}/openai/genera", headers=headers_json,
+                                  json={"prompt": prompt, "model": "gpt-4o", "max_tokens": 220, "temperature": 0.4})
             r.raise_for_status()
             return (r.json() or {}).get("output", "") or ""
 
     prezzo, descrizione = await asyncio.gather(get_prezzo(), get_descrizione())
 
-    # 6) Unico PATCH con service ESISTENTE
+    # 6) PATCH unico con service ESISTENTE
     await patch_auto_usata(
         id_auto=id_auto,
         body={
@@ -379,44 +403,46 @@ async def crea_boost(
         db=db
     )
 
-    # 7) Immagine AI sincrona → attiva → publish
+    # 7) Immagine AI sincrona → attiva → publish (rotte esistenti veo3 + usa_media_leonardo)
     image_url = None
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        r = await client.post(
-            f"{COREAPI_SELF_URL}/veo3/image-hero",
-            headers={"Authorization": f"Bearer {Authorize._token}", "Content-Type": "application/json"},
-            json={"id_auto": str(id_auto), "prompt_override": ""}  # prompt già gestito server-side
-        )
-        r.raise_for_status()
-        jj = r.json()
-        if jj.get("status") == "completed":
-            image_url = jj.get("public_url")
-            leonardo_id = jj.get("usato_leonardo_id")
-            if leonardo_id:
-                await client.patch(
-                    f"{COREAPI_SELF_URL}/usato/leonardo/{leonardo_id}/usa",
-                    headers={"Authorization": f"Bearer {Authorize._token}"}
-                )
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            r_img = await client.post(f"{base}/veo3/image-hero", headers=headers_json,
+                                      json={"id_auto": str(id_auto), "prompt_override": ""})
+            r_img.raise_for_status()
+            jimg = r_img.json()
+            if jimg.get("status") == "completed":
+                image_url = jimg.get("public_url")
+                img_id = jimg.get("usato_leonardo_id") or jimg.get("id")
+                # fallback: se manca l'id, pesca ultimo image e attivalo
+                if not img_id:
+                    rq = await client.get(f"{base}/api/azlease/usato/leonardo-attivi/{id_auto}?only_active=false",
+                                          headers=headers_json)
+                    if rq.status_code == 200:
+                        media = (rq.json() or {}).get("media", [])
+                        images = [m for m in media if m.get("media_type") == "image"]
+                        if images:
+                            img_id = images[0]["id"]
+                if img_id:
+                    # invoca direttamente la funzione esistente (no HTTP)
+                    usa_media_leonardo(UUID(str(img_id)), Authorize=Authorize, db=db)
+    except Exception:
+        image_url = None  # non bloccare
 
     visibile = False
     if image_url:
-        await patch_auto_usata(
-            id_auto=id_auto,
-            body={"visibile": True},
-            Authorize=Authorize,
-            db=db
-        )
+        await patch_auto_usata(id_auto=id_auto, body={"visibile": True}, Authorize=Authorize, db=db)
         visibile = True
 
-    # 8) Video AI asincrono (non blocca)
+    # 8) Video AI asincrono (job + webhook) – rotta esistente
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            await client.post(
-                f"{COREAPI_SELF_URL}/veo3/video-hero",
-                headers={"Authorization": f"Bearer {Authorize._token}", "Content-Type": "application/json"},
-                json={"id_auto": str(id_auto), "prompt_override": ""}
-            )
-        video_status = "processing"
+            r_vid = await client.post(f"{base}/veo3/video-hero", headers=headers_json,
+                                      json={"id_auto": str(id_auto), "prompt_override": ""})
+            r_vid.raise_for_status()
+            jv = r_vid.json()
+            _generation_id = jv.get("generation_id") or jv.get("gemini_operation_id")
+        video_status = "processing" if _generation_id else "failed"
     except Exception:
         video_status = "failed"
 
@@ -427,6 +453,7 @@ async def crea_boost(
         image_url=image_url,
         video_status=video_status
     )
+
 
 
 @router.patch("/usato/{id_auto}", tags=["AZLease Usato"])
