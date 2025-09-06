@@ -313,11 +313,40 @@ async def crea_boost(
     # Metadati per prompt
     marca = (bt.marca.nome if getattr(bt, "marca", None) else "") or ""
     modello = (bt.modello.descrizione if getattr(bt, "modello", None) else "") or ""
+
     allestimento = ""
     for v in (getattr(bt, "versioni", []) or []):
-        if (v.codice_motornet_uni or "").strip() == codice_uni:
-            allestimento = v.versione or ""
+        # robust read: attr o dict, tutte le varianti nome campo
+        code = (
+            getattr(v, "codice_motornet_univoco", None)
+            or getattr(v, "codice_motornet_uni", None)
+            or getattr(v, "codiceMotornetUnivoco", None)
+            or (v.get("codice_motornet_univoco") if isinstance(v, dict) else None)
+            or (v.get("codice_motornet_uni") if isinstance(v, dict) else None)
+            or (v.get("codiceMotornetUnivoco") if isinstance(v, dict) else None)
+        )
+        if (code or "").strip() == codice_uni:
+            allestimento = (
+                getattr(v, "versione", None)
+                or (v.get("versione") if isinstance(v, dict) else None)
+                or ""
+            )
             break
+
+    # Fallback se ancora vuoto: usa dettagli o modello
+    if not allestimento:
+        det = getattr(bt, "dettagli", None) or {}
+        allestimento = (
+            getattr(det, "descrizione_breve", None)
+            or (det.get("descrizione_breve") if isinstance(det, dict) else None)
+            or getattr(det, "allestimento", None)
+            or (det.get("allestimento") if isinstance(det, dict) else None)
+            or modello
+            or ""
+        )
+
+    allestimento = allestimento.strip()
+
 
     # 4) Inserimento record con il service ESISTENTE (visibile=false; prezzo_costo=0)
     insert_payload = AZUsatoInsertRequest(
@@ -439,8 +468,9 @@ async def crea_boost(
                 usa_media_leonardo(img_id, Authorize=Authorize, db=db)
 
         if image_url:
-            await patch_auto_usata(id_auto=id_auto, body={"visibile": True}, Authorize=Authorize, db=db)
+            await patch_auto_usata(id_auto=str(id_auto), body={"visibile": True}, Authorize=Authorize, db=db)
             visibile = True
+
         else:
             visibile = False
     except Exception:
