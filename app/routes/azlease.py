@@ -356,15 +356,18 @@ async def crea_boost(
     # 5) In parallelo: prezzo web + descrizione AI (riuso /openai/genera → funzioni locali)
     async def _get_prezzo():
         price_prompt = (
-            "Trova online un prezzo medio di vendita in Italia per questo veicolo usato.\n"
-            f"Marca: {marca}\n"
-            f"Modello: {modello}\n"
-            f"Versione/Allestimento: {allestimento}\n"
-            f"Anno immatricolazione: {anno}\n"
-            f"Chilometraggio: {int(body.km_certificati)} km\n"
-            "Limita la ricerca al ±1 anno. Fornisci range min–max e cita 2 fonti affidabili.\n"
-            "Chiudi SEMPRE con questa riga esatta: Prezzo consigliato: €12345"
+            f"""Trova online il prezzo di vendita consigliato in Italia per questo veicolo usato.
+        Considera solo annunci comparabili (±1 anno, stesso allestimento).
+        OUTPUT: scrivi SOLO un numero intero in euro, senza simboli, punti, virgole o testo. Esempio: 18490
+
+        Marca: {marca}
+        Modello: {modello}
+        Versione/Allestimento: {allestimento}
+        Anno immatricolazione: {anno}
+        Chilometraggio: {int(body.km_certificati)} km
+        """
         )
+
 
         resp = await genera_testo(
             payload=PromptRequest(
