@@ -355,17 +355,29 @@ async def crea_boost(
 
     # 5) In parallelo: prezzo web + descrizione AI (riuso /openai/genera → funzioni locali)
     async def _get_prezzo():
-        prompt = (
+        price_prompt = (
             "Trova online un prezzo medio di vendita in Italia per questo veicolo usato.\n"
-            f"Marca: {marca}\nModello: {modello}\nVersione/Allestimento: {allestimento}\n"
-            f"Anno immatricolazione: {anno}\nChilometraggio: {int(body.km_certificati)} km\n"
-            "Limita la ricerca al ±1 anno. Ritorna un valore consigliato in euro."
+            f"Marca: {marca}\n"
+            f"Modello: {modello}\n"
+            f"Versione/Allestimento: {allestimento}\n"
+            f"Anno immatricolazione: {anno}\n"
+            f"Chilometraggio: {int(body.km_certificati)} km\n"
+            "Limita la ricerca al ±1 anno. Fornisci range min–max e cita 2 fonti affidabili.\n"
+            "Chiudi SEMPRE con questa riga esatta: Prezzo consigliato: €12345"
         )
+
         resp = await genera_testo(
-            payload=PromptRequest(prompt=prompt, model="gpt-4o-search-preview", web_research=True, max_tokens=600, temperature=0.2),
+            payload=PromptRequest(
+                prompt=price_prompt,
+                model="gpt-4o-search-preview",
+                web_research=True,
+                max_tokens=600,
+                temperature=0.2
+            ),
             Authorize=Authorize,
             db=db
         )
+
         return _parse_euro(getattr(resp, "output", None) or (resp.get("output") if isinstance(resp, dict) else ""))
 
     async def _get_descrizione():
