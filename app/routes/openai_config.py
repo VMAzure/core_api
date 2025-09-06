@@ -707,7 +707,7 @@ async def check_image_status(
     # 2. Poll Gemini API
     try:
         headers = {
-            "Authorization": f"Bearer {GEMINI_API_KEY}"
+            "x-goog-api-key": GEMINI_API_KEY
         }
         url = f"https://generativelanguage.googleapis.com/v1beta/{payload.generation_id}"
         r = requests.get(url, headers=headers, timeout=6)
