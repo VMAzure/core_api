@@ -357,16 +357,18 @@ async def crea_boost(
     async def _get_prezzo():
         price_prompt = (
             f"""Trova online il prezzo di vendita consigliato in Italia per questo veicolo usato.
-    Considera solo annunci comparabili (±1 anno, stesso allestimento).
-    OUTPUT: scrivi SOLO un numero intero in euro, senza simboli, punti, virgole o testo. Esempio: 18490
+        Usa ESCLUSIVAMENTE risultati da autoscout.it (usa query con site:autoscout.it). Ignora ogni altro sito.
+        Se trovi più annunci comparabili (±1 anno, stesso allestimento), calcola la MEDIANA.
+        OUTPUT: scrivi SOLO un numero intero in euro, senza simboli, punti, virgole o testo. Esempio: 18490
 
-    Marca: {marca}
-    Modello: {modello}
-    Versione/Allestimento: {allestimento}
-    Anno immatricolazione: {anno}
-    Chilometraggio: {int(body.km_certificati)} km
-    """
+        Marca: {marca}
+        Modello: {modello}
+        Versione/Allestimento: {allestimento}
+        Anno immatricolazione: {anno}
+        Chilometraggio: {int(body.km_certificati)} km
+        """
         )
+
         resp = await genera_testo(
             payload=PromptRequest(
                 prompt=price_prompt,
