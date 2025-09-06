@@ -582,9 +582,8 @@ async def genera_image_hero_veo3(
         raise HTTPException(403, "Utente non trovato")
 
     # Crediti (se dealer)
+    IMG_COST = float(os.getenv("GEMINI_IMG_CREDIT_COST", "1.5"))
     if is_dealer_user(user):
-        # costo da ENV (es. GEMINI_IMG_CREDIT_COST) oppure 1.5 di default
-        IMG_COST = float(os.getenv("GEMINI_IMG_CREDIT_COST", "1.5"))
         if user.credit is None or user.credit < IMG_COST:
             raise HTTPException(402, "Credito insufficiente")
 
@@ -592,7 +591,6 @@ async def genera_image_hero_veo3(
     if not auto:
         raise HTTPException(404, "Auto non trovata")
 
-    # Dettagli per prompt di fallback (se serve)
     det = None
     if getattr(auto, "codice_motornet", None):
         det = db.query(MnetDettaglioUsato)\
@@ -607,58 +605,82 @@ async def genera_image_hero_veo3(
     if not (marca and modello and anno > 0):
         raise HTTPException(422, "Marca/Modello/Anno non disponibili")
 
-    # 🔴 SOLO prompt_override (niente scenario)
-    prompt = payload.prompt_override or _gemini_build_prompt(marca, modello, anno, colore, allestimento)
+    # Solo prompt_override; fallback sul builder immagini
+    prompt = payload.prompt_override or _gemini_build_image_prompt(marca, modello, anno, colore, allestimento)
 
     _gemini_assert_api()
 
+    # Crea record DB
     rec = UsatoLeonardo(
         id_auto=payload.id_auto,
         provider="gemini",
-        generation_id=None,            # lo metteremo quando parte l’operazione
+        generation_id=None,          # per immagini sync non serve
         status="queued",
         media_type="image",
         mime_type="image/png",
         prompt=prompt,
         negative_prompt=None,
-        model_id="veo-3.0",
+        model_id="gemini-2.5-flash-image-preview",
         duration_seconds=None,
         fps=None,
         aspect_ratio="16:9",
         seed=None,
-        credit_cost=os.getenv("GEMINI_IMG_CREDIT_COST", None),
+        credit_cost=IMG_COST,
         user_id=user.id
     )
     db.add(rec)
     db.commit()
     db.refresh(rec)
 
-    # Avvio generazione immagine (stesso endpoint dei video ma per immagini se hai una funzione dedicata)
-    # Se stai usando lo stesso provider per immagini: chiama qui la API image. Se no: simulazione sync.
-    # Qui assumiamo sincrona (come da tua implementazione esistente):
     try:
-        # Usa il tuo generatore immagine (qui esempio con lo stesso stack di download + upload)
-        op_name = await _gemini_start_video(prompt)  # se hai endpoint immagini, usa quello; se no lascia così e adatta
-        # Per immagini, potresti ricevere subito un URL. Se no, usa webhook come per i video.
-        # Qui segniamo processing e lasciamo al webhook completare.
-        rec.generation_id = op_name
-        rec.status = "processing"
+        # Generazione SINCRONA
+        img_bytes = await _gemini_generate_image_sync(prompt)
+
+        # Upload a Supabase
+        ext = ".png"
+        path = f"{str(rec.id_auto)}/{str(rec.id)}{ext}"
+        _, signed_url = _sb_upload_and_sign(path, img_bytes, "image/png")
+
+        # Aggiorna record
+        rec.public_url = signed_url
+        rec.storage_path = path
+        rec.status = "completed"
         db.commit()
+
+        # Scala crediti e notifica se dealer
+        if is_dealer_user(user):
+            user.credit = float(user.credit or 0) - IMG_COST
+            db.add(CreditTransaction(
+                dealer_id=user.id,
+                amount=-IMG_COST,
+                transaction_type="USE",
+                note="Immagine hero Gemini"
+            ))
+            inserisci_notifica(
+                db=db,
+                utente_id=user.id,
+                tipo_codice="CREDITO_USATO",
+                messaggio=f"Hai utilizzato {IMG_COST:g} crediti per la generazione immagine."
+            )
+            db.commit()
+
+        # Risposta COMPLETED immediata
+        return GeminiImageHeroResponse(
+            success=True,
+            id_auto=payload.id_auto,
+            status="completed",
+            public_url=signed_url,
+            error_message=None,
+            usato_leonardo_id=rec.id,
+            generation_id=None
+        )
+
     except Exception as e:
+        db.rollback()
         rec.status = "failed"
         rec.error_message = str(e)
         db.commit()
-        raise
-
-    return GeminiImageHeroResponse(
-        success=True,
-        id_auto=payload.id_auto,
-        status="processing",
-        public_url=None,
-        error_message=None,
-        usato_leonardo_id=rec.id,
-        generation_id=rec.generation_id   # ✅ AGGIUNTO QUI
-    )
+        raise HTTPException(500, f"Errore generazione immagine: {str(e)}")
 
 
 
@@ -682,10 +704,12 @@ async def check_image_status(
     payload: GeminiImageStatusRequest,
     db: Session = Depends(get_db)
 ):
-    # 1. Recupera il record dal DB
-    rec = db.query(UsatoLeonardo).filter(
-        UsatoLeonardo.generation_id == payload.generation_id
-    ).first()
+    # Supporta sia generation_id che usato_leonardo_id
+    rec = None
+    if payload.usato_leonardo_id:
+        rec = db.query(UsatoLeonardo).filter(UsatoLeonardo.id == payload.usato_leonardo_id).first()
+    if not rec and payload.generation_id:
+        rec = db.query(UsatoLeonardo).filter(UsatoLeonardo.generation_id == payload.generation_id).first()
 
     if not rec:
         return GeminiImageStatusResponse(status="not_found", error_message="Record non trovato")
@@ -696,58 +720,14 @@ async def check_image_status(
             public_url=rec.public_url,
             usato_leonardo_id=str(rec.id)
         )
-
     if rec.status in {"failed", "error"}:
         return GeminiImageStatusResponse(
             status="failed",
             error_message=rec.error_message or "Errore generazione",
             usato_leonardo_id=str(rec.id)
         )
+    return GeminiImageStatusResponse(status=rec.status or "processing", usato_leonardo_id=str(rec.id))
 
-    # 2. Poll Gemini API
-    try:
-        headers = {
-            "x-goog-api-key": GEMINI_API_KEY
-        }
-        url = f"https://generativelanguage.googleapis.com/v1beta/{payload.generation_id}"
-        r = requests.get(url, headers=headers, timeout=6)
-        r.raise_for_status()
-        data = r.json()
-
-        if data.get("done") and "response" in data:
-            image_uri = data["response"].get("imageUri") or data["response"].get("uri")
-            if not image_uri:
-                return GeminiImageStatusResponse(status="failed", error_message="imageUri mancante")
-
-            # ✅ Aggiorna DB
-            rec.public_url = image_uri
-            rec.status = "completed"
-            db.commit()
-
-            return GeminiImageStatusResponse(
-                status="completed",
-                public_url=image_uri,
-                usato_leonardo_id=str(rec.id)
-            )
-
-        elif data.get("error"):
-            rec.status = "failed"
-            rec.error_message = data["error"].get("message")
-            db.commit()
-            return GeminiImageStatusResponse(
-                status="failed",
-                error_message=rec.error_message,
-                usato_leonardo_id=str(rec.id)
-            )
-
-        return GeminiImageStatusResponse(status="processing", usato_leonardo_id=str(rec.id))
-
-    except Exception as e:
-        return GeminiImageStatusResponse(
-            status="failed",
-            error_message=str(e),
-            usato_leonardo_id=str(rec.id)
-        )
 
 
 
