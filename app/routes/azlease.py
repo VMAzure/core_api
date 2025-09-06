@@ -344,8 +344,14 @@ async def crea_boost(
         iva_esposta=False,
         descrizione=""
     )
-    created = inserisci_auto_usata(insert_payload, Authorize=Authorize, db=db)
-    id_auto = UUID(created["id_auto"])
+    created = await inserisci_auto_usata(insert_payload, Authorize=Authorize, db=db)
+    id_auto_str = (
+        getattr(created, "id_auto", None)
+        or (created.get("id_auto") if isinstance(created, dict) else None)
+    )
+    if not id_auto_str:
+        raise HTTPException(500, "id_auto mancante dalla risposta di inserisci_auto_usata")
+    id_auto = UUID(str(id_auto_str))
 
     # 5) In parallelo: prezzo web + descrizione AI (riuso /openai/genera → funzioni locali)
     async def _get_prezzo():
@@ -379,7 +385,7 @@ async def crea_boost(
     prezzo_vendita, descr = await asyncio.gather(_get_prezzo(), _get_descrizione())
 
     # 6) PATCH unico (service esistente)
-    patch_auto_usata(
+    await patch_auto_usata(
         id_auto=id_auto,
         body={
             "prezzo_costo": 0.0,
@@ -403,7 +409,17 @@ async def crea_boost(
         image_url = getattr(img_res, "public_url", None) or (img_res.get("public_url") if isinstance(img_res, dict) else None)
         img_id = getattr(img_res, "usato_leonardo_id", None) or (img_res.get("usato_leonardo_id") if isinstance(img_res, dict) else None)
         if img_id:
-            usa_media_leonardo(img_id, Authorize=Authorize, db=db)  # attiva come hero
+            try:
+                await usa_media_leonardo(img_id, Authorize=Authorize, db=db)
+            except TypeError:
+                # se la funzione è sync nel tuo progetto
+                usa_media_leonardo(img_id, Authorize=Authorize, db=db)
+
+        if image_url:
+            await patch_auto_usata(id_auto=id_auto, body={"visibile": True}, Authorize=Authorize, db=db)
+            visibile = True
+        else:
+            visibile = False
     except Exception:
         image_url = None  # non bloccare
 
