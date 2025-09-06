@@ -5,6 +5,7 @@ from app.database import get_db, supabase_client, SUPABASE_URL
 from app.models import AZLeaseUsatoAuto, AZLeaseUsatoIn, User, AZUsatoInsertRequest, AZLeaseQuotazioni, SiteAdminSettings
 from app.models import AutousatoAccessoriOptional
 
+
 from app.schemas import AutoUsataCreate
 from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
 import uuid
@@ -235,7 +236,8 @@ from app.routes.openai_config import (
     GeminiImageHeroRequest,
     genera_image_hero_veo3,
     GeminiVideoHeroRequest,
-    genera_video_hero_veo3
+    genera_video_hero_veo3,
+    
 )
 
 class BoostRequest(BaseModel):
@@ -386,11 +388,10 @@ async def crea_boost(
     async def _get_prezzo():
         price_prompt = (
             f"""Trova online il prezzo di vendita consigliato in Italia per questo veicolo usato.
-        Cerca SOLO su site:autoscout24.it. 
-        Usa come chiavi: Marca e Allestimento (l'allestimento include già il modello). 
-        Per marche con accenti usa anche la variante senza accento (es. Citroën ≈ Citroen).
-        Filtra per anno di immatricolazione ≈ {anno} (tolleranza ±1 anno) e chilometraggio comparabile a {int(body.km_certificati)} km.
-        Se non trovi corrispondenze esatte, allarga leggermente usando le parole chiave principali dell’allestimento (motore/cv/cambio) mantenendo la stessa generazione.
+        Cerca SOLO su site:autoscout24.it.
+        Usa come chiavi: "{marca} {allestimento}".
+        Filtra per anno ≈ {anno} (±1) e chilometraggio comparabile a {int(body.km_certificati)} km.
+        Per marche con accenti usa anche la variante senza accento (es. Citroën/Citroen).
 
         OUTPUT: scrivi SOLO un numero intero in euro, senza simboli, punti, virgole o testo. Esempio: 18490
 
@@ -400,6 +401,7 @@ async def crea_boost(
         Chilometraggio: {int(body.km_certificati)} km
         """
         )
+
 
 
         resp = await genera_testo(
