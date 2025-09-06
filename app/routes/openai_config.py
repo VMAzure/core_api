@@ -223,7 +223,9 @@ class GeminiImageHeroResponse(BaseModel):
     status: str
     public_url: Optional[str] = None
     error_message: Optional[str] = None
-    usato_leonardo_id: _UUID  # ← aggiunto
+    usato_leonardo_id: _UUID
+    generation_id: Optional[str] = None  # ✅ aggiunto
+
 
 
 
@@ -653,8 +655,10 @@ async def genera_image_hero_veo3(
         status="processing",
         public_url=None,
         error_message=None,
-        usato_leonardo_id=rec.id
+        usato_leonardo_id=rec.id,
+        generation_id=rec.generation_id   # ✅ AGGIUNTO QUI
     )
+
 
 
 # ⛔ deprecato: lo lasciamo per compatibilità, ma risponde subito
