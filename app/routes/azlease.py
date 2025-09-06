@@ -238,7 +238,6 @@ from app.routes.openai_config import (
     GeminiVideoHeroRequest,
     genera_video_hero_veo3,
     usa_hero_media,
-    usa_media_leonardo
 )
 
 class BoostRequest(BaseModel):
