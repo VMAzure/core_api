@@ -663,7 +663,9 @@ async def genera_image_hero_veo3(
 
 # ⛔ deprecato: lo lasciamo per compatibilità, ma risponde subito
 class GeminiImageStatusRequest(BaseModel):
-    operation_id: str
+    generation_id: str  # ✅ nome corretto atteso dal controller
+    usato_leonardo_id: Optional[str] = None
+
 
 class GeminiImageStatusResponse(BaseModel):
     status: str  # "processing" | "completed" | "failed" | "not_found"
