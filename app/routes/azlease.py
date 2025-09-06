@@ -20,7 +20,8 @@ from typing import List
 import uuid
 from uuid import UUID
 from app.routes.motornet import get_motornet_token  # ✅ importa la funzione dove definita
-
+from datetime import date
+import asyncio
 
 def get_descrizione_safe(val):
     return val.get("descrizione") if isinstance(val, dict) else val
@@ -222,21 +223,26 @@ async def inserisci_auto_usata(
     }
 
 # rotta boost per inserimento usato
+# === BOOST ORCHESTRATOR (senza HTTP interno) ===
 
-# --- BOOST ORCHESTRATOR (usa funzioni esistenti) ---
-from uuid import UUID
-from datetime import date
-import asyncio, httpx, os, re
-from pydantic import BaseModel
-from typing import Optional
 
-COREAPI_SELF_URL = os.getenv("COREAPI_SELF_URL", "http://127.0.0.1:8000").rstrip("/")
+# usa funzioni/DTO già esistenti
+from app.models import AZUsatoInsertRequest
+from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
+from app.routes.openai_config import (
+    PromptRequest,
+    genera_testo,
+    GeminiImageHeroRequest,
+    genera_image_hero_veo3,
+    GeminiVideoHeroRequest,
+    genera_video_hero_veo3
+)
 
 class BoostRequest(BaseModel):
     targa: str
     km_certificati: int
     colore: str
-    codice_motornet_univoco: str  # obbligatorio: scelto dall'utente nel modale
+    codice_motornet_univoco: str  # allestimento scelto nel modale
 
 class BoostResponse(BaseModel):
     id_auto: UUID
@@ -245,22 +251,19 @@ class BoostResponse(BaseModel):
     image_url: Optional[str] = None
     video_status: str
 
-# === BOOST ORCHESTRATOR ===
-
-COREAPI_SELF_URL = os.getenv("COREAPI_SELF_URL", "").rstrip("/")
-
-class BoostRequest(BaseModel):
-    targa: str
-    km_certificati: int
-    colore: str
-    codice_motornet_univoco: str  # allestimento scelto dall’utente
-
-class BoostResponse(BaseModel):
-    id_auto: UUID
-    visibile: bool
-    prezzo_vendita: float
-    image_url: Optional[str] = None
-    video_status: str
+def _parse_euro(txt: str) -> float:
+    if not txt:
+        return 0.0
+    m = re.search(r"prezzo consigliato.*?€\s*([0-9]{1,3}(?:[.,][0-9]{3})+)", txt, re.I)
+    if m:
+        return float(m.group(1).replace(".", "").replace(",", ""))
+    euros = [int(x.replace(".", "").replace(",", ""))
+             for x in re.findall(r"€\s*([0-9]{1,3}(?:[.,][0-9]{3})+)", txt)]
+    if euros:
+        euros.sort()
+        mid = len(euros)//2
+        return float(euros[mid]) if len(euros) % 2 == 1 else float((euros[mid-1]+euros[mid])/2)
+    return 0.0
 
 @router.post("/usato/boost", tags=["AZLease"], response_model=BoostResponse)
 async def crea_boost(
@@ -273,17 +276,17 @@ async def crea_boost(
     user_email = Authorize.get_jwt_subject()
     user = db.query(User).filter(User.email == user_email).first()
     if not user or not (is_admin_user(user) or is_dealer_user(user)):
-        raise HTTPException(status_code=403, detail="Ruolo non autorizzato")
+        raise HTTPException(403, "Ruolo non autorizzato")
 
     dealer_id = get_dealer_id(user) if is_dealer_user(user) else None
     admin_id = get_admin_id(user)
 
     # 1) Targa valida
-    plate = body.targa.strip().upper()
+    plate = (body.targa or "").strip().upper()
     if not re.match(r"^[A-Z0-9]{5,8}$", plate):
         raise HTTPException(422, "Formato targa non valido")
 
-    # 2) Blocco duplicati: stessa targa già visibile per lo stesso owner → 409
+    # 2) Blocco duplicati già pubblicati per stesso owner
     dup = db.execute(text("""
         SELECT 1
         FROM azlease_usatoauto a
@@ -296,27 +299,27 @@ async def crea_boost(
     if dup:
         raise HTTPException(409, "AUTO_GIÀ_PUBBLICATA")
 
-    # 3) Deriva anno/mese dal lookup targa (funzione esistente)
-    by_targa = motornet_by_targa(plate, Authorize=Authorize, response=None)  # sync def
-    anno = getattr(by_targa, "anno", None)
-    mese = getattr(by_targa, "mese", None)
+    # 3) Deriva anno/mese da by-targa (funzione già presente in questo file)
+    bt = motornet_by_targa(plate, Authorize=Authorize, response=None)
+    anno = getattr(bt, "anno", None)
+    mese = getattr(bt, "mese", None)
     if not anno or not mese:
         raise HTTPException(422, "Anno/mese non determinabili dalla targa")
 
-    codice_uni = body.codice_motornet_univoco.strip()
+    codice_uni = (body.codice_motornet_univoco or "").strip()
     if not codice_uni:
         raise HTTPException(422, "Allestimento obbligatorio")
 
     # Metadati per prompt
-    marca = (by_targa.marca.nome if getattr(by_targa, "marca", None) else "") or ""
-    modello = (by_targa.modello.descrizione if getattr(by_targa, "modello", None) else "") or ""
+    marca = (bt.marca.nome if getattr(bt, "marca", None) else "") or ""
+    modello = (bt.modello.descrizione if getattr(bt, "modello", None) else "") or ""
     allestimento = ""
-    for v in getattr(by_targa, "versioni", []) or []:
+    for v in (getattr(bt, "versioni", []) or []):
         if (v.codice_motornet_uni or "").strip() == codice_uni:
             allestimento = v.versione or ""
             break
 
-    # 4) Inserimento record usando il service ESISTENTE (visibile=false; prezzo_costo=0)
+    # 4) Inserimento record con il service ESISTENTE (visibile=false; prezzo_costo=0)
     insert_payload = AZUsatoInsertRequest(
         targa=plate,
         anno_immatricolazione=anno,
@@ -341,119 +344,92 @@ async def crea_boost(
         iva_esposta=False,
         descrizione=""
     )
-    created = await inserisci_auto_usata(insert_payload, Authorize=Authorize, db=db)
+    created = inserisci_auto_usata(insert_payload, Authorize=Authorize, db=db)
     id_auto = UUID(created["id_auto"])
 
-    # 5) In parallelo: prezzo web + descrizione AI (chiamate esistenti a /openai/genera)
-    bearer = request.headers.get("authorization", "")
-    base = (COREAPI_SELF_URL or f"{request.url.scheme}://{request.headers.get('host')}").rstrip("/")
-    headers_json = {"Authorization": bearer, "Content-Type": "application/json"}
-
-    async def get_prezzo():
+    # 5) In parallelo: prezzo web + descrizione AI (riuso /openai/genera → funzioni locali)
+    async def _get_prezzo():
         prompt = (
             "Trova online un prezzo medio di vendita in Italia per questo veicolo usato.\n"
             f"Marca: {marca}\nModello: {modello}\nVersione/Allestimento: {allestimento}\n"
             f"Anno immatricolazione: {anno}\nChilometraggio: {int(body.km_certificati)} km\n"
             "Limita la ricerca al ±1 anno. Ritorna un valore consigliato in euro."
         )
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            r = await client.post(f"{base}/openai/genera", headers=headers_json,
-                                  json={"prompt": prompt, "model": "gpt-4o-search-preview",
-                                        "web_research": True, "max_tokens": 600, "temperature": 0.2})
-            r.raise_for_status()
-            out = (r.json() or {}).get("output", "") or ""
-        # parser robusto
-        m = re.search(r"prezzo consigliato.*?€\s*([0-9]{1,3}(?:[.,][0-9]{3})+)", out, re.I)
-        if m:
-            return float(m.group(1).replace(".", "").replace(",", ""))
-        euros = [int(x.replace(".", "").replace(",", ""))
-                 for x in re.findall(r"€\s*([0-9]{1,3}(?:[.,][0-9]{3})+)", out)]
-        if euros:
-            euros.sort()
-            mid = len(euros) // 2
-            return float(euros[mid]) if len(euros) % 2 == 1 else float((euros[mid - 1] + euros[mid]) / 2)
-        return 0.0
+        resp = await genera_testo(
+            payload=PromptRequest(prompt=prompt, model="gpt-4o-search-preview", web_research=True, max_tokens=600, temperature=0.2),
+            Authorize=Authorize,
+            db=db
+        )
+        return _parse_euro(getattr(resp, "output", None) or (resp.get("output") if isinstance(resp, dict) else ""))
 
-    async def get_descrizione():
+    async def _get_descrizione():
         prompt = (
             "Scrivi una descrizione breve e commerciale per un'auto usata.\n"
             f"Marca: {marca}\nModello: {modello}\nAllestimento: {allestimento}\n"
             f"Anno: {anno}\nKM: {int(body.km_certificati)}\nColore: {body.colore.strip()}\n"
             "Tono chiaro, concreto, 3-5 frasi, senza superlativi inutili."
         )
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            r = await client.post(f"{base}/openai/genera", headers=headers_json,
-                                  json={"prompt": prompt, "model": "gpt-4o", "max_tokens": 220, "temperature": 0.4})
-            r.raise_for_status()
-            return (r.json() or {}).get("output", "") or ""
+        resp = await genera_testo(
+            payload=PromptRequest(prompt=prompt, model="gpt-4o", web_research=False, max_tokens=220, temperature=0.4),
+            Authorize=Authorize,
+            db=db
+        )
+        return getattr(resp, "output", None) or (resp.get("output") if isinstance(resp, dict) else "")
 
-    prezzo, descrizione = await asyncio.gather(get_prezzo(), get_descrizione())
+    prezzo_vendita, descr = await asyncio.gather(_get_prezzo(), _get_descrizione())
 
-    # 6) PATCH unico con service ESISTENTE
-    await patch_auto_usata(
+    # 6) PATCH unico (service esistente)
+    patch_auto_usata(
         id_auto=id_auto,
         body={
             "prezzo_costo": 0.0,
-            "prezzo_vendita": float(prezzo or 0.0),
+            "prezzo_vendita": float(prezzo_vendita or 0.0),
             "visibile": False,
             "iva_esposta": False,
-            "descrizione": descrizione or ""
+            "descrizione": descr or ""
         },
         Authorize=Authorize,
         db=db
     )
 
-    # 7) Immagine AI sincrona → attiva → publish (rotte esistenti veo3 + usa_media_leonardo)
+    # 7) Immagine AI sincrona → attiva → publish
     image_url = None
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            r_img = await client.post(f"{base}/veo3/image-hero", headers=headers_json,
-                                      json={"id_auto": str(id_auto), "prompt_override": ""})
-            r_img.raise_for_status()
-            jimg = r_img.json()
-            if jimg.get("status") == "completed":
-                image_url = jimg.get("public_url")
-                img_id = jimg.get("usato_leonardo_id") or jimg.get("id")
-                # fallback: se manca l'id, pesca ultimo image e attivalo
-                if not img_id:
-                    rq = await client.get(f"{base}/api/azlease/usato/leonardo-attivi/{id_auto}?only_active=false",
-                                          headers=headers_json)
-                    if rq.status_code == 200:
-                        media = (rq.json() or {}).get("media", [])
-                        images = [m for m in media if m.get("media_type") == "image"]
-                        if images:
-                            img_id = images[0]["id"]
-                if img_id:
-                    # invoca direttamente la funzione esistente (no HTTP)
-                    usa_media_leonardo(UUID(str(img_id)), Authorize=Authorize, db=db)
+        img_res = await genera_image_hero_veo3(
+            payload=GeminiImageHeroRequest(id_auto=id_auto, prompt_override=None),
+            Authorize=Authorize,
+            db=db
+        )
+        image_url = getattr(img_res, "public_url", None) or (img_res.get("public_url") if isinstance(img_res, dict) else None)
+        img_id = getattr(img_res, "usato_leonardo_id", None) or (img_res.get("usato_leonardo_id") if isinstance(img_res, dict) else None)
+        if img_id:
+            usa_media_leonardo(img_id, Authorize=Authorize, db=db)  # attiva come hero
     except Exception:
         image_url = None  # non bloccare
 
     visibile = False
     if image_url:
-        await patch_auto_usata(id_auto=id_auto, body={"visibile": True}, Authorize=Authorize, db=db)
+        patch_auto_usata(id_auto=id_auto, body={"visibile": True}, Authorize=Authorize, db=db)
         visibile = True
 
-    # 8) Video AI asincrono (job + webhook) – rotta esistente
+    # 8) Video AI asincrono (job + webhook) – avvio e stop
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r_vid = await client.post(f"{base}/veo3/video-hero", headers=headers_json,
-                                      json={"id_auto": str(id_auto), "prompt_override": ""})
-            r_vid.raise_for_status()
-            jv = r_vid.json()
-            _generation_id = jv.get("generation_id") or jv.get("gemini_operation_id")
-        video_status = "processing" if _generation_id else "failed"
+        vid_res = await genera_video_hero_veo3(
+            payload=GeminiVideoHeroRequest(id_auto=id_auto, prompt_override=None),
+            Authorize=Authorize,
+            db=db
+        )
+        video_status = "processing" if (getattr(vid_res, "gemini_operation_id", None) or (isinstance(vid_res, dict) and vid_res.get("gemini_operation_id"))) else "failed"
     except Exception:
         video_status = "failed"
 
     return BoostResponse(
         id_auto=id_auto,
         visibile=visibile,
-        prezzo_vendita=float(prezzo or 0.0),
+        prezzo_vendita=float(prezzo_vendita or 0.0),
         image_url=image_url,
         video_status=video_status
     )
-
 
 
 @router.patch("/usato/{id_auto}", tags=["AZLease Usato"])
