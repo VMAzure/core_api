@@ -91,7 +91,7 @@ def add_logo(request: VideoEditRequest):
                 .with_start(start_logo)
                 .with_effects([
                     FadeIn(0.5),
-                    Resize(height=int(base.h * 0.5)),  # grande e centrato
+                    Resize(width=int(base.w * 0.9))  # ✅ v2 resize con max 90% larghezza
                 ])
                 .with_position("center")
                 .with_opacity(0.95)
