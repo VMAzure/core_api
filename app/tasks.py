@@ -317,6 +317,8 @@ scheduler.add_job(video_weekly_sweep,      'cron', day_of_week='sun', hour=5, mi
 from apscheduler.triggers.interval import IntervalTrigger
 from app.routes.openai_config import _gemini_get_operation, _download_bytes, _sb_upload_and_sign
 from app.models import UsatoLeonardo
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-scheduler.add_job(lambda: asyncio.create_task(polla_video_gemini()), IntervalTrigger(seconds=60))
+scheduler = AsyncIOScheduler(job_defaults={'coalesce': True, 'max_instances': 1})
+scheduler.add_job(polla_video_gemini, IntervalTrigger(seconds=60))
 
