@@ -32,7 +32,6 @@ from moviepy.video.fx.CrossFadeIn import CrossFadeIn
 from moviepy.video.fx.FadeIn import FadeIn
 from moviepy.video.fx.FadeOut import FadeOut
 from moviepy.video.fx.Resize import Resize
-from app.schemas import VideoEditRequest
 
 router = APIRouter(prefix="/video", tags=["Video"])
 
