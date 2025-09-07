@@ -4,7 +4,7 @@ from fastapi.responses import StreamingResponse
 from moviepy.editor import ColorClip
 import io
 
-router = APIRouter(prefix="/api/test", tags=["Test"])
+router = APIRouter(prefix="/moviepy/test", tags=["Test"])
 
 @router.get("/moviepy")
 def test_moviepy():
