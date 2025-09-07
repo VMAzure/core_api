@@ -245,13 +245,22 @@ async def polla_video_gemini():
 
                 # Estrai URI video
                 resp = op.get("response", {})
-                vid0 = (resp.get("generatedVideos") or [{}])[0]
-                video_obj = vid0.get("video") or {}
-                uri = (
-                    vid0.get("uri")
-                    or video_obj.get("uri")
-                    or video_obj.get("videoUri")
-                )
+                uri = None
+
+                # ✅ Caso VEO3 attuale (da generateVideoResponse.generatedSamples[].video.uri)
+                samples = resp.get("generateVideoResponse", {}).get("generatedSamples") or []
+                if samples:
+                    video = samples[0].get("video", {})
+                    uri = video.get("uri")
+
+                # 🔁 Fallback classici (non sempre presenti)
+                if not uri:
+                    vids = resp.get("generatedVideos") or []
+                    if vids:
+                        v0 = vids[0]
+                        video_obj = v0.get("video") or {}
+                        uri = v0.get("uri") or video_obj.get("uri") or video_obj.get("videoUri")
+
 
                 if not uri:
                     rec.status = "failed"
