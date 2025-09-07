@@ -273,7 +273,7 @@ async def polla_video_gemini():
                 db.commit()
                 logging.info(f"✅ Video Gemini completato: {rec.id}")
                 op = await _gemini_get_operation(rec.generation_id)
-                print(json.dumps(op, indent=2))
+                logging.warning("📦 OP Gemini (%s):\n%s", rec.id, json.dumps(op, indent=2))
 
 
             except Exception as e:
