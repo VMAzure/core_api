@@ -216,6 +216,7 @@ def aggiorna_rating_convenienza_job():
 from app.routes.openai_config import _gemini_get_operation, _download_bytes, _sb_upload_and_sign
 from app.models import UsatoLeonardo
 import logging
+from pprint import pprint  # se preferisci invece di json.dumps
 
 async def polla_video_gemini():
     logging.info("🎥 Polling Gemini video VEO3...")
@@ -237,12 +238,12 @@ async def polla_video_gemini():
                 resp = op.get("response", {})
                 vid0 = (resp.get("generatedVideos") or [{}])[0]
                 video_obj = vid0.get("video") or {}
-
                 uri = (
                     vid0.get("uri")
                     or video_obj.get("uri")
                     or video_obj.get("videoUri")
                 )
+
 
                 if not uri:
                     rec.status = "failed"
@@ -271,6 +272,8 @@ async def polla_video_gemini():
 
                 db.commit()
                 logging.info(f"✅ Video Gemini completato: {rec.id}")
+                op = await _gemini_get_operation(rec.generation_id)
+                pprint(op) 
 
             except Exception as e:
                 db.rollback()
