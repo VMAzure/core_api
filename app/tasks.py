@@ -219,8 +219,9 @@ import logging
 import json
 
 async def polla_video_gemini():
-    logging.info("🎥 Polling Gemini video VEO3...")
+    logging.warning("🚀 INIZIO polling Gemini video VEO3")
     db = SessionLocal()
+
     try:
         recs = db.query(UsatoLeonardo).filter(
             UsatoLeonardo.media_type == "video",
@@ -228,13 +229,21 @@ async def polla_video_gemini():
             UsatoLeonardo.generation_id.isnot(None)
         ).all()
 
+        logging.warning(f"📊 Trovati {len(recs)} video in stato 'processing' da pollare")
+
         for rec in recs:
+            logging.warning(f"🟡 Inizio polling per video ID: {rec.id} (generation_id: {rec.generation_id})")
+
             try:
                 op = await _gemini_get_operation(rec.generation_id)
-                if not op.get("done", False):
-                    continue  # ancora in elaborazione
 
-                # Estrai URI compatibile con struttura Gemini VEO 3
+                logging.warning("📦 Risposta Gemini grezza:\n%s", json.dumps(op, indent=2))
+
+                if not op.get("done", False):
+                    logging.warning(f"⏳ Operazione ancora in corso per {rec.id}")
+                    continue
+
+                # Estrai URI video
                 resp = op.get("response", {})
                 vid0 = (resp.get("generatedVideos") or [{}])[0]
                 video_obj = vid0.get("video") or {}
@@ -244,14 +253,14 @@ async def polla_video_gemini():
                     or video_obj.get("videoUri")
                 )
 
-
                 if not uri:
                     rec.status = "failed"
                     rec.error_message = "URI video mancante dal response Gemini"
                     db.commit()
+                    logging.error(f"❌ URI mancante per video {rec.id}")
                     continue
 
-                # Scarica e salva su Supabase
+                # Download video
                 blob = await _download_bytes(uri)
                 ext = ".mp4"
                 path = f"{str(rec.id_auto)}/{str(rec.id)}{ext}"
@@ -268,26 +277,26 @@ async def polla_video_gemini():
                 rec.status = "completed"
                 rec.public_url = public_url
                 rec.storage_path = path
-                rec.is_active = other_active == 0
+                rec.is_active = (other_active == 0)
 
                 db.commit()
-                logging.info(f"✅ Video Gemini completato: {rec.id}")
-                op = await _gemini_get_operation(rec.generation_id)
-                logging.warning("📦 OP Gemini (%s):\n%s", rec.id, json.dumps(op, indent=2))
 
+                logging.info(f"✅ Video Gemini COMPLETATO per {rec.id} (attivo: {rec.is_active})")
 
             except Exception as e:
                 db.rollback()
                 rec.status = "failed"
                 rec.error_message = str(e)
                 db.commit()
-                logging.warning(f"❌ Errore polling video {rec.id}: {e}")
+                logging.error(f"❌ Errore durante polling video {rec.id}: {e}")
 
     except Exception as e:
-        logging.error(f"❌ Errore cronjob polla_video_gemini: {e}")
         db.rollback()
+        logging.critical(f"🔥 ERRORE FATALE nel cronjob polling Gemini: {e}")
+
     finally:
         db.close()
+        logging.warning("✅ Fine polling Gemini video VEO3\n")
 
 
 
