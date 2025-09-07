@@ -56,7 +56,7 @@ from app.routes import sync_allestimenti_usato, sync_dettagli_usato, sync_marche
 from app.routes.tenant import router as tenant_router
 from app.routes.notifiche import router as notifiche_router
 from app.routes.videos import router as videos_router
-from app.routes import moviepy
+from app.routes import video_maker
 
 
 # ✅ Configuriamo il logging
@@ -214,7 +214,7 @@ app.include_router(analytics.router)
 app.include_router(tenant_router)  # espone /api/tenant/resolve
 app.include_router(notifiche_router)
 app.include_router(videos_router)
-app.include_router(moviepy.router)
+app.include_router(video_maker.router)
 
 
 
