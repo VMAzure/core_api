@@ -38,6 +38,8 @@ router = APIRouter(prefix="/video", tags=["Video"])
 MAX_DURATION = 25.0
 XFADE_SEC = 0.4
 FINAL_BLACK_SEC = 3.0
+FONT_PATH = os.path.join(os.path.dirname(__file__), "../fonts/Inter-Bold.ttf")
+
 
 def download_temp_file(url: str, suffix: str) -> str:
     r = requests.get(url, timeout=30)
@@ -51,7 +53,12 @@ def create_text_clip(text: str, duration: float, size: tuple, position: tuple) -
     W, H = size
     img = Image.new("RGBA", size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    font = ImageFont.truetype("DejaVuSans-Bold.ttf", 50)
+    try:
+        font = ImageFont.truetype(FONT_PATH, 50)
+    except OSError:
+        font = ImageFont.load_default()
+        print("[FONT] Trying to load:", FONT_PATH)
+        print("[FONT] Exists?", os.path.exists(FONT_PATH))
     bbox = draw.textbbox((0, 0), text, font=font)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
