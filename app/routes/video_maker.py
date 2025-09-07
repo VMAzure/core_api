@@ -1,124 +1,102 @@
-﻿import io
+﻿# app/routes/video_maker.py
+import io
 import os
 import tempfile
+from io import BytesIO
+
 import requests
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse
+
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from moviepy.video.VideoClip import ImageClip
 from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
-import moviepy.video.fx.FadeIn as vfx          
-import moviepy.video.fx.Resize as vfx
-
-
-
-# La riga seguente è la sintassi corretta per le versioni recenti di moviepy.
-# L'errore "could not be resolved" proviene dall'analizzatore di codice (linter)
-# e non da Python. Il commento `# type: ignore` è la soluzione standard e
-# professionale per istruire il linter a ignorare questo falso positivo,
-# risultando in un codice pulito e funzionale.
+import moviepy.video.fx.all as vfx  # type: ignore
 
 
 router = APIRouter(prefix="/video", tags=["Video"])
 
 
 def download_file_to_temp(url: str, suffix: str) -> str:
-    """
-    Downloads a file from a URL and saves it to a temporary file.
-    Returns the path to the temporary file.
-    CRITICAL: The caller is responsible for deleting this file.
-    """
+    """Scarica un file da URL in un file temporaneo e ritorna il path."""
     try:
         with requests.get(url, stream=True, timeout=30) as r:
             r.raise_for_status()
-            # Use delete=False because we need the path to pass to moviepy,
-            # and we will handle the deletion manually in a finally block.
             tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
             with open(tmp.name, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
             return tmp.name
     except Exception as e:
-        raise HTTPException(
-            status_code=400, detail=f"Download failed for {url}: {e}"
-        )
+        raise HTTPException(status_code=400, detail=f"Download failed for {url}: {e}")
 
 
 @router.get("/add-logo")
 def add_logo(
-    video_url: str = Query(..., description="Public URL of the video"),
+    video_url: str = Query(..., description="Public URL of the video (mp4)"),
     logo_url: str = Query(..., description="Public URL of the PNG logo"),
 ):
     """
-    Overlays a PNG logo onto a video.
-    - The logo appears after 1 second with a fade-in transition.
-    - Returns the resulting MP4 directly as a StreamingResponse.
+    Sovrappone un logo PNG a un video.
+    - Il logo appare dopo 1s con fade-in di 0.5s.
+    - Viene ridimensionato al 15% della larghezza del video.
+    - Restituisce l'MP4 come StreamingResponse.
     """
     video_path, logo_path = None, None
     clip, final_clip = None, None
 
     try:
-        # 1. Download video and logo to temporary files
+        # 1. Scarica video e logo
         video_path = download_file_to_temp(video_url, ".mp4")
         logo_path = download_file_to_temp(logo_url, ".png")
 
-        # 2. Load video and prepare clips
+        # 2. Carica il video
         clip = VideoFileClip(video_path)
         video_duration = clip.duration or 0
 
-        # Ensure the logo doesn't start after the video ends
+        # 3. Calcola tempi e durata logo
         start_s = 1 if video_duration > 1 else 0
         logo_duration = max(0, video_duration - start_s)
 
-        # Apply effects as functions, not as chained .fx() methods
-        logo_clip = ImageClip(logo_path, duration=logo_duration)
-        logo_clip = logo_clip.fx(vfx.fadein, 0.5)             # fade-in
-        logo_clip = logo_clip.fx(vfx.resize, width=int(clip.w * 0.15))  # resize
+        # 4. Crea il logo clip
+        logo_clip = (
+            ImageClip(logo_path, duration=logo_duration)
+            .with_start(start_s)
+            .with_effects([
+                vfx.FadeIn(0.5),
+                vfx.Resize(width=int(clip.w * 0.15)),
+            ])
+            .set_position(("right", "top"))
+            .set_opacity(0.9)
+        )
 
-
-        # Other methods that return a new clip can still be chained
-        logo_clip = ImageClip(logo_path, duration=logo_duration)
-
-        # Applica gli effetti con .with_effects([...])
-        logo_clip = logo_clip.with_effects([
-            vfx.FadeIn(0.5),                  # fade-in di 0.5s
-            vfx.Resize(width=int(clip.w*0.15))  # ridimensiona
-        ])
-
-        logo_clip.start = start_s
-
+        # 5. Composizione finale
         final_clip = CompositeVideoClip([clip, logo_clip])
 
-        # 3. Write the final video to a temporary output file
+        # 6. Scrittura su file temporaneo
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=True) as tmp_out:
             final_clip.write_videofile(
                 tmp_out.name,
                 codec="libx264",
                 audio_codec="aac",
                 fps=clip.fps or 24,
-                threads=4,  # Increased threads for potentially faster processing
+                threads=4,
                 logger=None,
             )
-
-            # Read the bytes to be sent in the response
             tmp_out.seek(0)
             video_bytes = tmp_out.read()
 
-        # 4. Return the result
         return StreamingResponse(io.BytesIO(video_bytes), media_type="video/mp4")
 
     finally:
-        # --- CRITICAL CLEANUP ---
-
-        # Close moviepy clips to release file handles
+        # cleanup risorse
         if clip:
             clip.close()
         if final_clip:
             final_clip.close()
-
-        # Delete the downloaded temporary files
-        if video_path and os.path.exists(video_path):
-            os.remove(video_path)
-        if logo_path and os.path.exists(logo_path):
-            os.remove(logo_path)
-
+        for p in (video_path, logo_path):
+            if p and os.path.exists(p):
+                try:
+                    os.remove(p)
+                except:
+                    pass
