@@ -4,9 +4,7 @@ import tempfile
 import requests
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse
-from moviepy.video.io.VideoFileClip import VideoFileClip
-from moviepy.video.VideoClip import ImageClip
-from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
+from moviepy import *
 # --- FIX DEFINITIVO E SPIEGAZIONE ---
 # La riga seguente è la sintassi corretta per le versioni recenti di moviepy.
 # L'errore "could not be resolved" proviene dall'analizzatore di codice (linter)
