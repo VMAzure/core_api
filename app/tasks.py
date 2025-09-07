@@ -215,6 +215,7 @@ def aggiorna_rating_convenienza_job():
 
 from app.routes.openai_config import _gemini_get_operation, _download_bytes, _sb_upload_and_sign
 from app.models import UsatoLeonardo
+import logging
 
 async def polla_video_gemini():
     logging.info("🎥 Polling Gemini video VEO3...")
@@ -232,11 +233,17 @@ async def polla_video_gemini():
                 if not op.get("done", False):
                     continue  # ancora in elaborazione
 
-                # Estrai URL
+                # Estrai URI compatibile con struttura Gemini VEO 3
+                resp = op.get("response", {})
+                vid0 = (resp.get("generatedVideos") or [{}])[0]
+                video_obj = vid0.get("video") or {}
+
                 uri = (
-                    op.get("response", {}).get("generatedVideos", [{}])[0].get("uri")
-                    or op.get("response", {}).get("generatedVideos", [{}])[0].get("videoUri")
+                    vid0.get("uri")
+                    or video_obj.get("uri")
+                    or video_obj.get("videoUri")
                 )
+
                 if not uri:
                     rec.status = "failed"
                     rec.error_message = "URI video mancante dal response Gemini"
