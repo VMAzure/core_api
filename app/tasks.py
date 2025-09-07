@@ -216,7 +216,7 @@ def aggiorna_rating_convenienza_job():
 from app.routes.openai_config import _gemini_get_operation, _download_bytes, _sb_upload_and_sign
 from app.models import UsatoLeonardo
 import logging
-from pprint import pprint  # se preferisci invece di json.dumps
+import json
 
 async def polla_video_gemini():
     logging.info("🎥 Polling Gemini video VEO3...")
@@ -273,7 +273,8 @@ async def polla_video_gemini():
                 db.commit()
                 logging.info(f"✅ Video Gemini completato: {rec.id}")
                 op = await _gemini_get_operation(rec.generation_id)
-                pprint(op) 
+                print(json.dumps(op, indent=2))
+
 
             except Exception as e:
                 db.rollback()
