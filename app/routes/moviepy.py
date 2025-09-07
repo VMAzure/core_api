@@ -44,7 +44,6 @@ def test_moviepy():
         if 'clip' in locals():
             clip.close()
 
-
 import io
 import os
 import tempfile
@@ -54,7 +53,7 @@ from fastapi.responses import StreamingResponse
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from moviepy.video.VideoClip import ImageClip
 from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
-from moviepy.video.fx import all as vfx
+# --- FIX: Removed the problematic import for effects ---
 
 router = APIRouter(prefix="/video", tags=["Video"])
 
@@ -103,12 +102,12 @@ def add_logo(
         start_s = 1 if video_duration > 1 else 0
         logo_duration = max(0, video_duration - start_s)
         
-        # --- FIX #1: Use `logo_path` instead of the undefined `logo_np` ---
         logo_clip = (
             ImageClip(logo_path, duration=logo_duration)
             .set_start(start_s)
-            .fx(vfx.fadein, 0.5)
-            .fx(vfx.resize, width=int(clip.w * 0.15)) # Resize logo relative to video width
+            # --- FIX: Use string names to apply effects, avoiding import issues ---
+            .fx("fadein", 0.5)
+            .fx("resize", width=int(clip.w * 0.15)) # Resize logo relative to video width
             .set_position(("right", "top"), margin=10) # Add a small margin
             .set_opacity(0.9)
         )
@@ -119,7 +118,7 @@ def add_logo(
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=True) as tmp_out:
             final_clip.write_videofile(
                 tmp_out.name,
-                codec="libx24",
+                codec="libx264",
                 audio_codec="aac",
                 fps=clip.fps or 24,
                 threads=4, # Increased threads for potentially faster processing
@@ -134,7 +133,7 @@ def add_logo(
         return StreamingResponse(io.BytesIO(video_bytes), media_type="video/mp4")
 
     finally:
-        # --- FIX #2: CRITICAL CLEANUP ---
+        # --- CRITICAL CLEANUP ---
         # Close moviepy clips to release file handles
         if clip:
             clip.close()
@@ -146,3 +145,8 @@ def add_logo(
             os.remove(video_path)
         if logo_path and os.path.exists(logo_path):
             os.remove(logo_path)
+
+
+
+
+
