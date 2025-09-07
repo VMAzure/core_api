@@ -56,7 +56,7 @@ def add_logo(request: VideoEditRequest):
             if remaining <= 0:
                 break
             dur = min(clip.duration, remaining + (XFADE_SEC if i > 0 else 0))
-            trimmed = clip.subclip(0, dur)
+            trimmed = clip.subclipped(0, dur)  # ✅ corretto in v2
             if i > 0:
                 trimmed = trimmed.set_start(total - XFADE_SEC).crossfadein(XFADE_SEC)
             else:
