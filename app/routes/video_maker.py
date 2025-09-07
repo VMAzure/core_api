@@ -51,18 +51,27 @@ def add_logo(request: VideoEditRequest):
         # 2. Applica trim e transizioni fino a 25s
         assembled = []
         total = 0.0
+
         for i, clip in enumerate(clips):
             remaining = MAX_DURATION - total
             if remaining <= 0:
                 break
+
+            # durata clip = intera se c'è spazio, altrimenti taglia
             dur = min(clip.duration, remaining + (XFADE_SEC if i > 0 else 0))
-            trimmed = clip.subclipped(0, dur)  # ✅ corretto in v2
+            trimmed = clip.subclipped(0, dur)
+
             if i > 0:
-                trimmed = trimmed.set_start(total - XFADE_SEC).crossfadein(XFADE_SEC)
+                # crossfade: la nuova clip inizia XFADE_SEC prima della fine della precedente
+                trimmed = trimmed.with_start(total - XFADE_SEC).with_effects([
+                    CrossFadeIn(XFADE_SEC)
+                ])
             else:
-                trimmed = trimmed.set_start(0)
+                trimmed = trimmed.with_start(0)
+
             assembled.append(trimmed)
             total = trimmed.end
+
 
         if not assembled:
             raise HTTPException(400, "Total video duration is zero.")
