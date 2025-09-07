@@ -7,11 +7,11 @@ from io import BytesIO
 import requests
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse
+from moviepy.video.fx.FadeIn import FadeIn
+from moviepy.video.fx.Resize import Resize
 
-from moviepy.video.io.VideoFileClip import VideoFileClip
-from moviepy.video.VideoClip import ImageClip
-from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
-import moviepy.video.fx.all as vfx  # type: ignore
+from moviepy import VideoFileClip, ImageClip, CompositeVideoClip
+import moviepy.video.fx as vfx  # ✅ v2
 
 
 router = APIRouter(prefix="/video", tags=["Video"])
@@ -59,19 +59,16 @@ def add_logo(
         logo_duration = max(0, video_duration - start_s)
 
         # 4. Crea il logo clip
-        logo_clip = (
-            ImageClip(logo_path, duration=logo_duration)
-            .with_start(start_s)
-            .with_effects([
-                vfx.FadeIn(0.5),
-                vfx.Resize(width=int(clip.w * 0.15)),
-            ])
-            .set_position(("right", "top"))
-            .set_opacity(0.9)
-        )
+        clip = VideoFileClip(video_path)
+        start_s = 1 if (clip.duration or 0) > 1 else 0
+        logo_duration = max(0, (clip.duration or 0) - start_s)
 
-        # 5. Composizione finale
-        final_clip = CompositeVideoClip([clip, logo_clip])
+        logo_clip = logo_clip.with_effects([
+            FadeIn(0.5),
+            Resize(width=150),
+        ])
+
+        final = CompositeVideoClip([clip, logo_clip])
 
         # 6. Scrittura su file temporaneo
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=True) as tmp_out:
