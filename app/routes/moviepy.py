@@ -43,3 +43,89 @@ def test_moviepy():
         # Ensure the clip resources are released, even if an error occurs.
         if 'clip' in locals():
             clip.close()
+
+
+# app/routes/video_logo.py
+import io
+import tempfile
+import requests
+from fastapi import APIRouter, Query, HTTPException
+from fastapi.responses import StreamingResponse
+from moviepy.video.VideoClip import VideoFileClip, ImageClip, CompositeVideoClip
+import numpy as np
+from PIL import Image
+
+router = APIRouter(prefix="/video", tags=["Video"])
+
+def download_file(url: str, suffix: str) -> str:
+    """Scarica un file da URL e lo salva in un file temporaneo."""
+    try:
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Download fallito: {e}")
+    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    tmp.write(resp.content)
+    tmp.flush()
+    return tmp.name
+
+@router.get("/add-logo")
+def add_logo(
+    video_url: str = Query(..., description="URL pubblico del video (Supabase)"),
+    logo_url: str = Query(..., description="URL pubblico del logo PNG (Supabase)")
+):
+    """
+    Inserisce il logo PNG dentro il video.
+    - Il logo compare dopo 1s con una transizione (fade-in).
+    - Restituisce direttamente l'MP4 come StreamingResponse.
+    """
+    try:
+        # Scarica video e logo
+        video_path = download_file(video_url, ".mp4")
+        logo_path = download_file(logo_url, ".png")
+
+        # Carica video
+        clip = VideoFileClip(video_path)
+
+        # Carica logo con PIL per preservare trasparenza
+        logo_img = Image.open(logo_path).convert("RGBA")
+        logo_np = np.array(logo_img)
+
+        # Clip logo (durata = durata video, parte da 1s)
+        logo_clip = (
+            ImageClip(logo_np)
+            .set_duration(clip.duration - 1)
+            .set_start(1)              # inizia dopo 1 secondo
+            .crossfadein(0.5)          # fade-in di mezzo secondo
+            .set_position(("right", "top"))
+            .resize(width=150)         # ridimensiona a 150px larghezza
+            .set_opacity(0.9)
+        )
+
+        # Composizione
+        final = CompositeVideoClip([clip, logo_clip])
+
+        # Scrittura in buffer
+        buf = io.BytesIO()
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=True) as tmp_out:
+            final.write_videofile(
+                tmp_out.name,
+                codec="libx264",
+                audio_codec="aac",
+                fps=clip.fps or 24,
+                threads=2,
+                logger=None
+            )
+            tmp_out.seek(0)
+            buf.write(tmp_out.read())
+
+        buf.seek(0)
+        return StreamingResponse(buf, media_type="video/mp4")
+
+    finally:
+        # cleanup risorse
+        if "clip" in locals():
+            clip.close()
+        if "final" in locals():
+            final.close()
+
