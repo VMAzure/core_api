@@ -4,14 +4,17 @@ import tempfile
 import requests
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse
-from moviepy import *
-# --- FIX DEFINITIVO E SPIEGAZIONE ---
+from moviepy.video.io.VideoFileClip import VideoFileClip
+from moviepy.video.VideoClip import ImageClip
+from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
+
+from moviepy.video.fx import FadeIn, Resize
+
 # La riga seguente è la sintassi corretta per le versioni recenti di moviepy.
 # L'errore "could not be resolved" proviene dall'analizzatore di codice (linter)
 # e non da Python. Il commento `# type: ignore` è la soluzione standard e
 # professionale per istruire il linter a ignorare questo falso positivo,
 # risultando in un codice pulito e funzionale.
-from moviepy.video.fx.all import fadein, resize  # type: ignore
 
 
 router = APIRouter(prefix="/video", tags=["Video"])
@@ -67,10 +70,9 @@ def add_logo(
 
         # Apply effects as functions, not as chained .fx() methods
         logo_clip = ImageClip(logo_path, duration=logo_duration)
+        logo_clip = FadeIn(0.5)(logo_clip)              # effetto fade-in
+        logo_clip = Resize(width=int(clip.w * 0.15))(logo_clip)  # resize
 
-        # Apply effects by passing the clip to the imported effect function
-        logo_clip = fadein(logo_clip, 0.5)
-        logo_clip = resize(logo_clip, width=int(clip.w * 0.15))
 
         # Other methods that return a new clip can still be chained
         logo_clip = logo_clip.set_position(("right", "top"), margin=10).set_opacity(
