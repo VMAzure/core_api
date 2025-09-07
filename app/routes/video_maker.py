@@ -7,8 +7,8 @@ from fastapi.responses import StreamingResponse
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from moviepy.video.VideoClip import ImageClip
 from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
-
-from moviepy.video.fx import FadeIn, Resize
+import moviepy.video.fx.FadeIn as vfx          
+import moviepy.video.fx.Resize as vfx
 
 # La riga seguente è la sintassi corretta per le versioni recenti di moviepy.
 # L'errore "could not be resolved" proviene dall'analizzatore di codice (linter)
@@ -70,8 +70,8 @@ def add_logo(
 
         # Apply effects as functions, not as chained .fx() methods
         logo_clip = ImageClip(logo_path, duration=logo_duration)
-        logo_clip = FadeIn(0.5)(logo_clip)              # effetto fade-in
-        logo_clip = Resize(width=int(clip.w * 0.15))(logo_clip)  # resize
+        logo_clip = logo_clip.fx(vfx.fadein, 0.5)             # fade-in
+        logo_clip = logo_clip.fx(vfx.resize, width=int(clip.w * 0.15))  # resize
 
 
         # Other methods that return a new clip can still be chained
