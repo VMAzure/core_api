@@ -18,6 +18,7 @@ from sqlalchemy.orm import joinedload
 import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
+import asyncio
 
 from app.utils.video_jobs import (
     video_daily_batch,
@@ -212,6 +213,71 @@ def aggiorna_rating_convenienza_job():
         db.close()
 
 
+from app.routes.openai_config import _gemini_get_operation, _download_bytes, _sb_upload_and_sign
+from app.models import UsatoLeonardo
+
+async def polla_video_gemini():
+    logging.info("🎥 Polling Gemini video VEO3...")
+    db = SessionLocal()
+    try:
+        recs = db.query(UsatoLeonardo).filter(
+            UsatoLeonardo.media_type == "video",
+            UsatoLeonardo.status == "processing",
+            UsatoLeonardo.generation_id.isnot(None)
+        ).all()
+
+        for rec in recs:
+            try:
+                op = await _gemini_get_operation(rec.generation_id)
+                if not op.get("done", False):
+                    continue  # ancora in elaborazione
+
+                # Estrai URL
+                uri = (
+                    op.get("response", {}).get("generatedVideos", [{}])[0].get("uri")
+                    or op.get("response", {}).get("generatedVideos", [{}])[0].get("videoUri")
+                )
+                if not uri:
+                    rec.status = "failed"
+                    rec.error_message = "URI video mancante dal response Gemini"
+                    db.commit()
+                    continue
+
+                # Scarica e salva su Supabase
+                blob = await _download_bytes(uri)
+                ext = ".mp4"
+                path = f"{str(rec.id_auto)}/{str(rec.id)}{ext}"
+                _, public_url = _sb_upload_and_sign(path, blob, "video/mp4")
+
+                # Attiva solo se nessun altro attivo
+                other_active = db.query(UsatoLeonardo).filter(
+                    UsatoLeonardo.id_auto == rec.id_auto,
+                    UsatoLeonardo.media_type == "video",
+                    UsatoLeonardo.is_active == True,
+                    UsatoLeonardo.id != rec.id
+                ).count()
+
+                rec.status = "completed"
+                rec.public_url = public_url
+                rec.storage_path = path
+                rec.is_active = other_active == 0
+
+                db.commit()
+                logging.info(f"✅ Video Gemini completato: {rec.id}")
+
+            except Exception as e:
+                db.rollback()
+                rec.status = "failed"
+                rec.error_message = str(e)
+                db.commit()
+                logging.warning(f"❌ Errore polling video {rec.id}: {e}")
+
+    except Exception as e:
+        logging.error(f"❌ Errore cronjob polla_video_gemini: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
 
 
 scheduler = BackgroundScheduler(job_defaults={'coalesce': True, 'max_instances': 1})
@@ -247,4 +313,10 @@ scheduler.add_job(video_revalidate_existing, 'cron', hour=2,  minute=45)   # dai
 scheduler.add_job(video_daily_batch,       'cron', hour=5,  minute=20)   # daily search
 scheduler.add_job(video_weekly_sweep,      'cron', day_of_week='sun', hour=5, minute=40)  # weekly
 
+# Video Gemin veo
+from apscheduler.triggers.interval import IntervalTrigger
+from app.routes.openai_config import _gemini_get_operation, _download_bytes, _sb_upload_and_sign
+from app.models import UsatoLeonardo
+
+scheduler.add_job(lambda: asyncio.create_task(polla_video_gemini()), IntervalTrigger(seconds=60))
 
