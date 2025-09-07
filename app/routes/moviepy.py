@@ -1,4 +1,4 @@
-import io
+ï»¿import io
 import os
 import tempfile
 import requests
@@ -8,9 +8,9 @@ from moviepy.video.io.VideoFileClip import VideoFileClip
 from moviepy.video.VideoClip import ImageClip
 from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
 # --- FIX DEFINITIVO E SPIEGAZIONE ---
-# La riga seguente è la sintassi corretta per le versioni recenti di moviepy.
+# La riga seguente Ã¨ la sintassi corretta per le versioni recenti di moviepy.
 # L'errore "could not be resolved" proviene dall'analizzatore di codice (linter)
-# e non da Python. Il commento `# type: ignore` è la soluzione standard e
+# e non da Python. Il commento `# type: ignore` Ã¨ la soluzione standard e
 # professionale per istruire il linter a ignorare questo falso positivo,
 # risultando in un codice pulito e funzionale.
 from moviepy.video.fx.all import fadein, resize  # type: ignore
@@ -103,6 +103,7 @@ def add_logo(
 
     finally:
         # --- CRITICAL CLEANUP ---
+
         # Close moviepy clips to release file handles
         if clip:
             clip.close()
