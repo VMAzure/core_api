@@ -51,7 +51,9 @@ import tempfile
 import requests
 from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse
-from moviepy.video.VideoClip import VideoFileClip, ImageClip, CompositeVideoClip
+from moviepy.video.io.VideoFileClip import VideoFileClip
+from moviepy.video.VideoClip import ImageClip, ColorClip
+from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
 import numpy as np
 from PIL import Image
 
