@@ -1,48 +1,3 @@
-import io
-import tempfile
-from fastapi import APIRouter
-from fastapi.responses import StreamingResponse
-from moviepy.video.VideoClip import ColorClip
-
-router = APIRouter(prefix="/moviepy", tags=["Test"])
-
-@router.get("/test")
-def test_moviepy():
-    """
-    Generates a 2-second red MP4 video (1080x1920) and returns it as a streaming response.
-    This version uses a secure temporary file to avoid disk I/O conflicts.
-    """
-    try:
-        # 1. Create the clip and assign the FPS attribute directly.
-        clip = ColorClip(size=(1080, 1920), color=(255, 0, 0), duration=2)
-        clip.fps = 24
-
-        # 2. Use a named temporary file to securely write the video to disk.
-        # The 'with' block ensures the file is automatically deleted afterward.
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=True) as temp_video_file:
-            temp_filename = temp_video_file.name
-            
-            # Write the video file to the unique temporary path
-            clip.write_videofile(
-                temp_filename,
-                codec="libx264",
-                audio=False,
-                fps=24,
-                threads=2,
-                logger=None  # Suppress console output
-            )
-            
-            # 3. Read the bytes from the temporary file to send them in the response.
-            temp_video_file.seek(0)
-            video_bytes = temp_video_file.read()
-
-        # Return the video bytes in a streaming response
-        return StreamingResponse(io.BytesIO(video_bytes), media_type="video/mp4")
-
-    finally:
-        # Ensure the clip resources are released, even if an error occurs.
-        if 'clip' in locals():
-            clip.close()
 
 import io
 import os
@@ -104,13 +59,14 @@ def add_logo(
         
         logo_clip = (
             ImageClip(logo_path, duration=logo_duration)
-            .set_start(start_s)
             # --- FIX: Use string names to apply effects, avoiding import issues ---
             .fx("fadein", 0.5)
             .fx("resize", width=int(clip.w * 0.15)) # Resize logo relative to video width
             .set_position(("right", "top"), margin=10) # Add a small margin
             .set_opacity(0.9)
         )
+        # --- FIX: Set start time as an attribute, not with a method ---
+        logo_clip.start = start_s
 
         final_clip = CompositeVideoClip([clip, logo_clip])
 
@@ -145,7 +101,6 @@ def add_logo(
             os.remove(video_path)
         if logo_path and os.path.exists(logo_path):
             os.remove(logo_path)
-
 
 
 
