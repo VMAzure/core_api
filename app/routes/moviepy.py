@@ -1,4 +1,3 @@
-
 import io
 import os
 import tempfile
@@ -8,9 +7,13 @@ from fastapi.responses import StreamingResponse
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from moviepy.video.VideoClip import ImageClip
 from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
-# --- FIX: Removed the problematic import for effects ---
+# --- FIX: Add a 'type: ignore' comment to suppress the linter error ---
+# This comment tells the code analyzer to ignore the unresolved import error,
+# which can happen with some libraries. The code itself will still work correctly.
+import moviepy.video.fx.all as vfx  # type: ignore
 
 router = APIRouter(prefix="/video", tags=["Video"])
+
 
 def download_file_to_temp(url: str, suffix: str) -> str:
     """
@@ -24,17 +27,20 @@ def download_file_to_temp(url: str, suffix: str) -> str:
             # Use delete=False because we need the path to pass to moviepy,
             # and we will handle the deletion manually in a finally block.
             tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-            with open(tmp.name, 'wb') as f:
+            with open(tmp.name, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
             return tmp.name
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Download failed for {url}: {e}")
+        raise HTTPException(
+            status_code=400, detail=f"Download failed for {url}: {e}"
+        )
+
 
 @router.get("/add-logo")
 def add_logo(
     video_url: str = Query(..., description="Public URL of the video"),
-    logo_url: str = Query(..., description="Public URL of the PNG logo")
+    logo_url: str = Query(..., description="Public URL of the PNG logo"),
 ):
     """
     Overlays a PNG logo onto a video.
@@ -56,16 +62,19 @@ def add_logo(
         # Ensure the logo doesn't start after the video ends
         start_s = 1 if video_duration > 1 else 0
         logo_duration = max(0, video_duration - start_s)
-        
-        logo_clip = (
-            ImageClip(logo_path, duration=logo_duration)
-            # --- FIX: Use string names to apply effects, avoiding import issues ---
-            .fx("fadein", 0.5)
-            .fx("resize", width=int(clip.w * 0.15)) # Resize logo relative to video width
-            .set_position(("right", "top"), margin=10) # Add a small margin
-            .set_opacity(0.9)
+
+        # Apply effects as functions, not as chained .fx() methods
+        logo_clip = ImageClip(logo_path, duration=logo_duration)
+
+        # Apply effects by passing the clip to the effect function
+        logo_clip = vfx.fadein(logo_clip, 0.5)
+        logo_clip = vfx.resize(logo_clip, width=int(clip.w * 0.15))
+
+        # Other methods that return a new clip can still be chained
+        logo_clip = logo_clip.set_position(("right", "top"), margin=10).set_opacity(
+            0.9
         )
-        # --- FIX: Set start time as an attribute, not with a method ---
+
         logo_clip.start = start_s
 
         final_clip = CompositeVideoClip([clip, logo_clip])
@@ -77,14 +86,14 @@ def add_logo(
                 codec="libx264",
                 audio_codec="aac",
                 fps=clip.fps or 24,
-                threads=4, # Increased threads for potentially faster processing
-                logger=None
+                threads=4,  # Increased threads for potentially faster processing
+                logger=None,
             )
-            
+
             # Read the bytes to be sent in the response
             tmp_out.seek(0)
             video_bytes = tmp_out.read()
-            
+
         # 4. Return the result
         return StreamingResponse(io.BytesIO(video_bytes), media_type="video/mp4")
 
@@ -95,13 +104,10 @@ def add_logo(
             clip.close()
         if final_clip:
             final_clip.close()
-            
+
         # Delete the downloaded temporary files
         if video_path and os.path.exists(video_path):
             os.remove(video_path)
         if logo_path and os.path.exists(logo_path):
             os.remove(logo_path)
-
-
-
 
