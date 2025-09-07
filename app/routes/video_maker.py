@@ -76,7 +76,7 @@ def add_logo(request: VideoEditRequest):
         if not assembled:
             raise HTTPException(400, "Total video duration is zero.")
 
-        base = CompositeVideoClip(assembled).set_duration(min(total, MAX_DURATION))
+        base = CompositeVideoClip(assembled).with_duration(min(total, MAX_DURATION))
 
         # 3. Se c'è logo, aggiungilo
         if request.logo_url:
