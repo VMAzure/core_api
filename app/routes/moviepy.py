@@ -1,7 +1,8 @@
 # app/routes/moviepy.py
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
-from moviepy.editor import ColorClip
+# Nuovo metodo
+from moviepy.video.VideoClip import ColorClip
 import io
 
 router = APIRouter(prefix="/moviepy/test", tags=["Test"])
