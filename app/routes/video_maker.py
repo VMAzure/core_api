@@ -10,6 +10,8 @@ from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
 import moviepy.video.fx.FadeIn as vfx          
 import moviepy.video.fx.Resize as vfx
 
+
+
 # La riga seguente è la sintassi corretta per le versioni recenti di moviepy.
 # L'errore "could not be resolved" proviene dall'analizzatore di codice (linter)
 # e non da Python. Il commento `# type: ignore` è la soluzione standard e
@@ -75,9 +77,13 @@ def add_logo(
 
 
         # Other methods that return a new clip can still be chained
-        logo_clip = logo_clip.set_position(("right", "top"), margin=10).set_opacity(
-            0.9
-        )
+        logo_clip = ImageClip(logo_path, duration=logo_duration)
+
+        # Applica gli effetti con .with_effects([...])
+        logo_clip = logo_clip.with_effects([
+            vfx.FadeIn(0.5),                  # fade-in di 0.5s
+            vfx.Resize(width=int(clip.w*0.15))  # ridimensiona
+        ])
 
         logo_clip.start = start_s
 
