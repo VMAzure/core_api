@@ -16,6 +16,8 @@ from fastapi import APIRouter, Request, HTTPException, Depends
 from sqlalchemy.orm import Session
 import json
 import requests
+import re, unicodedata
+
 
 import logging, json, os
 GEMINI_DEBUG = os.getenv("GEMINI_DEBUG", "0") == "1"
@@ -265,18 +267,37 @@ def _gemini_assert_api():
         raise HTTPException(500, "GEMINI_API_KEY non configurata")
     genai.configure(api_key=GEMINI_API_KEY)
 
-def _gemini_build_prompt(marca: str, modello: str, anno: int, colore: Optional[str], allestimento: Optional[str] = None) -> str:
+def _plate_text_from_user(user: User) -> str:
+    name = (
+        getattr(user, "ragione_sociale", None)
+        or getattr(user, "nome", None)
+        or (user.email.split("@")[0] if getattr(user, "email", None) else None)
+        or "AZURE"
+    )
+    # ASCII upper, solo A-Z0-9, max 8
+    s = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    s = re.sub(r"[^A-Z0-9]", "", s.upper())
+    return (s[:8] or "AZURE")
+
+
+def _gemini_build_prompt(
+    marca: str, modello: str, anno: int, colore: Optional[str],
+    allestimento: Optional[str] = None, plate_text: Optional[str] = None
+) -> str:
     colore_txt = f" {colore}" if colore else ""
     anno_txt = f" {anno}" if anno else ""
     allest_txt = f" {allestimento}" if allestimento else ""
     base = f"{marca} {modello}{allest_txt}{anno_txt}{colore_txt}"
+    plate = f'Show a visible license plate that reads "{plate_text}" in a racing-style font. ' if plate_text else ""
     return (
         f"Generate a cinematic video of a {base}. "
         "Keep proportions, design and color factory-accurate. "
         "Place the car in a modern urban setting at dusk with realistic lighting and reflections. "
         "Smooth orbiting camera, three-quarter front view, natural motion. "
-        "No text, no subtitles, no non-Latin characters."
+        f"{plate}"
+        "No overlaid text or subtitles, no non-Latin characters."
     )
+
 
 
 async def _download_bytes(url: str) -> bytes:
@@ -365,14 +386,20 @@ async def genera_video_hero_veo3(
     if not (marca and modello and anno > 0):
         raise HTTPException(422, "Marca/Modello/Anno non disponibili")
 
+    plate_text = _plate_text_from_user(user)  # A–Z0–9, max 8
+
     prompt = (
         f"{payload.scenario.strip()} "
         f"The vehicle is a {marca} {modello} {allestimento or ''} {anno} in {colore}. "
         "Keep proportions, design and color factory-accurate. "
-        "No text, no subtitles, no non-Latin characters."
+        f'Show a visible license plate that reads "{plate_text}" in a racing-style font. '
+        "No overlaid text or subtitles, no non-Latin characters."
     ) if payload.scenario else (
-        payload.prompt_override or _gemini_build_prompt(marca, modello, anno, colore, allestimento)
+        payload.prompt_override or _gemini_build_prompt(
+            marca, modello, anno, colore, allestimento, plate_text=plate_text
+        )
     )
+
 
     _gemini_assert_api()
 
