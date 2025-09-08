@@ -125,12 +125,6 @@ class SiteSettingsPayload(BaseModel):
     claim_hero: str = None
     subclaim_hero: str = None
 
-
-
-
-
-
-
     servizi_visibili: dict = {
         "NLT": False,
         "REWIND": False,
@@ -500,16 +494,14 @@ async def get_site_settings(
 
 
 @router.get("/site-settings-public/{slug}")
-async def get_site_settings_public(
-    slug: str, 
-    db: Session = Depends(get_db)
-):
+async def get_site_settings_public(slug: str, db: Session = Depends(get_db)):
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
-
     if not settings:
         raise HTTPException(status_code=404, detail=f"Slug '{slug}' non trovato.")
 
     admin_user = db.query(User).filter(User.id == settings.admin_id).first()
+    dealer_user = db.query(User).filter(User.id == settings.dealer_id).first() if settings.dealer_id else None
+    visible_user = dealer_user or admin_user
 
     contact_email = settings.contact_email or (admin_user.email if admin_user else "")
     contact_phone = settings.contact_phone or (admin_user.cellulare if admin_user else "")
@@ -554,11 +546,7 @@ async def get_site_settings_public(
         "servizi_dettaglio": settings.servizi_dettaglio or {},
         "claim_hero": settings.claim_hero or "",
         "subclaim_hero": settings.subclaim_hero or "",
-
-
-
-
-
+        "avatar_url": (visible_user.avatar_url if visible_user else "") or "",  # <-- AGGIUNTO
         "agency_type": settings.prov_vetrina or 0  # ✅ aggiunto qui
 
     }
