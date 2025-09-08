@@ -41,6 +41,8 @@ from moviepy.video.fx.CrossFadeIn import CrossFadeIn
 from moviepy.video.fx.FadeIn import FadeIn
 from moviepy.video.fx.FadeOut import FadeOut
 from moviepy.video.fx.Resize import Resize
+from moviepy.video.fx.Crop import Crop  # se non l'hai già importato
+
 
 router = APIRouter(prefix="/video", tags=["Video"])
 
@@ -92,9 +94,21 @@ def add_logo(request: VideoEditRequest):
         for i, segment in enumerate(request.video_segments):
             path = download_temp_file(str(segment.url), ".mp4")
             temp_files.append(path)
-            clip = VideoFileClip(path).with_effects([
-                Resize(new_size=(target_w, target_h))
-            ])
+
+            clip = VideoFileClip(path)
+
+            if request.output_format == "portrait":
+                # Mantieni altezza target, croppa larghezza centralmente
+                clip = clip.with_effects([
+                    Resize(height=target_h),
+                    Crop(width=target_w, x_center=clip.w // 2)
+                ])
+            else:
+                # Ridimensiona normalmente per landscape
+                clip = clip.with_effects([
+                    Resize(new_size=(target_w, target_h))
+                ])
+
             remaining = MAX_DURATION - total
             if remaining <= 0:
                 break
