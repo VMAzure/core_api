@@ -376,7 +376,7 @@ async def crea_boost(
     async def _get_prezzo():
         price_prompt = (
             f"""Trova online il prezzo di vendita consigliato in Italia per questo veicolo usato.
-Cerca SOLO su site:autoscout24.it.
+
 Usa come chiavi: "{marca} {allestimento}".
 Filtra per anno ≈ {anno} (±1) e chilometraggio comparabile a {int(body.km_certificati)} km.
 Per marche con accenti usa anche la variante senza accento (es. Citroën/Citroen).
