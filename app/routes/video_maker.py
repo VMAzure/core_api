@@ -1,6 +1,7 @@
 ﻿from pydantic import BaseModel, HttpUrl, validator
 from typing import List, Optional
 
+
 class VideoSegment(BaseModel):
     url: HttpUrl
     text1: Optional[str] = None
@@ -10,12 +11,20 @@ class VideoEditRequest(BaseModel):
     video_segments: List[VideoSegment]
     logo_url: Optional[HttpUrl] = None
     text_logo: Optional[str] = None
+    output_format: Optional[str] = "landscape"  # "landscape" or "portrait"
 
     @validator("video_segments")
     def validate_segments(cls, v):
         if not (1 <= len(v) <= 5):
             raise ValueError("You must provide between 1 and 5 video segments.")
         return v
+
+    @validator("output_format")
+    def validate_format(cls, v):
+        if v not in ["landscape", "portrait"]:
+            raise ValueError("output_format must be 'landscape' or 'portrait'")
+        return v
+
 
 
 import io
@@ -40,6 +49,10 @@ XFADE_SEC = 0.4
 FINAL_BLACK_SEC = 3.0
 FONT_PATH = os.path.join(os.path.dirname(__file__), "../fonts/Inter-Bold.ttf")
 
+RESOLUTIONS = {
+    "landscape": (1920, 1080),
+    "portrait": (1080, 1920)
+}
 
 def download_temp_file(url: str, suffix: str) -> str:
     r = requests.get(url, timeout=30)
@@ -57,8 +70,6 @@ def create_text_clip(text: str, duration: float, size: tuple, position: tuple) -
         font = ImageFont.truetype(FONT_PATH, 50)
     except OSError:
         font = ImageFont.load_default()
-        print("[FONT] Trying to load:", FONT_PATH)
-        print("[FONT] Exists?", os.path.exists(FONT_PATH))
     bbox = draw.textbbox((0, 0), text, font=font)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
@@ -69,6 +80,8 @@ def create_text_clip(text: str, duration: float, size: tuple, position: tuple) -
 
 @router.post("/add-logo")
 def add_logo(request: VideoEditRequest):
+    target_w, target_h = RESOLUTIONS.get(request.output_format or "landscape")
+
     temp_files = []
     clips = []
     overlays = []
@@ -79,7 +92,9 @@ def add_logo(request: VideoEditRequest):
         for i, segment in enumerate(request.video_segments):
             path = download_temp_file(str(segment.url), ".mp4")
             temp_files.append(path)
-            clip = VideoFileClip(path)
+            clip = VideoFileClip(path).with_effects([
+                Resize(new_size=(target_w, target_h))
+            ])
             remaining = MAX_DURATION - total
             if remaining <= 0:
                 break
@@ -98,43 +113,41 @@ def add_logo(request: VideoEditRequest):
             text_dur = max(0.0, trimmed.duration - 1.0)
             if segment.text1:
                 overlays.append(
-                    create_text_clip(segment.text1, text_dur, trimmed.size, (trimmed.w // 2, int(trimmed.h * 0.3)))
+                    create_text_clip(segment.text1, text_dur, (target_w, target_h), (target_w // 2, int(target_h * 0.3)))
                     .with_start(text_start)
                     .with_effects([FadeIn(0.4), FadeOut(0.4)])
                 )
             if segment.text2:
                 overlays.append(
-                    create_text_clip(segment.text2, text_dur, trimmed.size, (trimmed.w // 2, int(trimmed.h * 0.45)))
+                    create_text_clip(segment.text2, text_dur, (target_w, target_h), (target_w // 2, int(target_h * 0.45)))
                     .with_start(text_start)
                     .with_effects([FadeIn(0.4), FadeOut(0.4)])
                 )
 
             total = trimmed.end
 
-        base = CompositeVideoClip(clips + overlays).with_duration(min(total, MAX_DURATION))
+        base = CompositeVideoClip(clips + overlays, size=(target_w, target_h)).with_duration(min(total, MAX_DURATION))
 
-        # LOGO overlay ultimi 3 secondi
+        # LOGO overlay in alto a sinistra, fisso, da 1s fino alla fine
         if request.logo_url:
             logo_path = download_temp_file(str(request.logo_url), ".png")
             temp_files.append(logo_path)
-            start_logo = max(0.0, base.duration - 3.0)
-            logo_duration = base.duration - start_logo
             logo_clip = (
-                ImageClip(logo_path, duration=logo_duration)
-                .with_start(start_logo)
+                ImageClip(logo_path, duration=base.duration - 1)
+                .with_start(1.0)
                 .with_effects([
                     FadeIn(0.5),
-                    Resize(width=int(base.w * 0.9)),
+                    Resize(width=int(target_w * 0.22)),
                 ])
-                .with_position("center")
-                .with_opacity(0.95)
+                .with_position(("left", "top"))
+                .with_opacity(0.9)
             )
-            base = CompositeVideoClip([base, logo_clip], size=base.size)
+            base = CompositeVideoClip([base, logo_clip], size=(target_w, target_h))
+
 
         # FRAME finale nero con logo e testo
         if request.logo_url or request.text_logo:
-            black_frame = Image.new("RGB", (base.w, base.h), (0, 0, 0))
-            black_np = np.array(black_frame)
+            black_np = np.zeros((target_h, target_w, 3), dtype=np.uint8)
             black_clip = ImageClip(black_np, duration=FINAL_BLACK_SEC).with_start(base.duration)
 
             final_overlays = []
@@ -142,17 +155,17 @@ def add_logo(request: VideoEditRequest):
                 final_overlays.append(
                     ImageClip(logo_path, duration=FINAL_BLACK_SEC)
                     .with_start(base.duration)
-                    .with_effects([Resize(width=int(base.w * 0.5))])
-                    .with_position(("center", int(base.h * 0.35)))
+                    .with_effects([Resize(width=int(target_w * 0.5))])
+                    .with_position(("center", int(target_h * 0.35)))
                     .with_opacity(1.0)
                 )
             if request.text_logo:
                 final_overlays.append(
-                    create_text_clip(request.text_logo, FINAL_BLACK_SEC, (base.w, base.h), (base.w // 2, int(base.h * 0.75)))
+                    create_text_clip(request.text_logo, FINAL_BLACK_SEC, (target_w, target_h), (target_w // 2, int(target_h * 0.75)))
                     .with_start(base.duration)
                 )
 
-            final = CompositeVideoClip([base, black_clip, *final_overlays], size=base.size).with_duration(base.duration + FINAL_BLACK_SEC)
+            final = CompositeVideoClip([base, black_clip, *final_overlays], size=(target_w, target_h)).with_duration(base.duration + FINAL_BLACK_SEC)
         else:
             final = base
 
