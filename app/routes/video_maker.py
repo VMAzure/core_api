@@ -98,16 +98,17 @@ def add_logo(request: VideoEditRequest):
             clip = VideoFileClip(path)
 
             if request.output_format == "portrait":
-                # Mantieni altezza target, croppa larghezza centralmente
+                # ⬇️ Ridimensiona per altezza, poi croppa centrato su larghezza
                 clip = clip.with_effects([
                     Resize(height=target_h),
-                    Crop(width=target_w, x_center=clip.w // 2)
+                    Crop(width=target_w, x_center=int(clip.size[0] / 2))
                 ])
             else:
-                # Ridimensiona normalmente per landscape
+                # ⬇️ Resize pieno (orizzontale)
                 clip = clip.with_effects([
                     Resize(new_size=(target_w, target_h))
                 ])
+
 
             remaining = MAX_DURATION - total
             if remaining <= 0:
@@ -142,21 +143,25 @@ def add_logo(request: VideoEditRequest):
 
         base = CompositeVideoClip(clips + overlays, size=(target_w, target_h)).with_duration(min(total, MAX_DURATION))
 
-        # LOGO overlay in alto a sinistra, fisso, da 1s fino alla fine
+        # LOGO fisso in alto a sinistra, da 1s fino alla fine
         if request.logo_url:
             logo_path = download_temp_file(str(request.logo_url), ".png")
             temp_files.append(logo_path)
+
+            logo_width = int(target_w * 0.22) if request.output_format == "landscape" else int(target_w * 0.44)
+
             logo_clip = (
                 ImageClip(logo_path, duration=base.duration - 1)
                 .with_start(1.0)
                 .with_effects([
                     FadeIn(0.5),
-                    Resize(width=int(target_w * 0.22)),
+                    Resize(width=logo_width),
                 ])
                 .with_position(("left", "top"))
                 .with_opacity(0.9)
             )
             base = CompositeVideoClip([base, logo_clip], size=(target_w, target_h))
+
 
 
         # FRAME finale nero con logo e testo
