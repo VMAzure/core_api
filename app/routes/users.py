@@ -451,6 +451,8 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
                     "logo_url": dealer.logo_url,
                     "created_at": dealer.created_at.isoformat() if dealer.created_at else None,
                     "updated_at": dealer.updated_at.isoformat() if dealer.updated_at else None,
+                    "avatar_url": dealer.avatar_url,  # o admin.avatar_url
+
                 }
 
             # per compatibilità: includo anche admin_info = admin parent
@@ -913,11 +915,9 @@ async def upload_avatar(
 ):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
-
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accesso negato")
-
+        raise HTTPException(status_code=403, detail="Accesso negato")
     if file.content_type not in ["image/png", "image/jpeg", "image/jpg"]:
         raise HTTPException(status_code=400, detail="Formato immagine non supportato")
 
@@ -926,19 +926,21 @@ async def upload_avatar(
 
     try:
         content = await file.read()
-        response = supabase_client.storage.from_("avatars").upload(
-            file_name,
-            content,
-            {"content-type": file.content_type}
+        supabase_client.storage.from_("avatars").upload(
+            file_name, content, {"content-type": file.content_type}
         )
-
         image_url = f"{SUPABASE_URL}/storage/v1/object/public/avatars/{file_name}"
 
-        return {"message": "Avatar caricato con successo", "avatar_url": image_url}
+        # 🔥 persist
+        user.avatar_url = image_url
+        db.commit()
+        db.refresh(user)
 
+        return {"message": "Avatar caricato con successo", "avatar_url": image_url}
     except Exception as e:
-        print(f"❌ Errore durante l'upload avatar su Supabase: {e}")
+        print(f"❌ Upload avatar Supabase: {e}")
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+
 
 @router.post("/forgot-password")
 def forgot_password(email: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
