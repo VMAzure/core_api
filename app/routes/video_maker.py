@@ -99,10 +99,20 @@ def add_logo(request: VideoEditRequest):
 
             if request.output_format == "portrait":
                 # ⬇️ Ridimensiona per altezza, poi croppa centrato su larghezza
+                # Step 1: resize (solo altezza)
                 clip = clip.with_effects([
-                    Resize(height=target_h),
-                    Crop(width=target_w, x_center=int(clip.size[0] / 2))
+                    Resize(height=target_h)
                 ])
+
+                # Step 2: calcola larghezza reale dopo resize
+                resized_width = clip.size[0]  # ora corretta
+                x_center = int(resized_width / 2)
+
+                # Step 3: crop centrato
+                clip = clip.with_effects([
+                    Crop(width=target_w, x_center=x_center)
+                ])
+
             else:
                 # ⬇️ Resize pieno (orizzontale)
                 clip = clip.with_effects([
@@ -126,18 +136,27 @@ def add_logo(request: VideoEditRequest):
             # TEXT overlay
             text_start = trimmed.start + 0.5
             text_dur = max(0.0, trimmed.duration - 1.0)
+            if request.output_format == "portrait":
+                text1_y = int(target_h * 0.32)
+                text2_y = int(target_h * 0.39)
+            else:
+                text1_y = int(target_h * 0.3)
+                text2_y = int(target_h * 0.45)
+
             if segment.text1:
                 overlays.append(
-                    create_text_clip(segment.text1, text_dur, (target_w, target_h), (target_w // 2, int(target_h * 0.3)))
+                    create_text_clip(segment.text1, text_dur, (target_w, target_h), (target_w // 2, text1_y))
                     .with_start(text_start)
                     .with_effects([FadeIn(0.4), FadeOut(0.4)])
                 )
+
             if segment.text2:
                 overlays.append(
-                    create_text_clip(segment.text2, text_dur, (target_w, target_h), (target_w // 2, int(target_h * 0.45)))
+                    create_text_clip(segment.text2, text_dur, (target_w, target_h), (target_w // 2, text2_y))
                     .with_start(text_start)
                     .with_effects([FadeIn(0.4), FadeOut(0.4)])
                 )
+
 
             total = trimmed.end
 
