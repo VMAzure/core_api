@@ -363,34 +363,6 @@ async def _download_bytes(url: str) -> bytes:
 
 import httpx
 
-async def _gemini_start_video(prompt: str) -> str:
-    if not GEMINI_API_KEY:
-        raise HTTPException(500, "GEMINI_API_KEY non configurata")
-
-    url = "https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-generate-preview:predictLongRunning"
-    payload = {
-        "instances": [{
-            "prompt": prompt
-        }],
-        "parameters": {
-            "aspectRatio": "16:9"
-            # opzionale: "negativePrompt": "...", "personGeneration": "allow_adult"
-        }
-    }
-
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(
-            url,
-            json=payload,
-            headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
-        )
-        if r.status_code >= 300:
-            raise HTTPException(r.status_code, f"Errore Gemini: {r.text}")
-        data = r.json()
-        op_name = data.get("name")
-        if not op_name:
-            raise HTTPException(502, f"Gemini: operation name mancante. Resp: {data}")
-        return op_name
 
 
 async def _gemini_get_operation(op_name: str) -> dict:
