@@ -910,19 +910,12 @@ def update_team_member(
 @router.post("/upload-avatar", tags=["Users"])
 async def upload_avatar(
     file: UploadFile = File(...),
-    Authorize: AuthJWT = Depends(),
-    db: Session = Depends(get_db)
 ):
-    Authorize.jwt_required()
-    user_email = Authorize.get_jwt_subject()
-    user = db.query(User).filter(User.email == user_email).first()
-    if not user:
-        raise HTTPException(status_code=403, detail="Accesso negato")
     if file.content_type not in ["image/png", "image/jpeg", "image/jpg"]:
         raise HTTPException(status_code=400, detail="Formato immagine non supportato")
 
     timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    file_name = f"avatars/{user.id}_{timestamp}_{file.filename}"
+    file_name = f"avatars/{timestamp}_{file.filename}"
 
     try:
         content = await file.read()
@@ -931,15 +924,13 @@ async def upload_avatar(
         )
         image_url = f"{SUPABASE_URL}/storage/v1/object/public/avatars/{file_name}"
 
-        # 🔥 persist
-        user.avatar_url = image_url
-        db.commit()
-        db.refresh(user)
+        # ⚠️ NON aggiorno più alcun utente
+        return {"message": "Upload completato", "avatar_url": image_url}
 
-        return {"message": "Avatar caricato con successo", "avatar_url": image_url}
     except Exception as e:
-        print(f"❌ Upload avatar Supabase: {e}")
+        print(f"❌ Errore durante l'upload su Supabase: {e}")
         raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+
 
 
 @router.post("/forgot-password")
