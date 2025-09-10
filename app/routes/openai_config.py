@@ -254,16 +254,13 @@ async def _gemini_start_video(prompt: str, start_image_url: Optional[str] = None
 
     instance = {"prompt": prompt}
 
-    # Se arriva l'URL di un'immagine → scaricala e aggiungila come conditioning
+    # Se arriva l’URL di un’immagine → scaricala e aggiungila
     if start_image_url:
-        try:
-            mime, b64 = await _fetch_image_base64_from_url(start_image_url)
-            instance["image"] = {
-                "mimeType": mime,
-                "bytesBase64Encoded": b64
-            }
-        except Exception as e:
-            raise HTTPException(502, f"Errore scaricamento immagine: {e}")
+        mime, b64 = await _fetch_image_base64_from_url(start_image_url)
+        instance["image"] = {
+            "mimeType": mime,
+            "bytesBase64Encoded": b64
+        }
 
     payload = {
         "instances": [instance],
@@ -285,6 +282,7 @@ async def _gemini_start_video(prompt: str, start_image_url: Optional[str] = None
         if not op_name:
             raise HTTPException(502, f"Gemini: operation name mancante. Resp: {data}")
         return op_name
+
 
 
 
