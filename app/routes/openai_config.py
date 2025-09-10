@@ -236,18 +236,17 @@ class GeminiImageHeroResponse(BaseModel):
 import base64
 
 async def _fetch_image_base64_from_url(url: str) -> tuple[str, str]:
-    """Scarica un'immagine e ritorna (mime_type, base64string)."""
+    """Scarica immagine da URL e restituisce (mime_type, base64string)."""
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.get(url)
         if r.status_code >= 300:
             raise HTTPException(502, f"Download immagine fallito: {r.text}")
-
-        # deduci MIME type da header o fallback a png
         mime = r.headers.get("content-type", "image/png")
         b64 = base64.b64encode(r.content).decode("utf-8")
         return mime, b64
 
-async def _gemini_start_video(prompt: str, image_url: Optional[str] = None) -> str:
+
+async def _gemini_start_video(prompt: str, start_image_url: Optional[str] = None) -> str:
     if not GEMINI_API_KEY:
         raise HTTPException(500, "GEMINI_API_KEY non configurata")
 
@@ -255,12 +254,16 @@ async def _gemini_start_video(prompt: str, image_url: Optional[str] = None) -> s
 
     instance = {"prompt": prompt}
 
-    if image_url:
-        mime, b64 = await _fetch_image_base64_from_url(image_url)
-        instance["image"] = {
-            "mimeType": mime,
-            "bytesBase64Encoded": b64
-        }
+    # Se arriva l'URL di un'immagine → scaricala e aggiungila come conditioning
+    if start_image_url:
+        try:
+            mime, b64 = await _fetch_image_base64_from_url(start_image_url)
+            instance["image"] = {
+                "mimeType": mime,
+                "bytesBase64Encoded": b64
+            }
+        except Exception as e:
+            raise HTTPException(502, f"Errore scaricamento immagine: {e}")
 
     payload = {
         "instances": [instance],
@@ -435,26 +438,24 @@ async def genera_video_hero_veo3(
     allestimento = (getattr(det, "allestimento", None) or "").strip() if det else None
     anno = int(getattr(auto, "anno_immatricolazione", 0) or 0)
     colore = (getattr(auto, "colore", None) or "").strip()
-    operation_id = await _gemini_start_video(prompt, payload.start_image_url)
-
 
     if not (marca and modello and anno > 0):
         raise HTTPException(422, "Marca/Modello/Anno non disponibili")
 
     plate_text = _plate_text_from_user(user)  # A–Z0–9, max 8
 
+    # Costruzione prompt
     prompt = (
         f"{payload.scenario.strip()} "
         f"The vehicle is a {marca} {modello} {allestimento or ''} {anno} in {colore}. "
         "Keep proportions, design and color factory-accurate. "
-        f'Show a visible license plate that reads "{plate_text}" in a racing-style font. '
+        f'Show a visible license plate that reads \"{plate_text}\" in a racing-style font. '
         "No overlaid text or subtitles, no non-Latin characters."
     ) if payload.scenario else (
         payload.prompt_override or _gemini_build_prompt(
             marca, modello, anno, colore, allestimento, plate_text=plate_text
         )
     )
-
 
     _gemini_assert_api()
 
@@ -472,18 +473,15 @@ async def genera_video_hero_veo3(
         seed=None,
         user_id=user.id
     )
-
-    # imposta attributi non presenti nel costruttore (solo se esistono nel modello DB)
     rec.media_type = "video"
     rec.mime_type = "video/mp4"
-    # rec.credit_cost = GEMINI_IMG_CREDIT_COST  ← SOLO se esiste nel modello
 
     db.add(rec)
     db.commit()
     db.refresh(rec)
 
     try:
-        operation_id = await _gemini_start_video(prompt)
+        operation_id = await _gemini_start_video(prompt, payload.start_image_url)
     except Exception as e:
         rec.status = "failed"
         rec.error_message = str(e)
@@ -499,9 +497,9 @@ async def genera_video_hero_veo3(
         id_auto=payload.id_auto,
         gemini_operation_id=operation_id,
         status="processing",
-        usato_leonardo_id=rec.id  
-
+        usato_leonardo_id=rec.id
     )
+
 
 @router.post("/veo3/video-status", response_model=GeminiVideoStatusResponse, tags=["Gemini VEO 3"])
 async def check_video_status(
