@@ -196,9 +196,6 @@ class GeminiVideoHeroRequest(BaseModel):
     start_image_url: Optional[str] = None  # 👈 nuovo campo
 
 
-
-
-
 class GeminiVideoStatusRequest(BaseModel):
     operation_id: str
 
@@ -252,9 +249,9 @@ async def _gemini_start_video(prompt: str, start_image_url: Optional[str] = None
 
     url = "https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-generate-preview:predictLongRunning"
 
+    # build instance
     instance = {"prompt": prompt}
 
-    # Se arriva l’URL di un’immagine → scaricala e aggiungila
     if start_image_url:
         mime, b64 = await _fetch_image_base64_from_url(start_image_url)
         instance["image"] = {
@@ -282,6 +279,7 @@ async def _gemini_start_video(prompt: str, start_image_url: Optional[str] = None
         if not op_name:
             raise HTTPException(502, f"Gemini: operation name mancante. Resp: {data}")
         return op_name
+
 
 
 
