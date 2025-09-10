@@ -193,7 +193,8 @@ class GeminiVideoHeroRequest(BaseModel):
     id_auto: _UUID
     scenario: Optional[str] = None
     prompt_override: Optional[str] = None
-    start_image_base64: Optional[str] = None  # 👈 aggiunto
+    start_image_url: Optional[str] = None  # 👈 nuovo campo
+
 
 
 
@@ -232,17 +233,33 @@ class GeminiImageHeroResponse(BaseModel):
     generation_id: Optional[str] = None  # ✅ aggiunto
 
 
-async def _gemini_start_video(prompt: str, start_image_b64: Optional[str] = None) -> str:
+import base64
+
+async def _fetch_image_base64_from_url(url: str) -> tuple[str, str]:
+    """Scarica un'immagine e ritorna (mime_type, base64string)."""
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.get(url)
+        if r.status_code >= 300:
+            raise HTTPException(502, f"Download immagine fallito: {r.text}")
+
+        # deduci MIME type da header o fallback a png
+        mime = r.headers.get("content-type", "image/png")
+        b64 = base64.b64encode(r.content).decode("utf-8")
+        return mime, b64
+
+async def _gemini_start_video(prompt: str, image_url: Optional[str] = None) -> str:
     if not GEMINI_API_KEY:
         raise HTTPException(500, "GEMINI_API_KEY non configurata")
 
     url = "https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-generate-preview:predictLongRunning"
 
     instance = {"prompt": prompt}
-    if start_image_b64:
+
+    if image_url:
+        mime, b64 = await _fetch_image_base64_from_url(image_url)
         instance["image"] = {
-            "mimeType": "image/png",  # o image/jpeg se serve
-            "bytesBase64Encoded": start_image_b64
+            "mimeType": mime,
+            "bytesBase64Encoded": b64
         }
 
     payload = {
@@ -265,6 +282,7 @@ async def _gemini_start_video(prompt: str, start_image_b64: Optional[str] = None
         if not op_name:
             raise HTTPException(502, f"Gemini: operation name mancante. Resp: {data}")
         return op_name
+
 
 
 def _extract_video_uri(op: dict):
@@ -417,7 +435,7 @@ async def genera_video_hero_veo3(
     allestimento = (getattr(det, "allestimento", None) or "").strip() if det else None
     anno = int(getattr(auto, "anno_immatricolazione", 0) or 0)
     colore = (getattr(auto, "colore", None) or "").strip()
-    operation_id = await _gemini_start_video(prompt, payload.start_image_base64)
+    operation_id = await _gemini_start_video(prompt, payload.start_image_url)
 
 
     if not (marca and modello and anno > 0):
