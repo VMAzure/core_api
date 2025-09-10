@@ -193,6 +193,8 @@ class GeminiVideoHeroRequest(BaseModel):
     id_auto: _UUID
     scenario: Optional[str] = None
     prompt_override: Optional[str] = None
+    start_image_base64: Optional[str] = None  # 👈 aggiunto
+
 
 
 
@@ -230,6 +232,39 @@ class GeminiImageHeroResponse(BaseModel):
     generation_id: Optional[str] = None  # ✅ aggiunto
 
 
+async def _gemini_start_video(prompt: str, start_image_b64: Optional[str] = None) -> str:
+    if not GEMINI_API_KEY:
+        raise HTTPException(500, "GEMINI_API_KEY non configurata")
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-generate-preview:predictLongRunning"
+
+    instance = {"prompt": prompt}
+    if start_image_b64:
+        instance["image"] = {
+            "mimeType": "image/png",  # o image/jpeg se serve
+            "bytesBase64Encoded": start_image_b64
+        }
+
+    payload = {
+        "instances": [instance],
+        "parameters": {
+            "aspectRatio": "16:9"
+        }
+    }
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.post(
+            url,
+            json=payload,
+            headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+        )
+        if r.status_code >= 300:
+            raise HTTPException(r.status_code, f"Errore Gemini: {r.text}")
+        data = r.json()
+        op_name = data.get("name")
+        if not op_name:
+            raise HTTPException(502, f"Gemini: operation name mancante. Resp: {data}")
+        return op_name
 
 
 def _extract_video_uri(op: dict):
@@ -382,6 +417,8 @@ async def genera_video_hero_veo3(
     allestimento = (getattr(det, "allestimento", None) or "").strip() if det else None
     anno = int(getattr(auto, "anno_immatricolazione", 0) or 0)
     colore = (getattr(auto, "colore", None) or "").strip()
+    operation_id = await _gemini_start_video(prompt, payload.start_image_base64)
+
 
     if not (marca and modello and anno > 0):
         raise HTTPException(422, "Marca/Modello/Anno non disponibili")
