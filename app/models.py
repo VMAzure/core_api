@@ -1428,3 +1428,19 @@ class UsatoLeonardo(Base):
     # backref generici (non “video_”)
     utente = relationship("User", backref="usato_media")
     auto = relationship("AZLeaseUsatoAuto", backref="usato_media")
+
+class ScenarioDealer(Base):
+    __tablename__ = "scenario_dealer"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dealer_id = Column(Integer, ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False)
+
+    titolo = Column(String(255), nullable=True)        # opzionale, per identificare
+    descrizione = Column(Text, nullable=False)         # testo libero scritto dal dealer
+    tags = Column(String(255), nullable=True)          # opzionale: parole chiave/categorie
+
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+
+    dealer = relationship("User", backref="scenari")
