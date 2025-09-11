@@ -1113,6 +1113,20 @@ class MnetMarcaUsato(Base):
     logo = Column(String)
 
 
+class MnetAnniUsato(Base):
+    __tablename__ = "mnet_anni_usato"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    marca_acronimo = Column(String(10), nullable=False, index=True)
+    anno = Column(Integer, nullable=False, index=True)
+    mese = Column(Integer, nullable=False, index=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("marca_acronimo", "anno", "mese", name="uq_marca_anno_mese"),
+    )
+
+
 
 
 class MnetModelloUsato(Base):
