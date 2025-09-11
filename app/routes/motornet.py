@@ -121,38 +121,53 @@ async def get_marche_usato_pubblico(
     ]
 
 
+from typing import Optional
+from datetime import date
+
 @router_usato.get("/modelli/{codice_marca}", tags=["Usato"])
 async def get_modelli_usato(
     codice_marca: str,
+    anno: Optional[int] = None,   # 👈 opzionale
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
-
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    modelli = db.query(MnetModelloUsato).filter(
+    q = db.query(MnetModelloUsato).filter(
         MnetModelloUsato.marca_acronimo == codice_marca
-    ).order_by(MnetModelloUsato.descrizione).all()
+    )
+
+    if anno:
+        start = date(anno, 1, 1)
+        end = date(anno, 12, 31)
+        q = q.filter(
+            MnetModelloUsato.inizio_commercializzazione <= end,
+            (MnetModelloUsato.fine_commercializzazione.is_(None)) |
+            (MnetModelloUsato.fine_commercializzazione >= start)
+        )
+
+    modelli = q.order_by(MnetModelloUsato.descrizione).all()
 
     return [
         {
             "codice": m.codice_modello,
             "descrizione": m.descrizione,
-            "inizio_produzione": m.inizio_produzione,
-            "fine_produzione": m.fine_produzione,
             "inizio_commercializzazione": m.inizio_commercializzazione,
             "fine_commercializzazione": m.fine_commercializzazione,
+            "inizio_produzione": m.inizio_produzione,
+            "fine_produzione": m.fine_produzione,
             "gruppo_storico": m.gruppo_storico,
             "serie_gamma": m.serie_gamma,
             "codice_desc_modello": m.codice_desc_modello,
             "descrizione_dettagliata": m.descrizione_dettagliata,
             "segmento": m.segmento,
             "tipo": m.tipo
-        } for m in modelli
+        }
+        for m in modelli
     ]
 
 
