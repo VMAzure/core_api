@@ -5,7 +5,7 @@ from fastapi_jwt_auth import AuthJWT
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.database import get_db, supabase_client
-from app.models import User, PurchasedServices, Services, CreditTransaction
+from app.models import User, PurchasedServices, Services, CreditTransaction, ScenarioDealer
 from app.auth_helpers import is_admin_user, is_dealer_user
 from app.routes.notifiche import inserisci_notifica
 from app.openai_utils import genera_descrizione_gpt
@@ -1210,3 +1210,123 @@ def usa_hero_media(id: UUID, Authorize: AuthJWT = Depends(), db: Session = Depen
     db.commit()
     return {"success": True}
 
+
+class ScenarioDealerRequest(BaseModel):
+    titolo: Optional[str] = None
+    descrizione: str
+    tags: Optional[str] = None
+
+
+@router.post("/scenario-dealer", tags=["Scenario Dealer"])
+async def crea_scenario_dealer(
+    payload: ScenarioDealerRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    # Autenticazione
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(403, "Utente non trovato")
+
+    # ✅ Inserisci record
+    rec = ScenarioDealer(
+        dealer_id=user.id,
+        titolo=payload.titolo,
+        descrizione=payload.descrizione,
+        tags=payload.tags
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+
+    return {
+        "success": True,
+        "id": str(rec.id),
+        "titolo": rec.titolo,
+        "descrizione": rec.descrizione,
+        "tags": rec.tags,
+        "created_at": rec.created_at.isoformat()
+    }
+
+
+@router.get("/scenario-dealer/miei", tags=["Scenario Dealer"])
+async def lista_scenari_dealer(
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(403, "Utente non trovato")
+
+    records = db.query(ScenarioDealer).filter(ScenarioDealer.dealer_id == user.id).order_by(ScenarioDealer.created_at.desc()).all()
+    return [
+        {
+            "id": str(r.id),
+            "titolo": r.titolo,
+            "descrizione": r.descrizione,
+            "tags": r.tags,
+            "created_at": r.created_at.isoformat(),
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None
+        }
+        for r in records
+    ]
+
+
+class ScenarioDealerUpdateRequest(BaseModel):
+    titolo: Optional[str] = None
+    descrizione: Optional[str] = None
+    tags: Optional[str] = None
+
+
+@router.patch("/scenario-dealer/{id}", tags=["Scenario Dealer"])
+async def aggiorna_scenario_dealer(
+    id: UUID,
+    payload: ScenarioDealerUpdateRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(403, "Utente non trovato")
+
+    rec = db.query(ScenarioDealer).filter(ScenarioDealer.id == id, ScenarioDealer.dealer_id == user.id).first()
+    if not rec:
+        raise HTTPException(404, "Scenario non trovato")
+
+    if payload.titolo is not None:
+        rec.titolo = payload.titolo
+    if payload.descrizione is not None:
+        rec.descrizione = payload.descrizione
+    if payload.tags is not None:
+        rec.tags = payload.tags
+
+    db.commit()
+    db.refresh(rec)
+    return {"success": True, "id": str(rec.id)}
+
+
+@router.delete("/scenario-dealer/{id}", tags=["Scenario Dealer"])
+async def elimina_scenario_dealer(
+    id: UUID,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(403, "Utente non trovato")
+
+    rec = db.query(ScenarioDealer).filter(ScenarioDealer.id == id, ScenarioDealer.dealer_id == user.id).first()
+    if not rec:
+        raise HTTPException(404, "Scenario non trovato")
+
+    db.delete(rec)
+    db.commit()
+    return {"success": True}
