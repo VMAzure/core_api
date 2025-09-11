@@ -607,8 +607,6 @@ async def _gemini_generate_image_sync(prompt: str, start_image_url: Optional[str
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent"
 
     parts = [{"text": prompt}]
-
-    # Se passo anche un'immagine → aggiungo conditioning
     if start_image_url:
         mime, b64 = await _fetch_image_base64_from_url(start_image_url)
         parts.append({
@@ -618,31 +616,35 @@ async def _gemini_generate_image_sync(prompt: str, start_image_url: Optional[str
             }
         })
 
-    payload = {
-        "contents": [{"parts": parts}]
-    }
+    payload = {"contents": [{"parts": parts}]}
 
     async with httpx.AsyncClient(timeout=120) as client:
-        r = await client.post(
-            url,
-            json=payload,
-            headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"}
-        )
+        r = await client.post(url, json=payload, headers={
+            "x-goog-api-key": GEMINI_API_KEY,
+            "Content-Type": "application/json"
+        })
         if r.status_code >= 300:
             raise HTTPException(r.status_code, f"Errore Gemini image: {r.text}")
+
         data = r.json()
 
-        # Estrai immagine da inline_data
+        # Estrai immagine
         parts = (
             data.get("candidates", [{}])[0]
             .get("content", {})
             .get("parts", [])
         )
         for p in parts:
-            inline = p.get("inline_data") or p.get("inlineData")
+            inline = (
+                p.get("inline_data")
+                or p.get("inlineData")
+                or p.get("inline")  # fallback
+            )
             if inline and inline.get("data"):
                 return base64.b64decode(inline["data"])
-        raise HTTPException(502, "Gemini image: nessuna immagine nel response")
+
+        raise HTTPException(502, f"Gemini image: nessuna immagine trovata. Resp: {data}")
+
 
 
 @router.post("/veo3/image-hero", response_model=GeminiImageHeroResponse, tags=["Gemini VEO 3"])
