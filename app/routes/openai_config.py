@@ -268,6 +268,29 @@ async def _gemini_start_video(prompt: str, start_image_url: Optional[str] = None
         }
     }
 
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.post(
+            url,
+            json=payload,
+            headers={
+                "x-goog-api-key": GEMINI_API_KEY,
+                "Content-Type": "application/json"
+            }
+        )
+
+    if r.status_code >= 300:
+        raise HTTPException(r.status_code, f"Errore Gemini start: {r.text}")
+
+    data = r.json()
+    op_name = data.get("name")
+    if not op_name:
+        # log utile per debug
+        logging.error("Gemini start response senza 'name': %s", json.dumps(data, ensure_ascii=False))
+        raise HTTPException(502, f"Gemini: operation name mancante. Resp: {data}")
+
+    return op_name
+
+
 
 async def _fetch_image_base64_from_url(url: str) -> tuple[str, str]:
     """Scarica immagine da URL e restituisce (mime_type, base64string)."""
