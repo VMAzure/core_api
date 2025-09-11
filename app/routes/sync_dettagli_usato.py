@@ -117,6 +117,8 @@ def process_codice(codice_uni):
                 :sospensioni_pneumatiche, :emissioni_urbe, :emissioni_extraurb, :descrizione_breve,
                 :peso_potenza, :volumi, :ridotte, :paese_prod
             )
+            ON CONFLICT (codice_motornet_uni) DO NOTHING
+
         """), {
             "codice_motornet_uni": codice_uni,
             "modello": modello.get("modello"),

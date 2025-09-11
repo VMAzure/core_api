@@ -3,111 +3,101 @@ import time
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 from app.database import engine
-from threading import Lock
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import logging
-
-# Disattiva log SQLAlchemy verbosi
-logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
-
-
-MOTORN_AUTH_URL = "https://webservice.motornet.it/auth/realms/webservices/protocol/openid-connect/token"
-MODELLI_URL = "https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/marca/modelli"
+from datetime import datetime
 
 SessionLocal = sessionmaker(bind=engine)
-token_lock = Lock()
+
+MOTORN_AUTH_URL = "https://webservice.motornet.it/auth/realms/webservices/protocol/openid-connect/token"
+MODELLI_PROXY_URL = "https://webservice.motornet.it/api/v2_0/rest/proxy/usato/auto/modelli"
+
 shared_token = {"value": None}
-fail_lock = Lock()
-codici_falliti = []
 
 def get_motornet_token():
+    data = {
+        'grant_type': 'password',
+        'client_id': 'webservice',
+        'username': 'azure447',   # TODO: spostare in env var
+        'password': 'azwsn557',   # TODO: spostare in env var
+    }
     for attempt in range(3):
         try:
-            data = {
-                'grant_type': 'password',
-                'client_id': 'webservice',
-                'username': 'azure447',
-                'password': 'azwsn557',
-            }
-            response = requests.post(MOTORN_AUTH_URL, data=data)
-            response.raise_for_status()
-            token = response.json().get('access_token')
-            shared_token["value"] = token
-            return token
-        except requests.exceptions.RequestException as e:
+            resp = requests.post(MOTORN_AUTH_URL, data=data, timeout=15)
+            resp.raise_for_status()
+            shared_token["value"] = resp.json().get("access_token")
+            return shared_token["value"]
+        except Exception as e:
             print(f"❌ Errore richiesta token (tentativo {attempt+1}): {e}")
             time.sleep(2)
-    raise Exception("❌ Impossibile ottenere il token dopo 3 tentativi")
+    raise Exception("❌ Impossibile ottenere token Motornet")
 
-from datetime import datetime
+def parse_date(val):
+    try:
+        return datetime.strptime(val, "%Y-%m-%d").date() if val else None
+    except:
+        return None
 
-from datetime import datetime
-
-def process_modelli(acronimo):
+def process_modelli(marca, anno):
+    """Scarica i modelli per una marca+anno e salva in mnet_modelli_usato. Ritorna True/False."""
     db = SessionLocal()
-    inseriti = 0
-    skippati = 0
-    falliti = 0
 
-    for attempt in range(3):
+    # Skip se abbiamo già almeno un modello per marca+anno
+    esiste = db.execute(text("""
+        SELECT 1 FROM mnet_modelli_usato
+        WHERE marca_acronimo = :marca
+        AND inizio_produzione <= make_date(:anno, 12, 31)
+        LIMIT 1
+    """), {"marca": marca, "anno": anno}).fetchone()
+
+    if esiste:
+        print(f"⏭️  {marca}-{anno}: già presenti modelli, skippo")
+        db.close()
+        return True
+
+    url = f"{MODELLI_PROXY_URL}?codice_marca={marca}&anno={anno}&libro=false"
+    headers = {"Authorization": f"Bearer {shared_token['value']}"}
+
+    for attempt in range(5):
         try:
-            headers = {"Authorization": f"Bearer {shared_token['value']}"}
-            url = f"{MODELLI_URL}?codice_marca={acronimo}"
-            response = requests.get(url, headers=headers)
+            resp = requests.get(url, headers=headers, timeout=20)
 
-            if response.status_code == 401:
-                print(f"🔄 Token scaduto per {acronimo}, rinnovo...")
+            if resp.status_code == 401:
+                print(f"🔄 Token scaduto per {marca}-{anno}, rinnovo...")
                 get_motornet_token()
+                headers = {"Authorization": f"Bearer {shared_token['value']}"}
                 time.sleep(1)
                 continue
 
-            if response.status_code == 412:
-                print(f"⚠️ 412 Precondition per {acronimo}, salto.")
-                return
-
-            response.raise_for_status()
-            break
-        except Exception as e:
-            print(f"❌ Errore modelli {acronimo} (tentativo {attempt+1}): {e}")
-            time.sleep(1.5)
-    else:
-        print(f"⛔ Fallito definitivamente {acronimo}, salto.")
-        db.close()
-        return
-
-    try:
-        modelli = response.json().get("modelli", [])
-        print(f"📦 {acronimo}: ricevuti {len(modelli)} modelli")
-
-        def parse_date(val):
-            try:
-                return datetime.strptime(val, "%Y-%m-%d").date() if val else None
-            except:
-                return None
-
-        for modello in modelli:
-            codice = modello.get("codDescModello", {}).get("codice")
-            if not codice:
-                skippati += 1
-                print(f"⚠️  Skipping modello senza codice ({acronimo})")
+            if resp.status_code == 429:
+                wait = int(resp.headers.get("Retry-After", 15))
+                print(f"⏳ Rate limit {marca}-{anno}, attendo {wait}s (tentativo {attempt+1}/5)")
+                time.sleep(wait)
                 continue
 
-            try:
+            resp.raise_for_status()
+            modelli = resp.json().get("modelli", [])
+            print(f"📦 {marca}-{anno}: ricevuti {len(modelli)} modelli")
+
+            inseriti = 0
+            for modello in modelli:
+                codice = modello.get("codDescModello", {}).get("codice")
+                if not codice:
+                    continue
+
                 result = db.execute(text("""
                     INSERT INTO mnet_modelli_usato (
                         marca_acronimo, codice_desc_modello, codice_modello, descrizione, descrizione_dettagliata,
                         gruppo_storico, inizio_produzione, fine_produzione,
-                        inizio_commercializzazione, fine_commercializzazione, segmento, tipo, serie_gamma,
-                        created_at
+                        inizio_commercializzazione, fine_commercializzazione,
+                        segmento, tipo, serie_gamma, created_at
                     ) VALUES (
                         :marca_acronimo, :codice_desc_modello, :codice_modello, :descrizione, :descrizione_dettagliata,
                         :gruppo_storico, :inizio_produzione, :fine_produzione,
-                        :inizio_commercializzazione, :fine_commercializzazione, :segmento, :tipo, :serie_gamma,
-                        :created_at
+                        :inizio_commercializzazione, :fine_commercializzazione,
+                        :segmento, :tipo, :serie_gamma, :created_at
                     )
                     ON CONFLICT (marca_acronimo, codice_desc_modello) DO NOTHING
                 """), {
-                    "marca_acronimo": acronimo,
+                    "marca_acronimo": marca,
                     "codice_desc_modello": codice,
                     "codice_modello": codice,
                     "descrizione": modello.get("codDescModello", {}).get("descrizione"),
@@ -122,43 +112,60 @@ def process_modelli(acronimo):
                     "serie_gamma": modello.get("serieGamma", {}).get("descrizione"),
                     "created_at": datetime.utcnow().date()
                 })
-
-                # SQLite returns None, Postgres returns rowcount
                 if result.rowcount == 1:
                     inseriti += 1
-                    print(f"✅ Inserito: {codice} - {modello.get('codDescModello', {}).get('descrizione')}")
-                else:
-                    skippati += 1
-                    print(f"🟡 Esiste già: {codice}")
 
-            except Exception as e:
-                falliti += 1
-                print(f"❌ Errore {codice}: {e}")
+            db.commit()
+            print(f"✅ {marca}-{anno}: {inseriti} nuovi modelli salvati")
+            return True
 
-        db.commit()
-        print(f"🟩 {acronimo}: {inseriti} nuovi / 🟡 {skippati} già presenti / ❌ {falliti} errori")
+        except Exception as e:
+            print(f"⚠️ Errore {marca}-{anno} (tentativo {attempt+1}/5): {e}")
+            time.sleep(5 * (attempt + 1))
+            continue
+        finally:
+            db.rollback()
 
-    except Exception as e:
-        print(f"❌ Errore globale salvataggio {acronimo}: {e}")
-        db.rollback()
-    finally:
-        db.close()
-
+    db.close()
+    print(f"⛔ Fallito definitivamente {marca}-{anno}")
+    return False
 
 def sync_modelli_usato():
     db = SessionLocal()
     get_motornet_token()
+    try:
+        rows = db.execute(text("""
+            SELECT DISTINCT marca_acronimo, anno
+            FROM mnet_anni_usato
+            ORDER BY marca_acronimo, anno
+        """)).fetchall()
+        rows = [(r[0], r[1]) for r in rows]
 
-    acronimi = db.execute(text("SELECT acronimo FROM mnet_marche_usato")).fetchall()
-    acronimi = [row[0] for row in acronimi]
+        print(f"🔧 Avvio sync modelli per {len(rows)} combinazioni marca+anno")
 
-    print(f"🔧 Avvio sync modelli per {len(acronimi)} marche")
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        futures = [executor.submit(process_modelli, acronimo) for acronimo in acronimi]
-        for future in as_completed(futures):
-            future.result()
+        da_fare = rows
+        round_num = 1
+        while da_fare:
+            print(f"🚀 Round {round_num} con {len(da_fare)} combinazioni")
+            next_round = []
+            for marca, anno in da_fare:
+                ok = process_modelli(marca, anno)
+                if not ok:
+                    next_round.append((marca, anno))
+                time.sleep(0.5)  # throttling
+            if da_fare == next_round:
+                print("⚠️ Nessun progresso, stop per evitare loop infinito")
+                break
+            da_fare = next_round
+            round_num += 1
 
-    db.close()
+        if not da_fare:
+            print("🏁 Tutti i modelli completati")
+        else:
+            print(f"⚠️ Rimaste non completate: {da_fare}")
+
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     sync_modelli_usato()

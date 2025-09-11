@@ -26,6 +26,11 @@ from app.utils.video_jobs import (
     video_weekly_sweep,
 )
 
+from apscheduler.triggers.interval import IntervalTrigger
+from app.routes.openai_config import _gemini_get_operation, _download_bytes, _sb_upload_and_sign
+from app.models import UsatoLeonardo
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 
 
 # Configurazione dei log
@@ -309,45 +314,41 @@ async def polla_video_gemini():
 
 
 
-scheduler = BackgroundScheduler(job_defaults={'coalesce': True, 'max_instances': 1})
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 
-# Ogni mattina alle 05:00
+# Usa un solo scheduler asincrono
+scheduler = AsyncIOScheduler(job_defaults={'coalesce': True, 'max_instances': 1})
+
+# === Catena usato Motornet ===
+# Ogni lunedì alle 01:00 → marche
+scheduler.add_job(sync_marche_settimanale, 'cron', day_of_week='fri', hour=1, minute=0)
+
+# Ogni lunedì alle 02:00 → modelli
+scheduler.add_job(sync_modelli_settimanale, 'cron', day_of_week='fri', hour=2, minute=0)
+
+# Ogni lunedì alle 02:30 → allestimenti
+scheduler.add_job(sync_allestimenti_settimanale, 'cron', day_of_week='fri', hour=2, minute=30)
+
+# Ogni lunedì alle 04:00 → dettagli
+scheduler.add_job(sync_dettagli_settimanale, 'cron', day_of_week='fri', hour=4, minute=0)
+
+# === Altri job già presenti ===
 scheduler.add_job(check_and_charge_services, 'cron', hour=5, minute=0)
-# Ogni lunedì alle 03:00
-scheduler.add_job(pulisci_modelli_settimanale, 'cron', day_of_week='mon', hour=3, minute=0)
-# Ogni lunedì alle 04:00
-scheduler.add_job(sync_dettagli_settimanale, 'cron', day_of_week='mon', hour=4, minute=0)
-# Ogni lunedì alle 02:30
-scheduler.add_job(sync_allestimenti_settimanale, 'cron', day_of_week='mon', hour=2, minute=30)
-# Ogni lunedì alle 01:00
-scheduler.add_job(sync_marche_settimanale, 'cron', day_of_week='mon', hour=1, minute=0)
-
-# Ogni lunedì alle 02:00
-scheduler.add_job(sync_modelli_settimanale, 'cron', day_of_week='mon', hour=2, minute=0)
-
-# Invia reminder pipeline ogni giorno lavorativo dalle 9:00 alle 17:30 ogni 30 minuti
-#scheduler.add_job(invia_reminder_pipeline, 'cron', day_of_week='mon-fri', hour='9-17', minute='*/30')
-
-# Invia ogni 30 minuti, tutti i giorni
+scheduler.add_job(pulisci_modelli_settimanale, 'cron', day_of_week='fri', hour=3, minute=0)
+scheduler.add_job(aggiorna_rating_convenienza_job, 'cron', hour=3, minute=30)
+scheduler.add_job(aggiorna_usato_settimanale, 'cron', day_of_week='tue', hour=1, minute=0)
 scheduler.add_job(invia_reminder_pipeline, 'interval', minutes=30)
 
-# Ogni notte alle 3:30
-scheduler.add_job(aggiorna_rating_convenienza_job, 'cron', hour=3, minute=30)
-
-# Ogni martedì alle 01:00 → sync completo usato, solo se ci sono modelli
-scheduler.add_job(aggiorna_usato_settimanale, 'cron', day_of_week='tue', hour=1, minute=0)
-
 # Video jobs
-scheduler.add_job(video_revalidate_existing, 'cron', hour=2,  minute=45)   # daily light
-scheduler.add_job(video_daily_batch,       'cron', hour=5,  minute=20)   # daily search
-scheduler.add_job(video_weekly_sweep,      'cron', day_of_week='sun', hour=5, minute=40)  # weekly
+scheduler.add_job(video_revalidate_existing, 'cron', hour=2, minute=45)
+scheduler.add_job(video_daily_batch,       'cron', hour=5, minute=20)
+scheduler.add_job(video_weekly_sweep,      'cron', day_of_week='sun', hour=5, minute=40)
 
-# Video Gemin veo
-from apscheduler.triggers.interval import IntervalTrigger
-from app.routes.openai_config import _gemini_get_operation, _download_bytes, _sb_upload_and_sign
-from app.models import UsatoLeonardo
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
-scheduler = AsyncIOScheduler(job_defaults={'coalesce': True, 'max_instances': 1})
+# Polling Gemini video ogni 60 secondi
 scheduler.add_job(polla_video_gemini, IntervalTrigger(seconds=60))
+
+# Avvio scheduler
+scheduler.start()
+
 
