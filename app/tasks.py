@@ -322,16 +322,16 @@ scheduler = AsyncIOScheduler(job_defaults={'coalesce': True, 'max_instances': 1}
 
 # === Catena usato Motornet ===
 # Ogni lunedì alle 01:00 → marche
-scheduler.add_job(sync_marche_settimanale, 'cron', day_of_week='fri', hour=1, minute=0)
+scheduler.add_job(sync_marche_settimanale, 'cron', day_of_week='fri', hour=8, minute=0)
 
 # Ogni lunedì alle 02:00 → modelli
-scheduler.add_job(sync_modelli_settimanale, 'cron', day_of_week='fri', hour=2, minute=0)
+scheduler.add_job(sync_modelli_settimanale, 'cron', day_of_week='fri', hour=9, minute=0)
 
 # Ogni lunedì alle 02:30 → allestimenti
-scheduler.add_job(sync_allestimenti_settimanale, 'cron', day_of_week='fri', hour=2, minute=30)
+scheduler.add_job(sync_allestimenti_settimanale, 'cron', day_of_week='fri', hour=11, minute=30)
 
 # Ogni lunedì alle 04:00 → dettagli
-scheduler.add_job(sync_dettagli_settimanale, 'cron', day_of_week='fri', hour=4, minute=0)
+scheduler.add_job(sync_dettagli_settimanale, 'cron', day_of_week='fri', hour=14, minute=0)
 
 # === Altri job già presenti ===
 scheduler.add_job(check_and_charge_services, 'cron', hour=5, minute=0)
@@ -348,7 +348,6 @@ scheduler.add_job(video_weekly_sweep,      'cron', day_of_week='sun', hour=5, mi
 # Polling Gemini video ogni 60 secondi
 scheduler.add_job(polla_video_gemini, IntervalTrigger(seconds=60))
 
-# Avvio scheduler
-scheduler.start()
+
 
 
