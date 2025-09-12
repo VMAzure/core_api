@@ -6,15 +6,25 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import uuid, io, os, logging
 from PIL import Image
+import time
 
 from app.database import get_db, supabase_client
-from app.models import MnetModelli
+from app.models import MnetModelli, MnetModelliAIFoto
 from app.routes.openai_config import _gemini_generate_image_sync  # async
 
 router = APIRouter(tags=["Modelli AI - Test"])
 
 SUPABASE_BUCKET_MODELLI_AI = os.getenv("SUPABASE_BUCKET_MODELLI_AI", "modelli-ai")
 WEBP_QUALITY = int(os.getenv("MODEL_AI_WEBP_QUALITY", "90"))
+
+SCENARIO_PROMPTS = {
+    "indoor": """Fotografia cinematografica ultra realistica della stessa auto mostrata nell’immagine caricata. Mantieni fedelmente forma, proporzioni, colore e loghi originali. Scatto con lente 85mm, prospettiva naturale e profondità di campo realistica. Ambientata in un showroom auto premium reale, con pavimento riflettente e grandi vetrate che lasciano intravedere fuori si vede la città commerciale viva ed illuminata a giorno. Illuminazione cinematografica indoor con riflessi realistici sulla carrozzeria, luce HDR da esposizione. L’auto deve occupare almeno il 75% della larghezza dell’immagine, in primo piano senza ostacoli. La targa deve essere bianca con scritta AZURE in carattere Sans, centrata e senza distorsioni. Stile fotografico professionale, nessun effetto rendering, nessun watermark o testo extra.""",
+    "mediterraneo": """Partendo dalla foto caricata, genera una nuova immagine fotorealistica dell’auto. Mantieni forma, proporzioni, rispetta l'angolo di visuale che ha l'immagine caricata, colore e loghi originali. Ambientala in un borgo antico di un'isola mediterranea con vista sul porto al mare con barche e pescherecci, parcheggiata davanti a una trattoria antica con tovaglie a quadretti bianchi e rossi, lucine colorate e illuminazione calda e persone ben vestite sedute a fare aperitivi. Inquadra con lente 85mm; l’auto deve essere in primo piano grande senza nulla davanti e occupare almeno il 75% della larghezza dell’immagine. Luce cinematografica al tramonto con riflessi realistici sulla carrozzeria. La targa deve essere bianca con la scritta AZURE con carattere stile Sans; centrata e senza distorsioni. Nessun testo extra, watermark o caratteri non latini.""",
+    "cortina": """Partendo dalla foto caricata, genera una nuova immagine fotorealistica dell’auto. Mantieni forma, proporzioni, rispetta l'angolo di visuale che ha l'immagine caricata, colore e loghi originali. Ambientala in una località sciistica modaiola fashion , in centro città con negozi e hotel tipici alpini. la molta neve amplifica l'illuminazione. Inquadra con lente 85mm; l’auto deve essere in primo piano grande senza nulla davanti e occupare almeno il 75% della larghezza dell’immagine. Luce cinematografica di sera con riflessi realistici sulla carrozzeria. La targa deve essere bianca con la scritta AZURE con carattere stile Sans; centrata e senza distorsioni. Nessun testo extra, watermark o caratteri non latini.""",
+    "milano": """Partendo dalla foto caricata, genera una nuova immagine fotorealistica dell’auto. Mantieni forma, proporzioni, colore e loghi originali. Ambientala in una città metropolitana tipo milano elegante e fashion, con ristoranti, alberi e movida sullo sfondo. Inquadra con lente 85mm; l’auto deve essere in primo piano e occupare almeno il 75% della larghezza dell’immagine. Luce cinematografica al tramonto con riflessi realistici sulla carrozzeria. La targa deve essere bianca con la scritta AZURE con carattere stile logo; centrata e senza distorsioni. Nessun testo extra, watermark o caratteri non latini.""",
+}
+
+
 
 SQL_PICK_START = """
 WITH foto_rank AS (
@@ -43,8 +53,7 @@ LIMIT 1;
 class ModelloAITestRequest(BaseModel):
     codice_modello: str | None = None
     start_image_url: str | None = None
-    prompt: str | None = None
-    save: bool = False  # se True aggiorna DB e conserva su bucket
+    scenario: str = "indoor"   # indoor | mediterraneo | cortina | milano
 
 class ModelloAITestResponse(BaseModel):
     codice_modello: str
@@ -72,20 +81,10 @@ def _sb_upload_and_sign_bucket(path: str, blob: bytes, content_type: str) -> tup
     return path, signed
 
 def _to_webp(png_bytes: bytes) -> bytes:
-    img = Image.open(io.BytesIO(png_bytes))
+    img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
     buf = io.BytesIO()
     img.save(buf, format="WEBP", quality=WEBP_QUALITY)
     return buf.getvalue()
-
-def _build_prompt(brand: str | None, model: str | None) -> str:
-    b = brand or ""
-    m = model or ""
-    return (
-        f"Migliora questa foto ufficiale del modello {b} {m}. "
-        "Mantieni proporzioni, design, colori e loghi di fabbrica fedeli. "
-        "Illuminazione cinematografica al tramonto, riflessi realistici, rimozione artefatti. "
-        "Nessun testo sovrapposto o watermark. Conserva l'angolo di scatto originale."
-    )
 
 @router.post("/modelli-ai/test", response_model=ModelloAITestResponse)
 async def modelli_ai_test(
@@ -94,6 +93,12 @@ async def modelli_ai_test(
     db: Session = Depends(get_db)
 ):
     Authorize.jwt_required()
+
+    # valida scenario e seleziona prompt
+    scenario = (payload.scenario or "indoor").lower().strip()
+    if scenario not in SCENARIO_PROMPTS:
+        raise HTTPException(422, f"Scenario non valido: {scenario}")
+    used_prompt = SCENARIO_PROMPTS[scenario]
 
     # 1) Risolvi start_image_url e metadati modello
     brand = modello = None
@@ -111,48 +116,66 @@ async def modelli_ai_test(
         modello = row["modello"]
     else:
         if not codice_modello:
-            # prova a ricavarlo dal DB se esiste una riga con ai_foto_url o descrizione
             codice_modello = "MANUALE"
 
-    # 2) Prompt
-    used_prompt = payload.prompt or _build_prompt(brand, modello)
-
-    # 3) Gemini generate (image edit)
-    def download_with_retry(url: str, retries: int = 4, delay: float = 2.0) -> bytes:
+    # 2) Download robusto
+    def download_with_retry(url: str, retries: int = 5, base_delay: float = 2.0, min_size: int = 50_000) -> bytes:
         import requests
+        last_err = None
         for attempt in range(1, retries + 1):
             try:
-                r = requests.get(url, timeout=10)
+                logging.info(f"⬇️ Tentativo {attempt}/{retries} download immagine da {url}")
+                r = requests.get(url, timeout=30, stream=True)
                 r.raise_for_status()
-                return r.content
+                content = r.content
+                if len(content) < min_size:
+                    raise ValueError(f"Contenuto troppo piccolo ({len(content)} bytes)")
+                return content
             except Exception as e:
-                wait = delay * attempt
-                logging.warning(f"❌ Download fallito ({e}) da {url} → retry {attempt}/{retries} in {wait:.1f}s")
+                last_err = e
+                wait = base_delay * (2 ** (attempt - 1))
+                logging.warning(f"❌ Download fallito ({e}) → retry in {wait:.1f}s")
                 time.sleep(wait)
-        raise Exception(f"💥 Impossibile scaricare immagine dopo {retries} tentativi: {url}")
+        raise HTTPException(424, f"Impossibile scaricare immagine dopo {retries} tentativi. Ultimo errore: {last_err}")
 
-    # 3) Scarica immagine con retry → poi Gemini
     try:
         img_bytes = download_with_retry(start_url)
-        png_bytes = await _gemini_generate_image_sync(prompt=used_prompt, start_image_bytes=img_bytes)
     except Exception as e:
-        raise HTTPException(502, f"Errore Gemini: {e}")
+        raise HTTPException(424, f"Impossibile scaricare immagine iniziale. Errore: {e}")
 
+    # 3) Gemini
+    png_bytes = await _gemini_generate_image_sync(
+        prompt=used_prompt,
+        start_image_bytes=img_bytes
+    )
 
     # 4) WEBP + upload
     webp_bytes = _to_webp(png_bytes)
     fname = f"{codice_modello}/{uuid.uuid4()}.webp"
     storage_path, public_url = _sb_upload_and_sign_bucket(fname, webp_bytes, "image/webp")
 
+    # 5) Persistenza scenario
     saved = False
-    # 5) Aggiorna DB se richiesto e se codice_modello è reale
-    if payload.save and codice_modello != "MANUALE":
+    if codice_modello != "MANUALE":
         rec = db.query(MnetModelli).filter(MnetModelli.codice_modello == codice_modello).first()
         if not rec:
             raise HTTPException(404, f"Modello {codice_modello} non trovato per il salvataggio.")
-        rec.ai_foto_url = public_url
-        rec.ai_foto_prompt = used_prompt
-        rec.ai_foto_updated_at = datetime.utcnow()
+
+        foto = (
+            db.query(MnetModelliAIFoto)
+            .filter(
+                MnetModelliAIFoto.codice_modello == codice_modello,
+                MnetModelliAIFoto.scenario == scenario
+            )
+            .first()
+        )
+        if not foto:
+            foto = MnetModelliAIFoto(codice_modello=codice_modello, scenario=scenario)
+            db.add(foto)
+
+        foto.ai_foto_url = public_url
+        foto.ai_foto_prompt = used_prompt
+        foto.ai_foto_updated_at = datetime.utcnow()
         db.commit()
         saved = True
 

@@ -585,10 +585,23 @@ class MnetModelli(Base):
     modello_breve_carrozzeria = Column(String, nullable=True)
     ultima_modifica = Column(DateTime, server_default=func.now(), onupdate=func.now())
     default_img = Column(String(1000), nullable=True)
-    ai_foto_url        = Column(String, nullable=True)
-    ai_foto_updated_at = Column(DateTime, nullable=True)
-    ai_foto_prompt     = Column(Text, nullable=True)
+    ai_foto = relationship("MnetModelliAIFoto", back_populates="modello", cascade="all, delete-orphan")
 
+
+class MnetModelliAIFoto(Base):
+    __tablename__ = "mnet_modelli_ai_foto"
+    __table_args__ = (
+        UniqueConstraint("codice_modello", "scenario", name="uq_modello_scenario"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    codice_modello = Column(String, ForeignKey("mnet_modelli.codice_modello", ondelete="CASCADE"), nullable=False)
+    scenario = Column(Text, nullable=False)  # indoor, mediterraneo, cortina, milano
+    ai_foto_url = Column(Text)
+    ai_foto_prompt = Column(Text)
+    ai_foto_updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    modello = relationship("MnetModelli", back_populates="ai_foto")
 
 
 class MnetAllestimenti(Base):
