@@ -1458,3 +1458,22 @@ class ScenarioDealer(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
 
     dealer = relationship("User", backref="scenari")
+
+class MnetImmagini(Base):
+    __tablename__ = "mnet_immagini"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    codice_motornet_uni = Column(
+        String,
+        ForeignKey("public.mnet_allestimenti.codice_motornet_uni", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    url = Column(Text, nullable=False)
+    codice_fotografia = Column(String(50), nullable=True)
+    codice_visuale = Column(String(10), nullable=True)
+    descrizione_visuale = Column(Text, nullable=True)
+    risoluzione = Column(String(2), nullable=True)  # L, M, H
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
