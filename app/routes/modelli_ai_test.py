@@ -20,10 +20,10 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # ----------- PROMPTS OTTIMIZZATI ------------
 SCENARIO_PROMPTS = {
     "indoor": "Fotografia cinematografica realistica in showroom auto premium, "
-              "pavimento lucido riflettente, grandi vetrate con città illuminata fuori. "
+              "pavimento lucido riflettente, grandi vetrate con zona commerciale viva a giorno fuori. "
               "Scatto con lente 85mm, HDR, prospettiva naturale. "
               "Auto in primo piano al 75% della larghezza. "
-              "Targa bianca con scritta AZURE, carattere Sans. "
+              "Targa bianca con scritta AZURE, carattere Sans bold uppercase. "
               "No rendering, no cartoon, no watermark.",
 
     "mediterraneo": "Fotografia cinematografica realistica ambientata in un borgo mediterraneo sul mare, "
@@ -31,21 +31,21 @@ SCENARIO_PROMPTS = {
                     "Vista sul porto con barche. Tramonto dorato. "
                     "Scatto 85mm, profondità di campo realistica. "
                     "Auto in primo piano al 75% della larghezza. "
-                    "Targa bianca con scritta AZURE Sans. "
+                    "Targa bianca con scritta AZURE, carattere Sans bold uppercase. "
                     "No rendering, no cartoon, no watermark.",
 
     "cortina": "Fotografia cinematografica realistica in località alpina modaiola, "
                "negozi e hotel di montagna sullo sfondo, tanta neve che amplifica la luce. "
                "Scatto 85mm, atmosfera serale. "
                "Auto in primo piano al 75% della larghezza. "
-               "Targa bianca con scritta AZURE Sans. "
+               "Targa bianca con scritta AZURE, carattere Sans bold uppercase. "
                "No rendering, no cartoon, no watermark.",
 
     "milano": "Fotografia cinematografica realistica in città metropolitana elegante, "
               "ristoranti e movida serale sullo sfondo, alberi illuminati. "
               "Scatto 85mm, luce cinematografica al tramonto, riflessi realistici. "
               "Auto in primo piano al 75% della larghezza. "
-              "Targa bianca con scritta AZURE Sans. "
+              "Targa bianca con scritta AZURE, carattere Sans bold uppercase. "
               "No rendering, no cartoon, no watermark."
 }
 
