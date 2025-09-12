@@ -11,7 +11,8 @@ from app.routes.sync_modelli_nuovo import sync_modelli
 from app.routes.sync_allestimenti_nuovo import sync_allestimenti
 from app.routes.invia_reminder_pipeline import invia_reminder_pipeline
 from app.utils.aggiorna_usato_settimanale import aggiorna_usato_settimanale
-from app.routes.sync_foto_mnet import sync_foto_mnet, sync_foto_mnet_missing
+from app.routes.sync_foto_mnet import sync_foto_mnet
+from app.routes.sync_foto_mnet_missing import sync_foto_mnet_missing
 
 
 from app.utils.notifications import inserisci_notifica
