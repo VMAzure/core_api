@@ -1360,16 +1360,15 @@ async def elimina_scenario_dealer(
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
+from typing import Optional
 import io
 from PIL import Image
 
-router = APIRouter()
-
 class WebpImageRequest(BaseModel):
     prompt: str
-    start_image_url: str
+    start_image_url: Optional[str] = None   # ora opzionale
 
-@router.post("/veo3/image-webp")
+@router.post("/veo3/image-webp", tags=["Gemini VEO 3"])
 async def genera_image_webp(payload: WebpImageRequest):
     try:
         # Genera immagine con Gemini
