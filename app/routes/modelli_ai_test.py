@@ -1,78 +1,52 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException
 from fastapi_jwt_auth import AuthJWT
-from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from datetime import datetime
-import uuid, io, os, logging
+import uuid, io, os, logging, time, base64
 from PIL import Image
-import time
+import httpx
 
+from pydantic import BaseModel
 from app.database import get_db, supabase_client
 from app.models import MnetModelli, MnetModelliAIFoto
-from app.routes.openai_config import _gemini_generate_image_sync  # async
 
 router = APIRouter(tags=["Modelli AI - Test"])
 
 SUPABASE_BUCKET_MODELLI_AI = os.getenv("SUPABASE_BUCKET_MODELLI_AI", "modelli-ai")
 WEBP_QUALITY = int(os.getenv("MODEL_AI_WEBP_QUALITY", "90"))
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+# ----------- PROMPTS OTTIMIZZATI ------------
 SCENARIO_PROMPTS = {
-    "indoor": """Fotografia cinematografica ultra realistica della stessa auto mostrata nell’immagine caricata. Mantieni fedelmente forma, proporzioni, colore e loghi originali. Scatto con lente 85mm, prospettiva naturale e profondità di campo realistica. Ambientata in un showroom auto premium reale, con pavimento riflettente e grandi vetrate che lasciano intravedere fuori si vede la città commerciale viva ed illuminata a giorno. Illuminazione cinematografica indoor con riflessi realistici sulla carrozzeria, luce HDR da esposizione. L’auto deve occupare almeno il 75% della larghezza dell’immagine, in primo piano senza ostacoli. La targa deve essere bianca con scritta AZURE in carattere Sans, centrata e senza distorsioni. Stile fotografico professionale, nessun effetto rendering, nessun watermark o testo extra.""",
-    "mediterraneo": """Partendo dalla foto caricata, genera una nuova immagine fotorealistica dell’auto. Mantieni forma, proporzioni, rispetta l'angolo di visuale che ha l'immagine caricata, colore e loghi originali. Ambientala in un borgo antico di un'isola mediterranea con vista sul porto al mare con barche e pescherecci, parcheggiata davanti a una trattoria antica con tovaglie a quadretti bianchi e rossi, lucine colorate e illuminazione calda e persone ben vestite sedute a fare aperitivi. Inquadra con lente 85mm; l’auto deve essere in primo piano grande senza nulla davanti e occupare almeno il 75% della larghezza dell’immagine. Luce cinematografica al tramonto con riflessi realistici sulla carrozzeria. La targa deve essere bianca con la scritta AZURE con carattere stile Sans; centrata e senza distorsioni. Nessun testo extra, watermark o caratteri non latini.""",
-    "cortina": """Partendo dalla foto caricata, genera una nuova immagine fotorealistica dell’auto. Mantieni forma, proporzioni, rispetta l'angolo di visuale che ha l'immagine caricata, colore e loghi originali. Ambientala in una località sciistica modaiola fashion , in centro città con negozi e hotel tipici alpini. la molta neve amplifica l'illuminazione. Inquadra con lente 85mm; l’auto deve essere in primo piano grande senza nulla davanti e occupare almeno il 75% della larghezza dell’immagine. Luce cinematografica di sera con riflessi realistici sulla carrozzeria. La targa deve essere bianca con la scritta AZURE con carattere stile Sans; centrata e senza distorsioni. Nessun testo extra, watermark o caratteri non latini.""",
-    "milano": """Partendo dalla foto caricata, genera una nuova immagine fotorealistica dell’auto. Mantieni forma, proporzioni, colore e loghi originali. Ambientala in una città metropolitana tipo milano elegante e fashion, con ristoranti, alberi e movida sullo sfondo. Inquadra con lente 85mm; l’auto deve essere in primo piano e occupare almeno il 75% della larghezza dell’immagine. Luce cinematografica al tramonto con riflessi realistici sulla carrozzeria. La targa deve essere bianca con la scritta AZURE con carattere stile logo; centrata e senza distorsioni. Nessun testo extra, watermark o caratteri non latini.""",
-}
+    "indoor": "Fotografia cinematografica realistica in showroom auto premium, "
+              "pavimento lucido riflettente, grandi vetrate con città illuminata fuori. "
+              "Scatto con lente 85mm, HDR, prospettiva naturale. "
+              "Auto in primo piano al 75% della larghezza. "
+              "Targa bianca con scritta AZURE, carattere Sans. "
+              "No rendering, no cartoon, no watermark.",
 
+    "mediterraneo": "Fotografia cinematografica realistica ambientata in un borgo mediterraneo sul mare, "
+                    "trattoria tipica con tovaglie a quadretti, lucine calde, persone in aperitivo. "
+                    "Vista sul porto con barche. Tramonto dorato. "
+                    "Scatto 85mm, profondità di campo realistica. "
+                    "Auto in primo piano al 75% della larghezza. "
+                    "Targa bianca con scritta AZURE Sans. "
+                    "No rendering, no cartoon, no watermark.",
 
+    "cortina": "Fotografia cinematografica realistica in località alpina modaiola, "
+               "negozi e hotel di montagna sullo sfondo, tanta neve che amplifica la luce. "
+               "Scatto 85mm, atmosfera serale. "
+               "Auto in primo piano al 75% della larghezza. "
+               "Targa bianca con scritta AZURE Sans. "
+               "No rendering, no cartoon, no watermark.",
 
-SQL_PICK_START = """
-WITH foto_rank AS (
-  SELECT
-    a.codice_modello,
-    i.url,
-    ROW_NUMBER() OVER (
-      PARTITION BY a.codice_modello
-      ORDER BY CASE
-        WHEN i.codice_visuale='0001' THEN 1
-        WHEN i.codice_visuale='0007' THEN 2
-        WHEN i.codice_visuale='0009' THEN 3
-        ELSE 4 END, i.url
-    ) AS rn
-  FROM public.mnet_allestimenti a
-  JOIN public.mnet_immagini i ON i.codice_motornet_uni = a.codice_motornet_uni
-  WHERE i.url IS NOT NULL
-)
-SELECT m.codice_modello, m.descrizione AS modello, m.marca_acronimo AS brand, f.url AS start_url
-FROM public.mnet_modelli m
-JOIN foto_rank f ON f.codice_modello = m.codice_modello AND f.rn = 1
-WHERE m.codice_modello = :codice_modello
-LIMIT 1;
-"""
-
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-from datetime import datetime
-import uuid, io, os, logging, time
-from PIL import Image
-
-from pydantic import BaseModel
-from app.database import get_db, supabase_client
-from app.models import MnetModelli, MnetModelliAIFoto
-from app.routes.openai_config import _gemini_generate_image_sync  # async
-
-router = APIRouter(tags=["Modelli AI - Test"])
-
-SUPABASE_BUCKET_MODELLI_AI = os.getenv("SUPABASE_BUCKET_MODELLI_AI", "modelli-ai")
-WEBP_QUALITY = int(os.getenv("MODEL_AI_WEBP_QUALITY", "90"))
-
-SCENARIO_PROMPTS = {
-    "indoor": """Fotografia cinematografica ultra realistica ...""",
-    "mediterraneo": """Partendo dalla foto caricata, genera una nuova immagine fotorealistica ...""",
-    "cortina": """Partendo dalla foto caricata, genera una nuova immagine fotorealistica ...""",
-    "milano": """Partendo dalla foto caricata, genera una nuova immagine fotorealistica ..."""
+    "milano": "Fotografia cinematografica realistica in città metropolitana elegante, "
+              "ristoranti e movida serale sullo sfondo, alberi illuminati. "
+              "Scatto 85mm, luce cinematografica al tramonto, riflessi realistici. "
+              "Auto in primo piano al 75% della larghezza. "
+              "Targa bianca con scritta AZURE Sans. "
+              "No rendering, no cartoon, no watermark."
 }
 
 SQL_PICK_START = """
@@ -99,6 +73,7 @@ WHERE m.codice_modello = :codice_modello
 LIMIT 1;
 """
 
+# ------------ RESPONSE MODELS ----------------
 class ScenarioImage(BaseModel):
     scenario: str
     url: str
@@ -107,6 +82,7 @@ class ModelloAITestResponse(BaseModel):
     codice_modello: str
     results: list[ScenarioImage]
 
+# ------------ UTILS ----------------
 def _sb_upload_and_sign_bucket(path: str, blob: bytes, content_type: str) -> tuple[str, str | None]:
     supabase_client.storage.from_(SUPABASE_BUCKET_MODELLI_AI).upload(
         path=path,
@@ -145,8 +121,48 @@ def download_with_retry(url: str, retries: int = 5, base_delay: float = 2.0, min
             wait = base_delay * (2 ** (attempt - 1))
             logging.warning(f"❌ Download fallito ({e}) → retry in {wait:.1f}s")
             time.sleep(wait)
-    raise HTTPException(424, f"Impossibile scaricare immagine dopo {retries} tentativi. Ultimo errore: {last_err}")
+    raise HTTPException(424, f"Impossibile scaricare immagine. Ultimo errore: {last_err}")
 
+# ------------ NUOVA FUNZIONE NANO BANANA -------------
+async def _nano_banana_generate_image(scenario: str, prompt: str, start_image_bytes: bytes) -> bytes:
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent"
+
+    parts = [
+        {"text": f"Scenario: {scenario}"},
+        {"text": "Fotografia cinematografica ultra realistica, non rendering, non cartoon."},
+        {"text": prompt},
+        {
+            "inline_data": {
+                "mime_type": "image/png",
+                "data": base64.b64encode(start_image_bytes).decode("utf-8")
+            }
+        }
+    ]
+
+    payload = {"contents": [{"parts": parts}]}
+
+    async with httpx.AsyncClient(timeout=180) as client:
+        r = await client.post(url, json=payload, headers={
+            "x-goog-api-key": GEMINI_API_KEY,
+            "Content-Type": "application/json"
+        })
+        if r.status_code >= 300:
+            raise HTTPException(r.status_code, f"Errore Nano Banana: {r.text}")
+
+        data = r.json()
+        parts = (
+            data.get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [])
+        )
+        for p in parts:
+            inline = p.get("inline_data") or p.get("inlineData")
+            if inline and inline.get("data"):
+                return base64.b64decode(inline["data"])
+
+        raise HTTPException(502, f"Nano Banana: nessuna immagine trovata. Resp: {data}")
+
+# ------------ ROUTE -------------
 @router.post("/modelli-ai/test/{codice_modello}", response_model=ModelloAITestResponse)
 async def modelli_ai_test(
     codice_modello: str,
@@ -155,50 +171,44 @@ async def modelli_ai_test(
 ):
     Authorize.jwt_required()
 
-    # 1) Risolvi start_image_url e metadati modello
+    # 1) Start image dal DB
     row = db.execute(text(SQL_PICK_START), {"codice_modello": codice_modello}).mappings().first()
     if not row:
         raise HTTPException(404, f"Nessuna foto trovata per codice_modello={codice_modello}")
 
     start_url = row["start_url"]
-    brand = row["brand"]
-    modello = row["modello"]
-
-    # 2) Scarica immagine base
     img_bytes = download_with_retry(start_url)
 
     results = []
     for scenario, prompt in SCENARIO_PROMPTS.items():
-        # 3) Genera con Gemini
-        png_bytes = await _gemini_generate_image_sync(
-            prompt=prompt,
-            start_image_bytes=img_bytes
-        )
+        try:
+            png_bytes = await _nano_banana_generate_image(scenario, prompt, img_bytes)
+            webp_bytes = _to_webp(png_bytes)
+            fname = f"{codice_modello}/{scenario}-{uuid.uuid4()}.webp"
+            storage_path, public_url = _sb_upload_and_sign_bucket(fname, webp_bytes, "image/webp")
 
-        # 4) Converti in WEBP e carica su Supabase
-        webp_bytes = _to_webp(png_bytes)
-        fname = f"{codice_modello}/{scenario}-{uuid.uuid4()}.webp"
-        storage_path, public_url = _sb_upload_and_sign_bucket(fname, webp_bytes, "image/webp")
-
-        # 5) Salva/aggiorna in tabella mnet_modelli_ai_foto
-        foto = (
-            db.query(MnetModelliAIFoto)
-            .filter(
-                MnetModelliAIFoto.codice_modello == codice_modello,
-                MnetModelliAIFoto.scenario == scenario
+            # Salva/aggiorna DB
+            foto = (
+                db.query(MnetModelliAIFoto)
+                .filter(
+                    MnetModelliAIFoto.codice_modello == codice_modello,
+                    MnetModelliAIFoto.scenario == scenario
+                )
+                .first()
             )
-            .first()
-        )
-        if not foto:
-            foto = MnetModelliAIFoto(codice_modello=codice_modello, scenario=scenario)
-            db.add(foto)
+            if not foto:
+                foto = MnetModelliAIFoto(codice_modello=codice_modello, scenario=scenario)
+                db.add(foto)
 
-        foto.ai_foto_url = public_url
-        foto.ai_foto_prompt = prompt
-        foto.ai_foto_updated_at = datetime.utcnow()
-        db.commit()
+            foto.ai_foto_url = public_url
+            foto.ai_foto_prompt = prompt
+            foto.ai_foto_updated_at = datetime.utcnow()
+            db.commit()
 
-        results.append(ScenarioImage(scenario=scenario, url=public_url))
+            results.append(ScenarioImage(scenario=scenario, url=public_url))
+        except Exception as e:
+            logging.error(f"❌ Errore scenario {scenario}: {e}")
+            # puoi decidere se aggiungere comunque results.append con url=None
 
     return ModelloAITestResponse(
         codice_modello=codice_modello,

@@ -678,6 +678,52 @@ async def _gemini_generate_image_sync(
 
         raise HTTPException(502, f"Gemini image: nessuna immagine trovata. Resp: {data}")
 
+async def _nano_banana_generate_image(
+    scenario: str,
+    prompt: str,
+    start_image_bytes: Optional[bytes] = None
+) -> bytes:
+    _gemini_assert_api()
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent"
+
+    parts = [
+        {"text": f"Scenario: {scenario}"},
+        {"text": "Fotografia cinematografica ultra realistica, non rendering, non cartoon."},
+        {"text": prompt}
+    ]
+
+    if start_image_bytes:
+        parts.append({
+            "inline_data": {
+                "mime_type": "image/png",
+                "data": base64.b64encode(start_image_bytes).decode("utf-8")
+            }
+        })
+
+    payload = {"contents": [{"parts": parts}]}
+
+    async with httpx.AsyncClient(timeout=180) as client:
+        r = await client.post(url, json=payload, headers={
+            "x-goog-api-key": GEMINI_API_KEY,
+            "Content-Type": "application/json"
+        })
+        if r.status_code >= 300:
+            raise HTTPException(r.status_code, f"Errore Nano Banana: {r.text}")
+
+        data = r.json()
+
+        parts = (
+            data.get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [])
+        )
+        for p in parts:
+            inline = p.get("inline_data") or p.get("inlineData")
+            if inline and inline.get("data"):
+                return base64.b64decode(inline["data"])
+
+        raise HTTPException(502, f"Nano Banana: nessuna immagine trovata. Resp: {data}")
+
 
 
 
