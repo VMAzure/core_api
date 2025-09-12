@@ -118,10 +118,26 @@ async def modelli_ai_test(
     used_prompt = payload.prompt or _build_prompt(brand, modello)
 
     # 3) Gemini generate (image edit)
+    def download_with_retry(url: str, retries: int = 4, delay: float = 2.0) -> bytes:
+        import requests
+        for attempt in range(1, retries + 1):
+            try:
+                r = requests.get(url, timeout=10)
+                r.raise_for_status()
+                return r.content
+            except Exception as e:
+                wait = delay * attempt
+                logging.warning(f"❌ Download fallito ({e}) da {url} → retry {attempt}/{retries} in {wait:.1f}s")
+                time.sleep(wait)
+        raise Exception(f"💥 Impossibile scaricare immagine dopo {retries} tentativi: {url}")
+
+    # 3) Scarica immagine con retry → poi Gemini
     try:
-        png_bytes = await _gemini_generate_image_sync(prompt=used_prompt, start_image_url=start_url)
+        img_bytes = download_with_retry(start_url)
+        png_bytes = await _gemini_generate_image_sync(prompt=used_prompt, start_image_bytes=img_bytes)
     except Exception as e:
         raise HTTPException(502, f"Errore Gemini: {e}")
+
 
     # 4) WEBP + upload
     webp_bytes = _to_webp(png_bytes)

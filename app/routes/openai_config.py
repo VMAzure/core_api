@@ -625,12 +625,23 @@ def _gemini_build_image_prompt(marca: str, modello: str, anno: int, colore: Opti
         "No text, no watermarks, no non-Latin characters."
     )
 
-async def _gemini_generate_image_sync(prompt: str, start_image_url: Optional[str] = None) -> bytes:
+async def _gemini_generate_image_sync(
+    prompt: str,
+    start_image_url: Optional[str] = None,
+    start_image_bytes: Optional[bytes] = None
+) -> bytes:
     _gemini_assert_api()
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent"
 
     parts = [{"text": prompt}]
-    if start_image_url:
+    if start_image_bytes:
+        parts.append({
+            "inline_data": {
+                "mime_type": "image/png",
+                "data": base64.b64encode(start_image_bytes).decode("utf-8")
+            }
+        })
+    elif start_image_url:
         mime, b64 = await _fetch_image_base64_from_url(start_image_url)
         parts.append({
             "inline_data": {
@@ -651,7 +662,6 @@ async def _gemini_generate_image_sync(prompt: str, start_image_url: Optional[str
 
         data = r.json()
 
-        # Estrai immagine
         parts = (
             data.get("candidates", [{}])[0]
             .get("content", {})
@@ -661,12 +671,13 @@ async def _gemini_generate_image_sync(prompt: str, start_image_url: Optional[str
             inline = (
                 p.get("inline_data")
                 or p.get("inlineData")
-                or p.get("inline")  # fallback
+                or p.get("inline")
             )
             if inline and inline.get("data"):
                 return base64.b64decode(inline["data"])
 
         raise HTTPException(502, f"Gemini image: nessuna immagine trovata. Resp: {data}")
+
 
 
 
