@@ -50,20 +50,62 @@ WHERE m.codice_modello = :codice_modello
 LIMIT 1;
 """
 
-class ModelloAITestRequest(BaseModel):
-    codice_modello: str | None = None
-    start_image_url: str | None = None
-    scenario: str = "indoor"   # indoor | mediterraneo | cortina | milano
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi_jwt_auth import AuthJWT
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from datetime import datetime
+import uuid, io, os, logging, time
+from PIL import Image
+
+from pydantic import BaseModel
+from app.database import get_db, supabase_client
+from app.models import MnetModelli, MnetModelliAIFoto
+from app.routes.openai_config import _gemini_generate_image_sync  # async
+
+router = APIRouter(tags=["Modelli AI - Test"])
+
+SUPABASE_BUCKET_MODELLI_AI = os.getenv("SUPABASE_BUCKET_MODELLI_AI", "modelli-ai")
+WEBP_QUALITY = int(os.getenv("MODEL_AI_WEBP_QUALITY", "90"))
+
+SCENARIO_PROMPTS = {
+    "indoor": """Fotografia cinematografica ultra realistica ...""",
+    "mediterraneo": """Partendo dalla foto caricata, genera una nuova immagine fotorealistica ...""",
+    "cortina": """Partendo dalla foto caricata, genera una nuova immagine fotorealistica ...""",
+    "milano": """Partendo dalla foto caricata, genera una nuova immagine fotorealistica ..."""
+}
+
+SQL_PICK_START = """
+WITH foto_rank AS (
+  SELECT
+    a.codice_modello,
+    i.url,
+    ROW_NUMBER() OVER (
+      PARTITION BY a.codice_modello
+      ORDER BY CASE
+        WHEN i.codice_visuale='0001' THEN 1
+        WHEN i.codice_visuale='0007' THEN 2
+        WHEN i.codice_visuale='0009' THEN 3
+        ELSE 4 END, i.url
+    ) AS rn
+  FROM public.mnet_allestimenti a
+  JOIN public.mnet_immagini i ON i.codice_motornet_uni = a.codice_motornet_uni
+  WHERE i.url IS NOT NULL
+)
+SELECT m.codice_modello, m.descrizione AS modello, m.marca_acronimo AS brand, f.url AS start_url
+FROM public.mnet_modelli m
+JOIN foto_rank f ON f.codice_modello = m.codice_modello AND f.rn = 1
+WHERE m.codice_modello = :codice_modello
+LIMIT 1;
+"""
+
+class ScenarioImage(BaseModel):
+    scenario: str
+    url: str
 
 class ModelloAITestResponse(BaseModel):
     codice_modello: str
-    brand: str | None
-    modello: str | None
-    used_start_url: str
-    used_prompt: str
-    public_url: str | None
-    storage_path: str | None
-    saved: bool
+    results: list[ScenarioImage]
 
 def _sb_upload_and_sign_bucket(path: str, blob: bytes, content_type: str) -> tuple[str, str | None]:
     supabase_client.storage.from_(SUPABASE_BUCKET_MODELLI_AI).upload(
@@ -86,81 +128,59 @@ def _to_webp(png_bytes: bytes) -> bytes:
     img.save(buf, format="WEBP", quality=WEBP_QUALITY)
     return buf.getvalue()
 
-@router.post("/modelli-ai/test", response_model=ModelloAITestResponse)
+def download_with_retry(url: str, retries: int = 5, base_delay: float = 2.0, min_size: int = 50_000) -> bytes:
+    import requests
+    last_err = None
+    for attempt in range(1, retries + 1):
+        try:
+            logging.info(f"⬇️ Tentativo {attempt}/{retries} download immagine da {url}")
+            r = requests.get(url, timeout=30, stream=True)
+            r.raise_for_status()
+            content = r.content
+            if len(content) < min_size:
+                raise ValueError(f"Contenuto troppo piccolo ({len(content)} bytes)")
+            return content
+        except Exception as e:
+            last_err = e
+            wait = base_delay * (2 ** (attempt - 1))
+            logging.warning(f"❌ Download fallito ({e}) → retry in {wait:.1f}s")
+            time.sleep(wait)
+    raise HTTPException(424, f"Impossibile scaricare immagine dopo {retries} tentativi. Ultimo errore: {last_err}")
+
+@router.post("/modelli-ai/test/{codice_modello}", response_model=ModelloAITestResponse)
 async def modelli_ai_test(
-    payload: ModelloAITestRequest,
+    codice_modello: str,
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
     Authorize.jwt_required()
 
-    # valida scenario e seleziona prompt
-    scenario = (payload.scenario or "indoor").lower().strip()
-    if scenario not in SCENARIO_PROMPTS:
-        raise HTTPException(422, f"Scenario non valido: {scenario}")
-    used_prompt = SCENARIO_PROMPTS[scenario]
-
     # 1) Risolvi start_image_url e metadati modello
-    brand = modello = None
-    start_url = payload.start_image_url
-    codice_modello = payload.codice_modello
+    row = db.execute(text(SQL_PICK_START), {"codice_modello": codice_modello}).mappings().first()
+    if not row:
+        raise HTTPException(404, f"Nessuna foto trovata per codice_modello={codice_modello}")
 
-    if not start_url:
-        if not codice_modello:
-            raise HTTPException(422, "Serve 'codice_modello' oppure 'start_image_url'.")
-        row = db.execute(text(SQL_PICK_START), {"codice_modello": codice_modello}).mappings().first()
-        if not row:
-            raise HTTPException(404, f"Nessuna foto trovata per codice_modello={codice_modello}")
-        start_url = row["start_url"]
-        brand = row["brand"]
-        modello = row["modello"]
-    else:
-        if not codice_modello:
-            codice_modello = "MANUALE"
+    start_url = row["start_url"]
+    brand = row["brand"]
+    modello = row["modello"]
 
-    # 2) Download robusto
-    def download_with_retry(url: str, retries: int = 5, base_delay: float = 2.0, min_size: int = 50_000) -> bytes:
-        import requests
-        last_err = None
-        for attempt in range(1, retries + 1):
-            try:
-                logging.info(f"⬇️ Tentativo {attempt}/{retries} download immagine da {url}")
-                r = requests.get(url, timeout=30, stream=True)
-                r.raise_for_status()
-                content = r.content
-                if len(content) < min_size:
-                    raise ValueError(f"Contenuto troppo piccolo ({len(content)} bytes)")
-                return content
-            except Exception as e:
-                last_err = e
-                wait = base_delay * (2 ** (attempt - 1))
-                logging.warning(f"❌ Download fallito ({e}) → retry in {wait:.1f}s")
-                time.sleep(wait)
-        raise HTTPException(424, f"Impossibile scaricare immagine dopo {retries} tentativi. Ultimo errore: {last_err}")
+    # 2) Scarica immagine base
+    img_bytes = download_with_retry(start_url)
 
-    try:
-        img_bytes = download_with_retry(start_url)
-    except Exception as e:
-        raise HTTPException(424, f"Impossibile scaricare immagine iniziale. Errore: {e}")
+    results = []
+    for scenario, prompt in SCENARIO_PROMPTS.items():
+        # 3) Genera con Gemini
+        png_bytes = await _gemini_generate_image_sync(
+            prompt=prompt,
+            start_image_bytes=img_bytes
+        )
 
-    # 3) Gemini
-    png_bytes = await _gemini_generate_image_sync(
-        prompt=used_prompt,
-        start_image_bytes=img_bytes
-    )
+        # 4) Converti in WEBP e carica su Supabase
+        webp_bytes = _to_webp(png_bytes)
+        fname = f"{codice_modello}/{scenario}-{uuid.uuid4()}.webp"
+        storage_path, public_url = _sb_upload_and_sign_bucket(fname, webp_bytes, "image/webp")
 
-    # 4) WEBP + upload
-    webp_bytes = _to_webp(png_bytes)
-    fname = f"{codice_modello}/{uuid.uuid4()}.webp"
-    storage_path, public_url = _sb_upload_and_sign_bucket(fname, webp_bytes, "image/webp")
-
-    # 5) Persistenza scenario
-    saved = False
-    if codice_modello != "MANUALE":
-        rec = db.query(MnetModelli).filter(MnetModelli.codice_modello == codice_modello).first()
-        if not rec:
-            raise HTTPException(404, f"Modello {codice_modello} non trovato per il salvataggio.")
-
+        # 5) Salva/aggiorna in tabella mnet_modelli_ai_foto
         foto = (
             db.query(MnetModelliAIFoto)
             .filter(
@@ -174,18 +194,13 @@ async def modelli_ai_test(
             db.add(foto)
 
         foto.ai_foto_url = public_url
-        foto.ai_foto_prompt = used_prompt
+        foto.ai_foto_prompt = prompt
         foto.ai_foto_updated_at = datetime.utcnow()
         db.commit()
-        saved = True
+
+        results.append(ScenarioImage(scenario=scenario, url=public_url))
 
     return ModelloAITestResponse(
         codice_modello=codice_modello,
-        brand=brand,
-        modello=modello,
-        used_start_url=start_url,
-        used_prompt=used_prompt,
-        public_url=public_url,
-        storage_path=storage_path,
-        saved=saved
+        results=results
     )
