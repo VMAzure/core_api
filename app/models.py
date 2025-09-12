@@ -589,6 +589,8 @@ class MnetModelli(Base):
 
 class MnetAllestimenti(Base):
     __tablename__ = "mnet_allestimenti"
+    __table_args__ = {"schema": "public"}
+
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     codice_modello = Column(String, ForeignKey("mnet_modelli.codice_modello", ondelete="CASCADE"), nullable=False)
@@ -597,6 +599,7 @@ class MnetAllestimenti(Base):
     data_da = Column(Date)
     data_a = Column(Date)
     ultima_modifica = Column(DateTime, default=func.now(), onupdate=func.now())
+
 
 class MnetMarche(Base):
     __tablename__ = "mnet_marche"

@@ -11,6 +11,8 @@ from app.routes.sync_modelli_nuovo import sync_modelli
 from app.routes.sync_allestimenti_nuovo import sync_allestimenti
 from app.routes.invia_reminder_pipeline import invia_reminder_pipeline
 from app.utils.aggiorna_usato_settimanale import aggiorna_usato_settimanale
+from app.routes.sync_foto_mnet import sync_foto_mnet, sync_foto_mnet_missing
+
 
 from app.utils.notifications import inserisci_notifica
 from app.utils.email import get_smtp_settings
@@ -344,6 +346,10 @@ scheduler.add_job(invia_reminder_pipeline, 'interval', minutes=30)
 scheduler.add_job(video_revalidate_existing, 'cron', hour=2, minute=45)
 scheduler.add_job(video_daily_batch,       'cron', hour=5, minute=20)
 scheduler.add_job(video_weekly_sweep,      'cron', day_of_week='sun', hour=5, minute=40)
+
+# ⬇️ schedulazione: venerdì 16:00 full scan, 18:00 retry mancanti
+scheduler.add_job(sync_foto_mnet,         'cron', day_of_week='sat', hour=1, minute=0,  misfire_grace_time=3600, coalesce=True)
+scheduler.add_job(sync_foto_mnet_missing, 'cron', day_of_week='sat', hour=4, minute=0,  misfire_grace_time=3600, coalesce=True)
 
 # Polling Gemini video ogni 60 secondi
 scheduler.add_job(polla_video_gemini, IntervalTrigger(seconds=60))

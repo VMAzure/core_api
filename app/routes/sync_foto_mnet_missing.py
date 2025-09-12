@@ -21,16 +21,22 @@ def get_motornet_token():
     r.raise_for_status()
     return r.json().get("access_token")
 
-def sync_foto_mnet(max_retries=5, delay_base=2):
+def sync_foto_mnet_missing(max_retries=5, delay_base=2):
     db = SessionLocal()
 
-    allestimenti = db.query(MnetAllestimenti.codice_motornet_uni).all()
-    logging.info(f"📸 Avvio sync_foto_mnet: {len(allestimenti)} allestimenti da processare")
+    # recupera solo gli allestimenti che non hanno nessun record in mnet_immagini
+    missing = db.query(MnetAllestimenti.codice_motornet_uni).filter(
+        ~db.query(MnetImmagini.codice_motornet_uni)
+        .filter(MnetImmagini.codice_motornet_uni == MnetAllestimenti.codice_motornet_uni)
+        .exists()
+    ).all()
+
+    logging.info(f"📸 Mancanti da processare: {len(missing)}")
 
     token = get_motornet_token()
     headers = {"Authorization": f"Bearer {token}"}
 
-    for (codice_uni,) in allestimenti:
+    for (codice_uni,) in missing:
         attempt = 0
         while attempt < max_retries:
             try:
@@ -46,21 +52,16 @@ def sync_foto_mnet(max_retries=5, delay_base=2):
 
                 if r.status_code == 412:
                     logging.info(f"🚫 Nessuna foto disponibile per {codice_uni}")
-                    # inserisci record "vuoto" se non esiste già
-                    exists = db.query(MnetImmagini).filter_by(
-                        codice_motornet_uni=codice_uni
-                    ).first()
-                    if not exists:
-                        rec = MnetImmagini(
-                            codice_motornet_uni=codice_uni,
-                            url=None,
-                            descrizione_visuale="NESSUNA FOTO DISPONIBILE",
-                            created_at=datetime.utcnow(),
-                            updated_at=datetime.utcnow()
-                        )
-                        db.add(rec)
-                        db.commit()
-                    break  # passa al prossimo codice
+                    rec = MnetImmagini(
+                        codice_motornet_uni=codice_uni,
+                        url=None,
+                        descrizione_visuale="NESSUNA FOTO DISPONIBILE",
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow()
+                    )
+                    db.add(rec)
+                    db.commit()
+                    break
 
                 if r.status_code == 429:
                     retry_after = int(r.headers.get("Retry-After", "10"))
@@ -74,7 +75,6 @@ def sync_foto_mnet(max_retries=5, delay_base=2):
                     logging.error(f"⚠️ Errore server {r.status_code} per {codice_uni}, tentativo {attempt+1}")
                     attempt += 1
                     if attempt >= max_retries:
-                        logging.warning(f"🚫 Inserisco placeholder ERRORE SERVER per {codice_uni}")
                         rec = MnetImmagini(
                             codice_motornet_uni=codice_uni,
                             url=None,
@@ -87,7 +87,6 @@ def sync_foto_mnet(max_retries=5, delay_base=2):
                     time.sleep(delay_base * attempt)
                     continue
 
-
                 r.raise_for_status()
                 data = r.json()
 
@@ -97,17 +96,9 @@ def sync_foto_mnet(max_retries=5, delay_base=2):
                         f"📷 {codice_uni} → {img.get('descrizioneVisuale')} "
                         f"[{img.get('risoluzione')}] {img.get('url')}"
                     )
-
-                    exists = db.query(MnetImmagini).filter_by(
-                        codice_motornet_uni=codice_uni,
-                        url=img["url"]
-                    ).first()
-                    if exists:
-                        continue
-
                     rec = MnetImmagini(
                         codice_motornet_uni=codice_uni,
-                        url=img["url"],
+                        url=img.get("url"),
                         codice_fotografia=img.get("codiceFotografia"),
                         codice_visuale=img.get("codiceVisuale"),
                         descrizione_visuale=img.get("descrizioneVisuale"),
@@ -121,8 +112,6 @@ def sync_foto_mnet(max_retries=5, delay_base=2):
                 db.commit()
                 if nuove > 0:
                     logging.info(f"✅ Inserite {nuove} nuove immagini per {codice_uni}")
-                else:
-                    logging.debug(f"⏩ Nessuna nuova immagine per {codice_uni}")
                 break
 
             except requests.exceptions.RequestException as e:
@@ -138,7 +127,7 @@ def sync_foto_mnet(max_retries=5, delay_base=2):
                 break
 
     db.close()
-    logging.info("🏁 sync_foto_mnet completato")
+    logging.info("🏁 sync_foto_mnet_missing completato")
 
 if __name__ == "__main__":
-    sync_foto_mnet()
+    sync_foto_mnet_missing()
