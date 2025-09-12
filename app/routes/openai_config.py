@@ -1353,3 +1353,45 @@ async def elimina_scenario_dealer(
     db.delete(rec)
     db.commit()
     return {"success": True}
+
+
+##ROTTA TEST per immagini download
+
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
+from pydantic import BaseModel
+import io
+from PIL import Image
+
+router = APIRouter()
+
+class WebpImageRequest(BaseModel):
+    prompt: str
+    start_image_url: str
+
+@router.post("/veo3/image-webp")
+async def genera_image_webp(payload: WebpImageRequest):
+    try:
+        # Genera immagine con Gemini
+        img_bytes = await _gemini_generate_image_sync(
+            prompt=payload.prompt,
+            start_image_url=payload.start_image_url
+        )
+
+        # Converti in .webp in memoria
+        img = Image.open(io.BytesIO(img_bytes))
+        buf = io.BytesIO()
+        img.save(buf, format="WEBP", quality=90)
+        buf.seek(0)
+
+        # Ritorna file da scaricare
+        return Response(
+            content=buf.read(),
+            media_type="image/webp",
+            headers={
+                "Content-Disposition": 'attachment; filename="output.webp"'
+            }
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore generazione immagine: {e}")
