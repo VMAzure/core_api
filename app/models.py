@@ -585,6 +585,10 @@ class MnetModelli(Base):
     modello_breve_carrozzeria = Column(String, nullable=True)
     ultima_modifica = Column(DateTime, server_default=func.now(), onupdate=func.now())
     default_img = Column(String(1000), nullable=True)
+    ai_foto_url        = Column(String, nullable=True)
+    ai_foto_updated_at = Column(DateTime, nullable=True)
+    ai_foto_prompt     = Column(Text, nullable=True)
+
 
 
 class MnetAllestimenti(Base):

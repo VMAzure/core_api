@@ -15,6 +15,8 @@ from pydantic import BaseSettings
 from dotenv import load_dotenv  # ✅ Importiamo dotenv PRIMA di qualsiasi import dipendente dalle variabili
 from fastapi.responses import JSONResponse
 
+from app.utils import modelli
+
 # ✅ Carichiamo le variabili d'ambiente PRIMA di qualsiasi import di moduli che le usano
 load_dotenv()
 
@@ -57,6 +59,8 @@ from app.routes.tenant import router as tenant_router
 from app.routes.notifiche import router as notifiche_router
 from app.routes.videos import router as videos_router
 from app.routes import video_maker
+from app.routes.modelli_ai_test import router as modelli_ai_test_router
+
 
 
 # ✅ Configuriamo il logging
@@ -215,7 +219,7 @@ app.include_router(tenant_router)  # espone /api/tenant/resolve
 app.include_router(notifiche_router)
 app.include_router(videos_router)
 app.include_router(video_maker.router)
-
+app.include_router(modelli_ai_test_router)
 
 
 
