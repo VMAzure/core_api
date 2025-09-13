@@ -1168,6 +1168,9 @@ class MnetModelloUsato(Base):
     serie_gamma = Column(String)
     created_at = Column(Date)
 
+    allestimenti = relationship("MnetAllestimentoUsato", back_populates="modello")
+
+
 
 
 class MnetAllestimentoUsato(Base):
@@ -1177,10 +1180,12 @@ class MnetAllestimentoUsato(Base):
     # 🔑 PK restituita da Motornet
     codice_motornet_uni = Column(String, primary_key=True)
 
+    # Chiave esterna verso modello
+    codice_modello = Column(String, ForeignKey("public.mnet_modelli_usato.codice_modello", ondelete="CASCADE"), nullable=False)
+
     # Campi principali
     codice_eurotax = Column(String, nullable=True)
     acronimo_marca = Column(String, nullable=False)
-    codice_modello = Column(String, ForeignKey("public.mnet_modelli_usato.codice_modello", ondelete="CASCADE"), nullable=False)
 
     # Descrizione
     versione = Column(String, nullable=True)
@@ -1191,7 +1196,7 @@ class MnetAllestimentoUsato(Base):
     inizio_commercializzazione = Column(Date, nullable=True)
     fine_commercializzazione = Column(Date, nullable=True)
 
-    # Specifiche base (popolate poi da dettagli)
+    # Specifiche base
     alimentazione = Column(String, nullable=True)
     cambio = Column(String, nullable=True)
     trazione = Column(String, nullable=True)
@@ -1202,7 +1207,7 @@ class MnetAllestimentoUsato(Base):
     # Audit
     created_at = Column(TIMESTAMP, server_default=func.now())
 
-    # 🔗 Relazione con modello
+    # 🔗 Relazione con modello (corretta)
     modello = relationship("MnetModelloUsato", back_populates="allestimenti")
 
 from sqlalchemy import Column, String, Integer, Float, Boolean, Date
