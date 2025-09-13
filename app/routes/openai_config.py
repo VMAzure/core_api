@@ -628,12 +628,16 @@ def _gemini_build_image_prompt(marca: str, modello: str, anno: int, colore: Opti
 async def _gemini_generate_image_sync(
     prompt: str,
     start_image_url: Optional[str] = None,
-    start_image_bytes: Optional[bytes] = None
+    start_image_bytes: Optional[bytes] = None,
+    subject_image_url: Optional[str] = None,
+    background_image_url: Optional[str] = None
 ) -> bytes:
     _gemini_assert_api()
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent"
 
     parts = [{"text": prompt}]
+
+    # immagine inline (compatibilità vecchia logica)
     if start_image_bytes:
         parts.append({
             "inline_data": {
@@ -649,6 +653,17 @@ async def _gemini_generate_image_sync(
                 "data": b64
             }
         })
+
+    # nuove immagini opzionali
+    for url in (subject_image_url, background_image_url):
+        if url:
+            mime, b64 = await _fetch_image_base64_from_url(url)
+            parts.append({
+                "inline_data": {
+                    "mime_type": mime,
+                    "data": b64
+                }
+            })
 
     payload = {"contents": [{"parts": parts}]}
 
@@ -677,6 +692,7 @@ async def _gemini_generate_image_sync(
                 return base64.b64decode(inline["data"])
 
         raise HTTPException(502, f"Gemini image: nessuna immagine trovata. Resp: {data}")
+
 
 async def _nano_banana_generate_image(
     scenario: str,
@@ -1423,7 +1439,9 @@ from PIL import Image
 
 class WebpImageRequest(BaseModel):
     prompt: str
-    start_image_url: Optional[str] = None   # ora opzionale
+    subject_image_url: Optional[str] = None     # foto soggetto
+    background_image_url: Optional[str] = None  # foto ambiente
+
 
 @router.post("/veo3/image-webp", tags=["Gemini VEO 3"])
 async def genera_image_webp(payload: WebpImageRequest):
@@ -1431,7 +1449,9 @@ async def genera_image_webp(payload: WebpImageRequest):
         # Genera immagine con Gemini
         img_bytes = await _gemini_generate_image_sync(
             prompt=payload.prompt,
-            start_image_url=payload.start_image_url
+            start_image_url=payload.start_image_url,
+            subject_image_url=payload.subject_image_url,
+            background_image_url=payload.background_image_url
         )
 
         # Converti in .webp in memoria
