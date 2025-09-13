@@ -241,7 +241,7 @@ async def _fetch_image_base64_from_url(url: str) -> tuple[str, str]:
         if r.status_code >= 300:
             raise HTTPException(502, f"Download immagine fallito: {r.text}")
         mime = r.headers.get("content-type", "image/png")
-        b64 = base64.b64encode(r.content).decode("ascii")
+        b64 = base64.b64encode(r.content).decode("utf-8")
         return mime, b64
 
 
@@ -1451,13 +1451,60 @@ class WebpImageRequest(BaseModel):
 @router.post("/veo3/image-webp", tags=["Gemini VEO 3"])
 async def genera_image_webp(payload: WebpImageRequest):
     try:
-        # Genera immagine con Gemini
-        img_bytes = await _gemini_generate_image_sync(
-            prompt=payload.prompt,
-            start_image_url=payload.start_image_url,
-            subject_image_url=payload.subject_image_url,
-            background_image_url=payload.background_image_url
-        )
+        _gemini_assert_api()
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent"
+
+        # Costruisci parts
+        parts = [{"text": payload.prompt}]
+
+        for name, img_url in {
+            "start_image_url": payload.start_image_url,
+            "subject_image_url": payload.subject_image_url,
+            "background_image_url": payload.background_image_url
+        }.items():
+            if img_url:
+                mime, b64 = await _fetch_image_base64_from_url(img_url)
+                parts.append({
+                    "inline_data": {
+                        "mime_type": mime,
+                        "data": b64
+                    }
+                })
+
+        request_payload = {"contents": [{"parts": parts}]}
+
+        # Chiamata a Gemini con Authorization Bearer
+        async with httpx.AsyncClient(timeout=180) as client:
+            r = await client.post(
+                url,
+                json=request_payload,
+                headers={
+                    "Authorization": f"Bearer {GEMINI_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+            )
+            if r.status_code >= 300:
+                raise HTTPException(r.status_code, f"Errore Gemini image: {r.text}")
+
+            data = r.json()
+            result_parts = (
+                data.get("candidates", [{}])[0]
+                .get("content", {})
+                .get("parts", [])
+            )
+            img_bytes = None
+            for p in result_parts:
+                inline = (
+                    p.get("inline_data")
+                    or p.get("inlineData")
+                    or p.get("inline")
+                )
+                if inline and inline.get("data"):
+                    img_bytes = base64.b64decode(inline["data"])
+                    break
+
+            if not img_bytes:
+                raise HTTPException(502, f"Gemini image: nessuna immagine trovata. Resp: {data}")
 
         # Converti in .webp in memoria
         img = Image.open(io.BytesIO(img_bytes))
@@ -1465,14 +1512,12 @@ async def genera_image_webp(payload: WebpImageRequest):
         img.save(buf, format="WEBP", quality=90)
         buf.seek(0)
 
-        # Ritorna file da scaricare
         return Response(
             content=buf.read(),
             media_type="image/webp",
-            headers={
-                "Content-Disposition": 'attachment; filename="output.webp"'
-            }
+            headers={"Content-Disposition": 'attachment; filename="output.webp"'}
         )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore generazione immagine: {e}")
+
