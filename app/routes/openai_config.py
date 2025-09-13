@@ -1478,10 +1478,11 @@ async def genera_image_webp(payload: WebpImageRequest):
             r = await client.post(
                 url,
                 json=request_payload,
-                headers={
-                    "Authorization": f"Bearer {GEMINI_API_KEY}",
+                 headers = {
+                    "x-goog-api-key": GEMINI_API_KEY,
                     "Content-Type": "application/json"
                 }
+
             )
             if r.status_code >= 300:
                 raise HTTPException(r.status_code, f"Errore Gemini image: {r.text}")
