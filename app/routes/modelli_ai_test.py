@@ -15,7 +15,7 @@ router = APIRouter(tags=["Modelli AI - Test"])
 
 SUPABASE_BUCKET_MODELLI_AI = os.getenv("SUPABASE_BUCKET_MODELLI_AI", "modelli-ai")
 WEBP_QUALITY = int(os.getenv("MODEL_AI_WEBP_QUALITY", "90"))
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or "AIzaSyADzQaAS8VeiSqjgZ77Hofw7kIcv7KgChc"
 
 # ----------- PROMPTS OTTIMIZZATI ------------
 SCENARIO_PROMPTS = {
@@ -140,6 +140,13 @@ async def _nano_banana_generate_image(scenario: str, prompt: str, start_image_by
     ]
 
     payload = {"contents": [{"parts": parts}]}
+    logging.info(f"🌐 Chiamo Gemini per {scenario}")
+    async with httpx.AsyncClient(timeout=180) as client:
+        r = await client.post(url, json=payload, headers={
+            "x-goog-api-key": GEMINI_API_KEY,
+            "Content-Type": "application/json"
+        })
+    logging.info(f"🌐 Risposta Gemini {scenario}: {r.status_code}")
 
     async with httpx.AsyncClient(timeout=180) as client:
         r = await client.post(url, json=payload, headers={
@@ -150,6 +157,8 @@ async def _nano_banana_generate_image(scenario: str, prompt: str, start_image_by
             raise HTTPException(r.status_code, f"Errore Nano Banana: {r.text}")
 
         data = r.json()
+        logging.warning(f"📦 Risposta grezza Gemini: {data}")
+
         parts = (
             data.get("candidates", [{}])[0]
             .get("content", {})
@@ -181,21 +190,28 @@ async def modelli_ai_test(
 
     results = []
     for scenario, prompt in SCENARIO_PROMPTS.items():
+        # controlla se già esiste
+        foto = (
+            db.query(MnetModelliAIFoto)
+            .filter(
+                MnetModelliAIFoto.codice_modello == codice_modello,
+                MnetModelliAIFoto.scenario == scenario
+            )
+            .first()
+        )
+
+        if foto and foto.ai_foto_url:   # già generata
+            logging.info(f"⏩ Skip {codice_modello} - {scenario}, già presente")
+            continue
+
+        logging.info(f"▶️ Genero {codice_modello} - {scenario}")
+
         try:
             png_bytes = await _nano_banana_generate_image(scenario, prompt, img_bytes)
             webp_bytes = _to_webp(png_bytes)
             fname = f"{codice_modello}/{scenario}-{uuid.uuid4()}.webp"
             storage_path, public_url = _sb_upload_and_sign_bucket(fname, webp_bytes, "image/webp")
 
-            # Salva/aggiorna DB
-            foto = (
-                db.query(MnetModelliAIFoto)
-                .filter(
-                    MnetModelliAIFoto.codice_modello == codice_modello,
-                    MnetModelliAIFoto.scenario == scenario
-                )
-                .first()
-            )
             if not foto:
                 foto = MnetModelliAIFoto(codice_modello=codice_modello, scenario=scenario)
                 db.add(foto)
@@ -205,12 +221,80 @@ async def modelli_ai_test(
             foto.ai_foto_updated_at = datetime.utcnow()
             db.commit()
 
-            results.append(ScenarioImage(scenario=scenario, url=public_url))
+            logging.info(f"✅ Salvata {codice_modello} - {scenario}")
         except Exception as e:
-            logging.error(f"❌ Errore scenario {scenario}: {e}")
-            # puoi decidere se aggiungere comunque results.append con url=None
+            logging.error(f"❌ Errore {codice_modello} - {scenario}: {e}")
+
 
     return ModelloAITestResponse(
         codice_modello=codice_modello,
         results=results
     )
+
+@router.post("/modelli-ai/sync-mnet")
+async def sync_immagini_mnet(db: Session = Depends(get_db)):
+    rows = db.execute(text("SELECT codice_modello FROM public.mnet_modelli")).mappings().all()
+    logging.info(f"🔄 Avvio sync immagini AI per {len(rows)} modelli")
+
+    report = []
+
+    for row in rows:
+        codice_modello = row["codice_modello"]
+        modello_report = {"codice_modello": codice_modello, "scenari": {}}
+
+        try:
+            pick = db.execute(text(SQL_PICK_START), {"codice_modello": codice_modello}).mappings().first()
+            if not pick:
+                modello_report["errore"] = "no_start_image"
+                report.append(modello_report)
+                continue
+
+            start_url = pick["start_url"]
+            img_bytes = download_with_retry(start_url)
+            logging.info(f"✅ Download completato per {codice_modello}, size={len(img_bytes)} bytes")
+
+            for scenario, prompt in SCENARIO_PROMPTS.items():
+                foto = (
+                    db.query(MnetModelliAIFoto)
+                    .filter(
+                        MnetModelliAIFoto.codice_modello == codice_modello,
+                        MnetModelliAIFoto.scenario == scenario
+                    )
+                    .first()
+                )
+
+                if foto and foto.ai_foto_url:
+                    logging.info(f"⏩ Skip {codice_modello} - {scenario}, già presente")
+                    modello_report["scenari"][scenario] = "skip"
+                    continue
+
+                logging.info(f"▶️ Inizio generazione {codice_modello} - {scenario}")
+
+                try:
+                    png_bytes = await _nano_banana_generate_image(scenario, prompt, img_bytes)
+                    webp_bytes = _to_webp(png_bytes)
+                    fname = f"{codice_modello}/{scenario}-{uuid.uuid4()}.webp"
+                    storage_path, public_url = _sb_upload_and_sign_bucket(fname, webp_bytes, "image/webp")
+
+                    if not foto:
+                        foto = MnetModelliAIFoto(codice_modello=codice_modello, scenario=scenario)
+                        db.add(foto)
+
+                    foto.ai_foto_url = public_url
+                    foto.ai_foto_prompt = prompt
+                    foto.ai_foto_updated_at = datetime.utcnow()
+                    db.commit()
+
+                    modello_report["scenari"][scenario] = "ok"
+                except Exception as e:
+                    logging.exception(f"❌ Errore {codice_modello} - {scenario}")
+                    modello_report["scenari"][scenario] = f"errore: {e}"
+
+        except Exception as e:
+            modello_report["errore"] = str(e)
+
+        report.append(modello_report)
+
+    logging.info("🎯 Fine sync immagini AI mnet")
+    return {"status": "completed", "report": report}
+
