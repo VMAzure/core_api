@@ -1171,20 +1171,39 @@ class MnetModelloUsato(Base):
 
 
 class MnetAllestimentoUsato(Base):
-    __table_args__ = {"schema": "public"}
-    
     __tablename__ = "mnet_allestimenti_usato"
+    __table_args__ = {"schema": "public"}
 
+    # 🔑 PK restituita da Motornet
     codice_motornet_uni = Column(String, primary_key=True)
-    acronimo_marca = Column(String)
-    codice_desc_modello = Column(String, ForeignKey("mnet_modelli_usato.codice_desc_modello", ondelete="CASCADE"))
-    versione = Column(String)
-    alimentazione = Column(String)
-    cambio = Column(String)
-    trazione = Column(String)
-    cilindrata = Column(Integer)
-    kw = Column(Integer)
-    cv = Column(Integer)
+
+    # Campi principali
+    codice_eurotax = Column(String, nullable=True)
+    acronimo_marca = Column(String, nullable=False)
+    codice_modello = Column(String, ForeignKey("public.mnet_modelli_usato.codice_modello", ondelete="CASCADE"), nullable=False)
+
+    # Descrizione
+    versione = Column(String, nullable=True)
+
+    # Date
+    inizio_produzione = Column(Date, nullable=True)
+    fine_produzione = Column(Date, nullable=True)
+    inizio_commercializzazione = Column(Date, nullable=True)
+    fine_commercializzazione = Column(Date, nullable=True)
+
+    # Specifiche base (popolate poi da dettagli)
+    alimentazione = Column(String, nullable=True)
+    cambio = Column(String, nullable=True)
+    trazione = Column(String, nullable=True)
+    cilindrata = Column(Integer, nullable=True)
+    kw = Column(Integer, nullable=True)
+    cv = Column(Integer, nullable=True)
+
+    # Audit
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    # 🔗 Relazione con modello
+    modello = relationship("MnetModelloUsato", back_populates="allestimenti")
 
 from sqlalchemy import Column, String, Integer, Float, Boolean, Date
 

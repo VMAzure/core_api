@@ -207,7 +207,7 @@ async def get_allestimenti_usato(
             cv
         FROM mnet_allestimenti_usato
         WHERE acronimo_marca = :codice_marca
-          AND codice_desc_modello = :codice_modello
+          AND codice_modello = :codice_modello
         ORDER BY versione
     """)
 

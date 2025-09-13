@@ -39,19 +39,7 @@ def parse_date(val):
 def process_modelli(marca, anno):
     """Scarica i modelli per una marca+anno e salva in mnet_modelli_usato. Ritorna True/False."""
     db = SessionLocal()
-
-    # Skip se abbiamo già almeno un modello per marca+anno
-    esiste = db.execute(text("""
-        SELECT 1 FROM mnet_modelli_usato
-        WHERE marca_acronimo = :marca
-        AND inizio_produzione <= make_date(:anno, 12, 31)
-        LIMIT 1
-    """), {"marca": marca, "anno": anno}).fetchone()
-
-    if esiste:
-        print(f"⏭️  {marca}-{anno}: già presenti modelli, skippo")
-        db.close()
-        return True
+    inseriti = 0
 
     url = f"{MODELLI_PROXY_URL}?codice_marca={marca}&anno={anno}&libro=false"
     headers = {"Authorization": f"Bearer {shared_token['value']}"}
@@ -77,31 +65,36 @@ def process_modelli(marca, anno):
             modelli = resp.json().get("modelli", [])
             print(f"📦 {marca}-{anno}: ricevuti {len(modelli)} modelli")
 
-            inseriti = 0
             for modello in modelli:
-                codice = modello.get("codDescModello", {}).get("codice")
-                if not codice:
+                cod_desc = modello.get("codDescModello", {}).get("codice")
+                desc = modello.get("codDescModello", {}).get("descrizione")
+                gamma_codice = modello.get("gammaModello", {}).get("codice")
+                gamma_descrizione = modello.get("gammaModello", {}).get("descrizione")
+
+                if not gamma_codice or not cod_desc:
                     continue
 
                 result = db.execute(text("""
                     INSERT INTO mnet_modelli_usato (
-                        marca_acronimo, codice_desc_modello, codice_modello, descrizione, descrizione_dettagliata,
+                        marca_acronimo, codice_desc_modello, codice_modello,
+                        descrizione, descrizione_dettagliata,
                         gruppo_storico, inizio_produzione, fine_produzione,
                         inizio_commercializzazione, fine_commercializzazione,
                         segmento, tipo, serie_gamma, created_at
                     ) VALUES (
-                        :marca_acronimo, :codice_desc_modello, :codice_modello, :descrizione, :descrizione_dettagliata,
+                        :marca_acronimo, :codice_desc_modello, :codice_modello,
+                        :descrizione, :descrizione_dettagliata,
                         :gruppo_storico, :inizio_produzione, :fine_produzione,
                         :inizio_commercializzazione, :fine_commercializzazione,
                         :segmento, :tipo, :serie_gamma, :created_at
                     )
-                    ON CONFLICT (marca_acronimo, codice_desc_modello) DO NOTHING
+                    ON CONFLICT (marca_acronimo, codice_modello) DO NOTHING
                 """), {
                     "marca_acronimo": marca,
-                    "codice_desc_modello": codice,
-                    "codice_modello": codice,
-                    "descrizione": modello.get("codDescModello", {}).get("descrizione"),
-                    "descrizione_dettagliata": modello.get("gammaModello", {}).get("descrizione"),
+                    "codice_desc_modello": cod_desc,
+                    "codice_modello": gamma_codice,  # gamma
+                    "descrizione": desc,
+                    "descrizione_dettagliata": gamma_descrizione,
                     "gruppo_storico": modello.get("gruppoStorico", {}).get("descrizione"),
                     "inizio_produzione": parse_date(modello.get("inizioProduzione")),
                     "fine_produzione": parse_date(modello.get("fineProduzione")),
@@ -129,6 +122,8 @@ def process_modelli(marca, anno):
     db.close()
     print(f"⛔ Fallito definitivamente {marca}-{anno}")
     return False
+
+
 
 def sync_modelli_usato():
     db = SessionLocal()

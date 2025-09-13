@@ -8,11 +8,12 @@ from threading import Lock
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 import os
+from app.database import get_db, DATABASE_URL
 
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "app/.env"))
 
 MOTORN_AUTH_URL = "https://webservice.motornet.it/auth/realms/webservices/protocol/openid-connect/token"
-DETTAGLI_URL = "https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/dettaglio"
+DETTAGLI_URL = "https://webservice.motornet.it/api/v2_0/rest/public/usato/auto/dettaglio"
 
 SessionLocal = sessionmaker(bind=engine)
 token_lock = Lock()
@@ -50,7 +51,7 @@ def safe_float(val):
 
 def process_codice(codice_uni):
     db = SessionLocal()
-    url = f"{DETTAGLI_URL}?codice_motornet_uni={codice_uni}"
+    url = f"{DETTAGLI_URL}?codice_motornet={codice_uni}"
 
     for attempt in range(5):
         headers = {"Authorization": f"Bearer {shared_token['value']}"}
