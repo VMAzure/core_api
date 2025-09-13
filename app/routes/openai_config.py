@@ -1439,8 +1439,10 @@ from PIL import Image
 
 class WebpImageRequest(BaseModel):
     prompt: str
-    subject_image_url: Optional[str] = None     # foto soggetto
-    background_image_url: Optional[str] = None  # foto ambiente
+    start_image_url: Optional[str] = None          # compatibilità
+    subject_image_url: Optional[str] = None        # nuovo opzionale
+    background_image_url: Optional[str] = None     # nuovo opzionale
+
 
 
 @router.post("/veo3/image-webp", tags=["Gemini VEO 3"])
