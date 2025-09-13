@@ -241,7 +241,7 @@ async def _fetch_image_base64_from_url(url: str) -> tuple[str, str]:
         if r.status_code >= 300:
             raise HTTPException(502, f"Download immagine fallito: {r.text}")
         mime = r.headers.get("content-type", "image/png")
-        b64 = base64.b64encode(r.content).decode("utf-8")
+        b64 = base64.b64encode(r.content).decode("ascii")
         return mime, b64
 
 
