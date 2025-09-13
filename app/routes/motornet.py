@@ -10,6 +10,8 @@ from datetime import datetime
 import httpx
 from app.utils.modelli import pulisci_modello
 from fastapi import Query
+from sqlalchemy import func, cast, Date, or_
+
 
 
 router_generic = APIRouter()
@@ -144,11 +146,15 @@ async def get_modelli_usato(
     if anno:
         start = date(anno, 1, 1)
         end = date(anno, 12, 31)
+
         q = q.filter(
             MnetModelloUsato.inizio_commercializzazione <= end,
-            (MnetModelloUsato.fine_commercializzazione.is_(None)) |
-            (MnetModelloUsato.fine_commercializzazione >= start)
+            or_(
+                MnetModelloUsato.fine_commercializzazione.is_(None),
+                (MnetModelloUsato.fine_commercializzazione + text("interval '12 months'")) >= start
+            )
         )
+
 
     modelli = q.order_by(MnetModelloUsato.descrizione).all()
 
@@ -329,7 +335,9 @@ async def get_marche_per_anno_usato(
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
-    """Ritorna solo le marche che avevano modelli in commercio nell'anno specificato (dal DB locale)."""
+    """Ritorna solo le marche che avevano modelli in commercio nell'anno specificato (dal DB locale).
+       Considera un margine di 12 mesi dopo la fine commercializzazione.
+    """
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
     user = db.query(User).filter(User.email == user_email).first()
@@ -339,13 +347,15 @@ async def get_marche_per_anno_usato(
     start = date(anno, 1, 1)
     end = date(anno, 12, 31)
 
-    # Trova modelli attivi nell'anno
+    # Trova modelli attivi nell'anno, con margine +12 mesi dopo la fine commercializzazione
     modelli = (
         db.query(MnetModelloUsato.marca_acronimo)
         .filter(
             MnetModelloUsato.inizio_commercializzazione <= end,
-            (MnetModelloUsato.fine_commercializzazione.is_(None)) |
-            (MnetModelloUsato.fine_commercializzazione >= start)
+            (
+                (MnetModelloUsato.fine_commercializzazione.is_(None)) |
+                (MnetModelloUsato.fine_commercializzazione + text("interval '12 months'") >= start)
+            )
         )
         .distinct()
         .all()
@@ -353,7 +363,6 @@ async def get_marche_per_anno_usato(
 
     acronimi = [m.marca_acronimo for m in modelli]
 
-    # Recupera marche corrispondenti
     marche = (
         db.query(MnetMarche)
         .filter(MnetMarche.acronimo.in_(acronimi))
@@ -369,6 +378,7 @@ async def get_marche_per_anno_usato(
         }
         for m in marche
     ]
+
 
 @router_usato.get("/accessori/{codice_motornet}/{anno}/{mese}", tags=["Usato"])
 async def get_accessori_auto_usato(
