@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.routes.auth import get_current_user
 from app.database import get_db  # ✅ Import corretto per il DB
-from app.models import User, MnetModelli, MnetMarcaUsato, MnetModelloUsato
+from app.models import User, MnetModelli, MnetMarcaUsato, MnetModelloUsato, MnetMarche
 from datetime import datetime
 import httpx
 from app.utils.modelli import pulisci_modello
@@ -321,52 +321,54 @@ async def get_valutazione_auto(
 
     raise HTTPException(status_code=response.status_code, detail="Errore nel recupero della valutazione")
 
-@router_usato.get("/marche/{anno}", tags=["Usato"])
-async def get_marche_per_anno_usato(anno: int, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    """Recupera la lista delle marche per un anno specifico"""
-    Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
-    user_email = Authorize.get_jwt_subject()
+from datetime import date
 
+@router_usato.get("/marche/{anno}", tags=["Usato"])
+async def get_marche_per_anno_usato(
+    anno: int,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """Ritorna solo le marche che avevano modelli in commercio nell'anno specificato (dal DB locale)."""
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=401, detail="Utente non trovato")
 
-    token = get_motornet_token()  # 🔹 Otteniamo il token da Motornet prima della richiesta
+    start = date(anno, 1, 1)
+    end = date(anno, 12, 31)
 
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
+    # Trova modelli attivi nell'anno
+    modelli = (
+        db.query(MnetModelloUsato.marca_acronimo)
+        .filter(
+            MnetModelloUsato.inizio_commercializzazione <= end,
+            (MnetModelloUsato.fine_commercializzazione.is_(None)) |
+            (MnetModelloUsato.fine_commercializzazione >= start)
+        )
+        .distinct()
+        .all()
+    )
 
-    motornet_url = f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/marche/{anno}"
+    acronimi = [m.marca_acronimo for m in modelli]
 
-    response = requests.get(motornet_url, headers=headers)
+    # Recupera marche corrispondenti
+    marche = (
+        db.query(MnetMarche)
+        .filter(MnetMarche.acronimo.in_(acronimi))
+        .order_by(MnetMarche.nome)
+        .all()
+    )
 
-    print(f"🔍 DEBUG: Risposta Motornet Marche per anno: {response.text}")  # 🔹 Stampa la risposta ricevuta
-
-    if response.status_code == 200:
-        try:
-            data = response.json()
-        except Exception as e:
-            raise HTTPException(500, f"Errore parse JSON: {str(e)}")
-
-        # compatibilità: se data è lista, usala direttamente
-        raw_marche = data.get("marche") if isinstance(data, dict) else data
-        if not isinstance(raw_marche, list):
-            raise HTTPException(500, detail=f"Formato inatteso da Motornet: {data}")
-
-        return [
-            {
-                "acronimo": m.get("acronimo"),
-                "nome": m.get("nome"),
-                "logo": m.get("logo")
-            }
-            for m in raw_marche
-        ]
-
-
-        return marche_pulite
-
-    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero delle marche per l'anno specificato")
+    return [
+        {
+            "acronimo": m.acronimo,
+            "nome": m.nome,
+            "logo": m.logo
+        }
+        for m in marche
+    ]
 
 @router_usato.get("/accessori/{codice_motornet}/{anno}/{mese}", tags=["Usato"])
 async def get_accessori_auto_usato(
