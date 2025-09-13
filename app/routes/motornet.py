@@ -344,16 +344,25 @@ async def get_marche_per_anno_usato(anno: int, Authorize: AuthJWT = Depends(), d
     print(f"🔍 DEBUG: Risposta Motornet Marche per anno: {response.text}")  # 🔹 Stampa la risposta ricevuta
 
     if response.status_code == 200:
-        data = response.json()
+        try:
+            data = response.json()
+        except Exception as e:
+            raise HTTPException(500, f"Errore parse JSON: {str(e)}")
 
-        # Estraggo solo i dati utili
-        marche_pulite = [
+        # compatibilità: se data è lista, usala direttamente
+        raw_marche = data.get("marche") if isinstance(data, dict) else data
+        if not isinstance(raw_marche, list):
+            raise HTTPException(500, detail=f"Formato inatteso da Motornet: {data}")
+
+        return [
             {
-                "acronimo": marca.get("acronimo"),
-                "nome": marca.get("nome")
+                "acronimo": m.get("acronimo"),
+                "nome": m.get("nome"),
+                "logo": m.get("logo")
             }
-            for marca in data.get("marche", [])
+            for m in raw_marche
         ]
+
 
         return marche_pulite
 

@@ -15,7 +15,7 @@ router = APIRouter(tags=["Modelli AI - Test"])
 
 SUPABASE_BUCKET_MODELLI_AI = os.getenv("SUPABASE_BUCKET_MODELLI_AI", "modelli-ai")
 WEBP_QUALITY = int(os.getenv("MODEL_AI_WEBP_QUALITY", "90"))
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or "AIzaSyADzQaAS8VeiSqjgZ77Hofw7kIcv7KgChc"
 
 # ----------- PROMPTS OTTIMIZZATI ------------
 SCENARIO_PROMPTS = {
