@@ -637,7 +637,7 @@ async def _gemini_generate_image_sync(
 
     parts = [{"text": prompt}]
 
-    # immagine inline (compatibilità vecchia logica)
+    # compatibilità: start_image
     if start_image_bytes:
         parts.append({
             "inline_data": {
@@ -646,6 +646,8 @@ async def _gemini_generate_image_sync(
             }
         })
     elif start_image_url:
+        if not isinstance(start_image_url, str) or not start_image_url.strip():
+            raise HTTPException(422, "start_image_url deve essere una stringa valida")
         mime, b64 = await _fetch_image_base64_from_url(start_image_url)
         parts.append({
             "inline_data": {
@@ -654,9 +656,11 @@ async def _gemini_generate_image_sync(
             }
         })
 
-    # nuove immagini opzionali
-    for url in (subject_image_url, background_image_url):
-        if url:
+    # obbligo: se i campi sono presenti devono essere stringhe valide
+    for name, url in {"subject_image_url": subject_image_url, "background_image_url": background_image_url}.items():
+        if url is not None:
+            if not isinstance(url, str) or not url.strip():
+                raise HTTPException(422, f"{name} deve essere una stringa valida")
             mime, b64 = await _fetch_image_base64_from_url(url)
             parts.append({
                 "inline_data": {
@@ -676,7 +680,6 @@ async def _gemini_generate_image_sync(
             raise HTTPException(r.status_code, f"Errore Gemini image: {r.text}")
 
         data = r.json()
-
         parts = (
             data.get("candidates", [{}])[0]
             .get("content", {})
