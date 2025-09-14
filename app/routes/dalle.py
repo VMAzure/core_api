@@ -47,9 +47,9 @@ async def dalle_combine(
             prompt=prompt,
             image=buf,
             size="1024x1024",
-            quality=quality,
-            response_format="b64_json"  # 👈 chiediamo base64
+            quality=quality
         )
+
 
         # Decodifica base64 e salva su file locale
         img_b64 = result.data[0].b64_json
