@@ -23,7 +23,8 @@ async def dalle_combine(
     quality: str = Form("medium"),
     size: str = Form("1024x1024"),
     logo_url: str = Form(None),
-    logo_height: int = Form(100),        # 👈 altezza logo
+    logo_height: int = Form(100),   
+    logo_offset_y: int = Form(100),  # default = 100px sotto il top
     as_file: bool = Form(True),
 ):
 
@@ -85,7 +86,7 @@ async def dalle_combine(
 
             # Posizionamento: top centrato
             logo_x = (final.width - new_w) // 2
-            logo_y = 0
+            logo_y = logo_offset_y
 
             final.paste(logo, (logo_x, logo_y), logo)
 
