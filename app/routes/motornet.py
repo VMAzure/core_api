@@ -719,7 +719,7 @@ async def get_accessori_usato_pubblico(
 
     motornet_url = (
         f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/accessori"
-        f"?codice_motornet_uni={codice_motornet}"
+        f"?codice_motornet={codice_motornet}"
         f"&anno={anno}"
         f"&mese={mese}"
     )
