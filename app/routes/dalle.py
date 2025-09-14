@@ -1,5 +1,4 @@
-﻿# app/routes/dalle.py
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+﻿from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 from openai import OpenAI
 import os
@@ -7,15 +6,23 @@ from io import BytesIO
 from PIL import Image
 
 router = APIRouter()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    organization=os.getenv("OPENAI_ORG_ID")  # opzionale, utile se hai più org
+)
 
 @router.post("/ai/dalle/combine")
 async def dalle_combine(
     prompt: str = Form(...),
     img1: UploadFile = File(...),
     img2: UploadFile = File(...),
+    quality: str = Form("standard"),   # "standard" oppure "hd"
 ):
     try:
+        if quality not in ["standard", "hd"]:
+            raise HTTPException(status_code=400, detail="quality must be 'standard' or 'hd'")
+
         # Leggi immagini
         i1 = Image.open(BytesIO(await img1.read()))
         i2 = Image.open(BytesIO(await img2.read()))
@@ -27,18 +34,19 @@ async def dalle_combine(
         canvas.paste(i1, (0, 0))
         canvas.paste(i2, (i1.width, 0))
 
-        # Converti in buffer PNG
+        # Converti in buffer PNG con nome
         buf = BytesIO()
         canvas.save(buf, format="PNG")
         buf.seek(0)
-        buf.name = "canvas.png"   
+        buf.name = "canvas.png"
 
-        # Invio a DALL·E 3
+        # Invio a GPT Image 1 (DALL·E 3)
         result = client.images.edit(
             model="gpt-image-1",
             prompt=prompt,
             image=buf,
-            size="1024x1024"
+            size="1024x1024",
+            quality=quality
         )
 
         return JSONResponse(content=result.data[0].model_dump())
