@@ -4,6 +4,7 @@ from openai import OpenAI
 import os
 from io import BytesIO
 from PIL import Image
+import base64
 
 router = APIRouter()
 
@@ -46,10 +47,25 @@ async def dalle_combine(
             prompt=prompt,
             image=buf,
             size="1024x1024",
-            quality=quality
+            quality=quality,
+            response_format="b64_json"  # 👈 chiediamo base64
         )
 
-        return JSONResponse(content=result.data[0].model_dump())
+        # Decodifica base64 e salva su file locale
+        img_b64 = result.data[0].b64_json
+        img_bytes = base64.b64decode(img_b64)
+
+        output_dir = "tmp"
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, "output.png")
+        with open(output_path, "wb") as f:
+            f.write(img_bytes)
+
+        return {
+            "message": "Immagine generata",
+            "local_path": output_path,
+            "base64_preview": img_b64[:200] + "..."  # preview corta, non tutto il base64
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
