@@ -403,7 +403,7 @@ async def get_accessori_auto_usato(
     }
 
     motornet_url = (
-        f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/accessori"
+        f"https://webservice.motornet.it/api/v2_0/rest/public/usato/auto/accessori"
         f"?codice_motornet_uni={codice_motornet}"
         f"&anno={anno}"
         f"&mese={mese}"
