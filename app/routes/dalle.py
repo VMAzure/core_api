@@ -1,4 +1,4 @@
-# app/routes/dalle.py
+﻿# app/routes/dalle.py
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 from openai import OpenAI
@@ -32,7 +32,7 @@ async def dalle_combine(
         canvas.save(buf, format="PNG")
         buf.seek(0)
 
-        # Invio a DALL�E 3
+        # Invio a DALL·E 3
         result = client.images.edit(
             model="dall-e-3",
             prompt=prompt,
