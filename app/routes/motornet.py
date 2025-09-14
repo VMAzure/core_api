@@ -706,30 +706,51 @@ async def get_tutti_modelli(db: Session = Depends(get_db)):
         for modello in modelli
     ]
 
-@router_usato.get("/accessori-pubblico", tags=["MNet Pubblico"])
-async def get_accessori_usato_pubblico(
-    codice_motornet: str = Query(...),
-    anno: int = Query(...),
-    mese: int = Query(...),
+@router_usato.get("/accessori/{codice_motornet}/{anno}/{mese}", tags=["Usato"])
+async def get_accessori_auto_usato(
+    codice_motornet: str,
+    anno: int,
+    mese: int,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
 ):
-    """Accessori usato (Motornet) pubblici senza JWT"""
+    """
+    Recupera tutti gli accessori di un veicolo usato tramite codice Motornet (non _uni)
+    """
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Utente non trovato")
+
     token = get_motornet_token()
 
-    headers = { "Authorization": f"Bearer {token}" }
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
 
     motornet_url = (
-        f"https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/accessori"
+        f"https://webservice.motornet.it/api/v2_0/rest/public/usato/auto/accessori"
         f"?codice_motornet={codice_motornet}"
-        f"&anno={anno}"
-        f"&mese={mese}"
+        f"&anno={anno}&mese={mese}"
     )
 
     response = requests.get(motornet_url, headers=headers)
 
+    print(f"🔍 DEBUG Motornet Accessori {codice_motornet}: {response.status_code}")
+    print(f"🔍 Response: {response.text}")
+
     if response.status_code == 200:
         return response.json()
 
-    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero degli accessori del veicolo")
+    if response.status_code == 412:
+        raise HTTPException(412, detail="Parametri mancanti o errati per Motornet")
+
+    if response.status_code == 404:
+        raise HTTPException(404, detail="Veicolo non trovato in Motornet")
+
+    raise HTTPException(response.status_code, detail="Errore Motornet accessori")
 
 
 
