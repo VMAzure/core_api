@@ -380,44 +380,7 @@ async def get_marche_per_anno_usato(
     ]
 
 
-@router_usato.get("/accessori/{codice_motornet}/{anno}/{mese}", tags=["Usato"])
-async def get_accessori_auto_usato(
-    codice_motornet: str,
-    anno: int,
-    mese: int,
-    Authorize: AuthJWT = Depends(),
-    db: Session = Depends(get_db)
-):
-    """Recupera tutti gli accessori di un veicolo usato tramite il codice Motornet univoco"""
-    Authorize.jwt_required()  # 🔹 Verifica il token JWT di CoreAPI
-    user_email = Authorize.get_jwt_subject()
 
-    user = db.query(User).filter(User.email == user_email).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Utente non trovato")
-
-    token = get_motornet_token()  # 🔹 Otteniamo il token da Motornet prima della richiesta
-
-    headers = {
-        "Authorization": f"Bearer {token}"
-    }
-
-    motornet_url = (
-        f"https://webservice.motornet.it/api/v2_0/rest/public/usato/auto/accessori"
-        f"?codice_motornet_uni={codice_motornet}"
-        f"&anno={anno}"
-        f"&mese={mese}"
-    )
-
-    response = requests.get(motornet_url, headers=headers)
-
-    print(f"🔍 DEBUG: Risposta Motornet Accessori: {response.text}")  # 🔹 Stampa la risposta ricevuta
-
-    if response.status_code == 200:
-        data = response.json()
-        return data  # 🔹 Restituiamo tutti i dati ricevuti senza modificarli
-
-    raise HTTPException(status_code=response.status_code, detail="Errore nel recupero degli accessori del veicolo")
 
 @router_nuovo.get("/marche", tags=["Motornet"])
 async def get_marche_nuovo(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
