@@ -1,71 +1,81 @@
-﻿from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+﻿# app/routes/dalle.py
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 from openai import OpenAI
-import os
+import os, base64
 from io import BytesIO
 from PIL import Image
-import base64
+from uuid import uuid4
+from datetime import datetime
 
 router = APIRouter()
 
 client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),
-    organization=os.getenv("OPENAI_ORG_ID")  # opzionale, utile se hai più org
+    api_key=os.getenv("OPENAI_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY"),
+    organization=os.getenv("OPENAI_ORG_ID")
 )
+
+QUALITY_MAP = {
+    "standard": "medium",
+    "hd": "high"
+}
+ALLOWED_QUALITY = {"low", "medium", "high", "auto"}
 
 @router.post("/ai/dalle/combine")
 async def dalle_combine(
     prompt: str = Form(...),
     img1: UploadFile = File(...),
     img2: UploadFile = File(...),
-    quality: str = Form("standard"),   # "standard" oppure "hd"
+    quality: str = Form("medium"),   # default coerente con gpt-image-1
+    size: str = Form("1024x1024")
 ):
     try:
-        if quality not in ["standard", "hd"]:
-            raise HTTPException(status_code=400, detail="quality must be 'standard' or 'hd'")
+        q = QUALITY_MAP.get(quality.lower(), quality.lower())
+        if q not in ALLOWED_QUALITY:
+            raise HTTPException(status_code=400, detail="quality must be one of: low, medium, high, auto (or standard/hd which map to medium/high)")
 
-        # Leggi immagini
-        i1 = Image.open(BytesIO(await img1.read()))
-        i2 = Image.open(BytesIO(await img2.read()))
+        # Leggi e normalizza immagini
+        i1 = Image.open(BytesIO(await img1.read())).convert("RGB")
+        i2 = Image.open(BytesIO(await img2.read())).convert("RGB")
 
         # Canvas affiancato orizzontale
-        w = i1.width + i2.width
-        h = max(i1.height, i2.height)
+        w, h = i1.width + i2.width, max(i1.height, i2.height)
         canvas = Image.new("RGB", (w, h), (255, 255, 255))
         canvas.paste(i1, (0, 0))
         canvas.paste(i2, (i1.width, 0))
 
-        # Converti in buffer PNG con nome
+        # Buffer PNG nominato (serve a OpenAI per il mimetype)
         buf = BytesIO()
         canvas.save(buf, format="PNG")
         buf.seek(0)
         buf.name = "canvas.png"
 
-        # Invio a GPT Image 1 (DALL·E 3)
+        # Chiamata a gpt-image-1 (images.edit ritorna sempre b64_json)
         result = client.images.edit(
             model="gpt-image-1",
             prompt=prompt,
             image=buf,
-            size="1024x1024",
-            quality=quality
+            size=size,
+            quality=q
         )
 
-
-        # Decodifica base64 e salva su file locale
+        # Decodifica e salvataggio locale per test
         img_b64 = result.data[0].b64_json
         img_bytes = base64.b64decode(img_b64)
 
-        output_dir = "tmp"
-        os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, "output.png")
-        with open(output_path, "wb") as f:
+        out_dir = os.getenv("IMG_OUT_DIR", "tmp")
+        os.makedirs(out_dir, exist_ok=True)
+        fname = f"dalle_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}.png"
+        out_path = os.path.join(out_dir, fname)
+        with open(out_path, "wb") as f:
             f.write(img_bytes)
 
-        return {
-            "message": "Immagine generata",
-            "local_path": output_path,
-            "base64_preview": img_b64[:200] + "..."  # preview corta, non tutto il base64
-        }
+        return JSONResponse({
+            "message": "ok",
+            "quality_used": q,
+            "size": size,
+            "local_path": out_path
+        })
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
