@@ -31,6 +31,7 @@ async def dalle_combine(
         buf = BytesIO()
         canvas.save(buf, format="PNG")
         buf.seek(0)
+        buf.name = "canvas.png"   
 
         # Invio a DALL·E 3
         result = client.images.edit(
