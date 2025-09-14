@@ -38,6 +38,8 @@ async def dalle_combine(
     quality: str = Form("medium"),          # accetta: low|medium|high|auto anche standard|hd
     size: str = Form("1024x1024"),          # ammessi: 1024x1024 | 1792x1024 | 1024x1792
     as_file: bool = Form(True),             # True => ritorna PNG diretto (Swagger: “Download file”)
+    temperature=0.1   # ← ottimale per realismo controllato
+
 ):
     # normalizza qualità
     q = QUALITY_MAP.get(quality.lower(), quality.lower())
