@@ -1,81 +1,101 @@
 ﻿# app/routes/dalle.py
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import Response, JSONResponse
 from openai import OpenAI
-import os, base64
 from io import BytesIO
 from PIL import Image
 from uuid import uuid4
 from datetime import datetime
+import os, base64
 
 router = APIRouter()
 
 client = OpenAI(
-    api_key=os.getenv("OPENAI_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY"),
-    organization=os.getenv("OPENAI_ORG_ID")
+    api_key=os.getenv("OPENAI_API_KEY"),
+    organization=os.getenv("OPENAI_ORG_ID"),
 )
 
-QUALITY_MAP = {
-    "standard": "medium",
-    "hd": "high"
-}
+QUALITY_MAP = {"standard": "medium", "hd": "high"}
 ALLOWED_QUALITY = {"low", "medium", "high", "auto"}
+ALLOWED_SIZE = {"1024x1024", "1792x1024", "1024x1792"}
 
-@router.post("/ai/dalle/combine")
+@router.post(
+    "/ai/dalle/combine",
+    responses={
+        200: {
+            "content": {
+                "image/png": {},
+                "application/json": {}
+            },
+            "description": "PNG file or JSON"
+        }
+    },
+)
 async def dalle_combine(
     prompt: str = Form(...),
     img1: UploadFile = File(...),
     img2: UploadFile = File(...),
-    quality: str = Form("medium"),   # default coerente con gpt-image-1
-    size: str = Form("1024x1024")
+    quality: str = Form("medium"),          # accetta: low|medium|high|auto anche standard|hd
+    size: str = Form("1024x1024"),          # ammessi: 1024x1024 | 1792x1024 | 1024x1792
+    as_file: bool = Form(True),             # True => ritorna PNG diretto (Swagger: “Download file”)
 ):
-    try:
-        q = QUALITY_MAP.get(quality.lower(), quality.lower())
-        if q not in ALLOWED_QUALITY:
-            raise HTTPException(status_code=400, detail="quality must be one of: low, medium, high, auto (or standard/hd which map to medium/high)")
+    # normalizza qualità
+    q = QUALITY_MAP.get(quality.lower(), quality.lower())
+    if q not in ALLOWED_QUALITY:
+        raise HTTPException(400, "quality must be one of: low, medium, high, auto (or standard/hd)")
+    if size not in ALLOWED_SIZE:
+        raise HTTPException(400, f"size must be one of: {', '.join(sorted(ALLOWED_SIZE))}")
 
-        # Leggi e normalizza immagini
+    # leggi e combina le due immagini
+    try:
         i1 = Image.open(BytesIO(await img1.read())).convert("RGB")
         i2 = Image.open(BytesIO(await img2.read())).convert("RGB")
+    except Exception:
+        raise HTTPException(400, "invalid image input")
 
-        # Canvas affiancato orizzontale
-        w, h = i1.width + i2.width, max(i1.height, i2.height)
-        canvas = Image.new("RGB", (w, h), (255, 255, 255))
-        canvas.paste(i1, (0, 0))
-        canvas.paste(i2, (i1.width, 0))
+    w, h = i1.width + i2.width, max(i1.height, i2.height)
+    canvas = Image.new("RGB", (w, h), (255, 255, 255))
+    canvas.paste(i1, (0, 0))
+    canvas.paste(i2, (i1.width, 0))
 
-        # Buffer PNG nominato (serve a OpenAI per il mimetype)
-        buf = BytesIO()
-        canvas.save(buf, format="PNG")
-        buf.seek(0)
-        buf.name = "canvas.png"
+    # buffer PNG nominato (mimetype hint per OpenAI)
+    buf = BytesIO()
+    canvas.save(buf, format="PNG")
+    buf.seek(0)
+    buf.name = "canvas.png"
 
-        # Chiamata a gpt-image-1 (images.edit ritorna sempre b64_json)
-        result = client.images.edit(
+    # chiamata a gpt-image-1 (images.edit restituisce base64)
+    try:
+        res = client.images.edit(
             model="gpt-image-1",
             prompt=prompt,
             image=buf,
             size=size,
-            quality=q
+            quality=q,
+        )
+    except Exception as e:
+        # propaghiamo errore API in modo chiaro
+        raise HTTPException(500, detail=str(e))
+
+    img_b64 = res.data[0].b64_json
+    img_bytes = base64.b64decode(img_b64)
+
+    if as_file:
+        fname = f"dalle_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}.png"
+        return Response(
+            content=img_bytes,
+            media_type="image/png",
+            headers={
+                "Content-Disposition": f'inline; filename="{fname}"',
+                "X-Image-Size": size,
+                "X-Image-Quality": q,
+            },
         )
 
-        # Decodifica e salvataggio locale per test
-        img_b64 = result.data[0].b64_json
-        img_bytes = base64.b64decode(img_b64)
-
-        out_dir = os.getenv("IMG_OUT_DIR", "tmp")
-        os.makedirs(out_dir, exist_ok=True)
-        fname = f"dalle_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}.png"
-        out_path = os.path.join(out_dir, fname)
-        with open(out_path, "wb") as f:
-            f.write(img_bytes)
-
-        return JSONResponse({
-            "message": "ok",
-            "quality_used": q,
-            "size": size,
-            "local_path": out_path
-        })
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # fallback JSON (utile se vuoi gestire lato frontend o salvare altrove)
+    return JSONResponse({
+        "message": "ok",
+        "quality_used": q,
+        "size": size,
+        "b64_json": img_b64,  # attenzione: grande
+    })
