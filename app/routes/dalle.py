@@ -13,26 +13,34 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"),
 
 QUALITY_MAP = {"standard": "medium", "hd": "high"}
 ALLOWED_QUALITY = {"low", "medium", "high", "auto"}
-ALLOWED_SIZE = {"1024x1024", "1792x1024", "1024x1792"}
+ORIENTATION_SIZE = {
+    "square": "1024x1024",
+    "landscape": "1792x1024",
+    "portrait": "1024x1792",
+}
 
 @router.post("/ai/dalle/combine")
 async def dalle_combine(
     prompt: str = Form(...),
     img1: UploadFile = File(...),
     img2: UploadFile = File(...),
+
     quality: str = Form("medium"),
-    size: str = Form("1024x1024"),
+    orientation: str = Form("square"),  # 👈 sostituisce size
+
     logo_url: str = Form(None),
-    logo_height: int = Form(100),   
-    logo_offset_y: int = Form(100),  # default = 100px sotto il top
+    logo_height: int = Form(100),
+    logo_offset_y: int = Form(100),
     as_file: bool = Form(True),
 ):
-
     q = QUALITY_MAP.get(quality.lower(), quality.lower())
     if q not in ALLOWED_QUALITY:
-        raise HTTPException(400, "quality must be one of: low, medium, high, auto (or standard/hd)")
-    if size not in ALLOWED_SIZE:
-        raise HTTPException(400, f"size must be one of: {', '.join(sorted(ALLOWED_SIZE))}")
+        raise HTTPException(400, "quality must be: low, medium, high, auto (or standard/hd)")
+
+    if orientation not in ORIENTATION_SIZE:
+        raise HTTPException(400, "orientation must be: square, landscape, portrait")
+
+    size = ORIENTATION_SIZE[orientation]
 
     try:
         i1 = Image.open(BytesIO(await img1.read())).convert("RGB")
@@ -65,34 +73,27 @@ async def dalle_combine(
     img_bytes = base64.b64decode(img_b64)
     final = Image.open(BytesIO(img_bytes)).convert("RGBA")
 
-    # Applica logo se presente
-        # Applica logo se presente
     if logo_url:
         try:
             r = requests.get(logo_url)
             r.raise_for_status()
             logo = Image.open(BytesIO(r.content)).convert("RGBA")
 
-            # Resize: altezza fissa, larghezza auto
             original_w, original_h = logo.size
             aspect_ratio = original_w / original_h
             new_h = logo_height
             new_w = int(aspect_ratio * new_h)
             logo = logo.resize((new_w, new_h))
 
-            # Verifica altezza minima immagine
-            if final.height < new_h:
-                raise HTTPException(400, f"image too small for logo height {new_h}px")
+            if final.height < new_h + logo_offset_y:
+                raise HTTPException(400, f"image too small for logo position {logo_offset_y}px")
 
-            # Posizionamento: top centrato
             logo_x = (final.width - new_w) // 2
             logo_y = logo_offset_y
-
             final.paste(logo, (logo_x, logo_y), logo)
 
         except Exception as e:
             raise HTTPException(400, f"logo_url error: {str(e)}")
-
 
     output = BytesIO()
     final.save(output, format="PNG")
@@ -106,10 +107,10 @@ async def dalle_combine(
             headers={"Content-Disposition": f'inline; filename="{fname}"'}
         )
 
-    # JSON fallback
     return {
         "message": "ok",
         "quality_used": q,
         "size": size,
+        "orientation": orientation,
         "logo_applied": bool(logo_url),
     }
