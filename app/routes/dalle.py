@@ -34,7 +34,7 @@ async def dalle_combine(
 
         # Invio a DALL·E 3
         result = client.images.edit(
-            model="dall-e-3",
+            model="gpt-image-1",
             prompt=prompt,
             image=buf,
             size="1024x1024"
