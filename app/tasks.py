@@ -18,7 +18,7 @@ from app.routes.sync_marche_usato import sync_marche_usato as sync_marche_usato
 from app.routes.sync_modelli_usato import sync_modelli_usato as sync_modelli_usato
 from app.routes.sync_allestimenti_usato import sync_allestimenti_usato as sync_allestimenti_usato
 from app.routes.sync_dettagli_usato import sync_dettagli_usato as sync_dettagli_usato
-from app.routes.sync_anni_usato import sync_anni_usato
+from app.routes.sync_anni_usato import sync_all_marche
 
 
 from app.routes.invia_reminder_pipeline import invia_reminder_pipeline
@@ -314,7 +314,7 @@ scheduler.add_job(sync_dettagli_nuovo,     'cron', id='nuovo_dettagli',     name
 # === Catena USATO (martedì) ===
 scheduler.add_job(sync_marche_usato,       'cron', id='usato_marche',       name='USATO: marche',       day_of_week='tue', hour=1,  minute=0, timezone=TZ)
 scheduler.add_job(sync_modelli_usato,      'cron', id='usato_modelli',      name='USATO: modelli',      day_of_week='tue', hour=2,  minute=0, timezone=TZ)
-scheduler.add_job(sync_anni_usato,         'cron', id='usato_anni',         name='USATO: anni',         day_of_week='tue', hour=2,  minute=30, timezone=TZ)
+scheduler.add_job(sync_all_marche,         'cron', id='usato_anni',         name='USATO: anni',         day_of_week='tue', hour=2, minute=30, timezone=TZ)
 scheduler.add_job(sync_allestimenti_usato, 'cron', id='usato_allestimenti', name='USATO: allestimenti', day_of_week='tue', hour=3,  minute=0, timezone=TZ)
 scheduler.add_job(sync_dettagli_usato,     'cron', id='usato_dettagli',     name='USATO: dettagli',     day_of_week='tue', hour=4,  minute=0, timezone=TZ)
 
