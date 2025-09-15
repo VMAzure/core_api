@@ -805,7 +805,10 @@ async def genera_image_hero_veo3(
     db.refresh(rec)
 
     try:
-        img_bytes = await _gemini_generate_image_sync(prompt, payload.start_image_url)
+        if payload.start_image_url and payload.start_image_url.strip():
+            img_bytes = await _gemini_generate_image_sync(prompt, payload.start_image_url)
+        else:
+            img_bytes = await _gemini_generate_image_sync(prompt)
 
         # Upload su Supabase
         ext = ".png"
