@@ -201,10 +201,12 @@ class GeminiVideoStatusRequest(BaseModel):
 
 
 class GeminiImageHeroRequest(BaseModel):
-    id_auto: _UUID
+    id_auto: UUID
     scenario: Optional[str] = None
     prompt_override: Optional[str] = None
-    start_image_url: Optional[str] = None  
+    start_image_url: Optional[str] = None
+    subject_image_url: Optional[str] = None   # 👈 opzionale
+    background_image_url: Optional[str] = None # 👈 opzionale
 
 
 # --- VIDEO VEO3 ---
@@ -814,6 +816,7 @@ async def genera_image_hero_veo3(
             kwargs["background_image_url"] = payload.background_image_url
 
         img_bytes = await _gemini_generate_image_sync(prompt, **kwargs)
+
 
 
         # Upload su Supabase
