@@ -806,7 +806,7 @@ async def genera_image_hero_veo3(
 
     try:
         if payload.start_image_url and payload.start_image_url.strip():
-            img_bytes = await _gemini_generate_image_sync(prompt, payload.start_image_url)
+            img_bytes = await _gemini_generate_image_sync(prompt, start_image_url=payload.start_image_url)
         else:
             img_bytes = await _gemini_generate_image_sync(prompt)
 
