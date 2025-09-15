@@ -5,10 +5,22 @@ from app.models import User, PurchasedServices, Services
 from sqlalchemy import text
 import logging
 from app.utils.modelli import pulizia_massiva_modelli
-from app.routes.sync_dettagli_nuovo import sync_dettagli_auto
-from app.routes.sync_marche_completo import sync_marche
-from app.routes.sync_modelli_nuovo import sync_modelli
-from app.routes.sync_allestimenti_nuovo import sync_allestimenti
+
+
+# === Catena NUOVO ===
+from app.routes.sync_marche_completo import sync_marche as sync_marche_nuovo
+from app.routes.sync_modelli_nuovo import sync_modelli as sync_modelli_nuovo
+from app.routes.sync_allestimenti_nuovo import sync_allestimenti as sync_allestimenti_nuovo
+from app.routes.sync_dettagli_nuovo import sync_dettagli_auto as sync_dettagli_nuovo
+
+# === Catena USATO ===
+from app.routes.sync_marche_usato import sync_marche as sync_marche_usato
+from app.routes.sync_modelli_usato import sync_modelli as sync_modelli_usato
+from app.routes.sync_allestimenti_usato import sync_allestimenti as sync_allestimenti_usato
+from app.routes.sync_dettagli_usato import sync_dettagli_auto as sync_dettagli_usato
+from app.routes.sync_anni_usato import sync_anni_usato
+
+
 from app.routes.invia_reminder_pipeline import invia_reminder_pipeline
 from app.utils.aggiorna_usato_settimanale import aggiorna_usato_settimanale
 from app.routes.sync_foto_mnet import sync_foto_mnet
@@ -34,6 +46,8 @@ from app.routes.openai_config import _gemini_get_operation, _download_bytes, _sb
 from app.models import UsatoLeonardo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from pytz import timezone
+TZ = timezone("Europe/Rome")
 
 
 # Configurazione dei log
@@ -173,38 +187,6 @@ def pulisci_modelli_settimanale():
     finally:
         db.close()
 
-def sync_dettagli_settimanale():
-    print("🛠️ Avvio job settimanale: sync dettagli auto")
-    try:
-        sync_dettagli_auto()
-        print("✅ Sync dettagli completato.")
-    except Exception as e:
-        print(f"❌ Errore durante sync dettagli: {e}")
-
-def sync_allestimenti_settimanale():
-    logging.info("🧩 Avvio sync allestimenti settimanale...")
-    try:
-        sync_allestimenti()
-        logging.info("✅ Sync allestimenti completato.")
-    except Exception as e:
-        logging.error(f"❌ Errore nella sync allestimenti: {e}")
-
-def sync_marche_settimanale():
-    logging.info("🚗 Avvio sync marche settimanale...")
-    try:
-        sync_marche()
-        logging.info("✅ Sync marche completato.")
-    except Exception as e:
-        logging.error(f"❌ Errore nella sync marche: {e}")
-
-
-def sync_modelli_settimanale():
-    logging.info("📦 Avvio sync modelli settimanale...")
-    try:
-        sync_modelli()
-        logging.info("✅ Sync modelli completato.")
-    except Exception as e:
-        logging.error(f"❌ Errore nella sync modelli: {e}")
 
 
 from app.utils.quotazioni import aggiorna_rating_convenienza
@@ -321,20 +303,20 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 # Usa un solo scheduler asincrono
-scheduler = AsyncIOScheduler(job_defaults={'coalesce': True, 'max_instances': 1})
+scheduler = AsyncIOScheduler(job_defaults={'coalesce': True, 'max_instances': 1}, timezone=TZ)
 
-# === Catena usato Motornet ===
-# Ogni lunedì alle 01:00 → marche
-scheduler.add_job(sync_marche_settimanale, 'cron', day_of_week='fri', hour=8, minute=0)
+# === Catena NUOVO (lunedì) ===
+scheduler.add_job(sync_marche_nuovo,       'cron', id='nuovo_marche',       name='NUOVO: marche',       day_of_week='mon', hour=1,  minute=0, timezone=TZ)
+scheduler.add_job(sync_modelli_nuovo,      'cron', id='nuovo_modelli',      name='NUOVO: modelli',      day_of_week='mon', hour=2,  minute=0, timezone=TZ)
+scheduler.add_job(sync_allestimenti_nuovo, 'cron', id='nuovo_allestimenti', name='NUOVO: allestimenti', day_of_week='mon', hour=3,  minute=0, timezone=TZ)
+scheduler.add_job(sync_dettagli_nuovo,     'cron', id='nuovo_dettagli',     name='NUOVO: dettagli',     day_of_week='mon', hour=4,  minute=0, timezone=TZ)
 
-# Ogni lunedì alle 02:00 → modelli
-scheduler.add_job(sync_modelli_settimanale, 'cron', day_of_week='fri', hour=9, minute=0)
-
-# Ogni lunedì alle 02:30 → allestimenti
-scheduler.add_job(sync_allestimenti_settimanale, 'cron', day_of_week='fri', hour=11, minute=30)
-
-# Ogni lunedì alle 04:00 → dettagli
-scheduler.add_job(sync_dettagli_settimanale, 'cron', day_of_week='fri', hour=14, minute=0)
+# === Catena USATO (martedì) ===
+scheduler.add_job(sync_marche_usato,       'cron', id='usato_marche',       name='USATO: marche',       day_of_week='tue', hour=1,  minute=0, timezone=TZ)
+scheduler.add_job(sync_modelli_usato,      'cron', id='usato_modelli',      name='USATO: modelli',      day_of_week='tue', hour=2,  minute=0, timezone=TZ)
+scheduler.add_job(sync_anni_usato,         'cron', id='usato_anni',         name='USATO: anni',         day_of_week='tue', hour=2,  minute=30, timezone=TZ)
+scheduler.add_job(sync_allestimenti_usato, 'cron', id='usato_allestimenti', name='USATO: allestimenti', day_of_week='tue', hour=3,  minute=0, timezone=TZ)
+scheduler.add_job(sync_dettagli_usato,     'cron', id='usato_dettagli',     name='USATO: dettagli',     day_of_week='tue', hour=4,  minute=0, timezone=TZ)
 
 # === Altri job già presenti ===
 scheduler.add_job(check_and_charge_services, 'cron', hour=5, minute=0)

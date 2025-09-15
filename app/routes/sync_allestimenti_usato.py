@@ -1,4 +1,5 @@
-﻿import requests
+﻿
+import requests
 import time
 from datetime import datetime
 from sqlalchemy import text
@@ -67,7 +68,8 @@ def fetch_with_retry(url, headers, max_attempts=5):
     return None
 
 def process_allestimenti(marca, anno, codice_modello, esistenti):
-    if codice_modello in esistenti:
+    key = (marca, anno, codice_modello)
+    if key in esistenti:
         print(f"⏭️  {marca}-{anno}-{codice_modello}: già presenti allestimenti")
         return True
 
@@ -122,6 +124,7 @@ def process_allestimenti(marca, anno, codice_modello, esistenti):
                 inseriti += 1
 
         db.commit()
+        esistenti.add(key)  # 🔑 segna come completato
         print(f"✅ {marca}-{anno}-{codice_modello}: {inseriti} allestimenti salvati")
         return True
 
@@ -132,15 +135,19 @@ def process_allestimenti(marca, anno, codice_modello, esistenti):
     finally:
         db.close()
 
-def sync_allestimenti_usato():
+def sync_allestimenti_usato(start_from=None):
+    """
+    start_from = ('FIAT', 2015, '1234') → riprende da questa combinazione in poi
+    """
     db = SessionLocal()
     get_motornet_token()
 
-    # ✅ Modelli già esistenti → evitiamo doppie chiamate
+    # ✅ Combinazioni già presenti
     existing_rows = db.execute(text("""
-        SELECT DISTINCT codice_modello FROM mnet_allestimenti_usato
+        SELECT DISTINCT acronimo_marca, EXTRACT(YEAR FROM inizio_produzione) AS anno, codice_modello
+        FROM mnet_allestimenti_usato
     """)).fetchall()
-    esistenti = {r[0] for r in existing_rows}
+    esistenti = {(r[0], int(r[1]), r[2]) for r in existing_rows if r[1]}
 
     # ✅ Tutti i modelli da elaborare
     rows = db.execute(text("""
@@ -153,6 +160,15 @@ def sync_allestimenti_usato():
     """)).fetchall()
     rows = [(r[0], r[1], r[2]) for r in rows]
 
+    if start_from:
+        # taglia fino al punto richiesto
+        try:
+            idx = rows.index(start_from)
+            rows = rows[idx:]
+            print(f"▶️ Riparto da {start_from}")
+        except ValueError:
+            print(f"⚠️ start_from {start_from} non trovato, parto dall'inizio")
+
     print(f"\n🔧 Avvio sync allestimenti per {len(rows)} combinazioni marca+anno+modello")
 
     da_fare = rows
@@ -164,7 +180,7 @@ def sync_allestimenti_usato():
             ok = process_allestimenti(marca, anno, codice_modello, esistenti)
             if not ok:
                 next_round.append((marca, anno, codice_modello))
-            time.sleep(0.4)  # throttling leggero
+            time.sleep(0.4)  # throttling
         if da_fare == next_round:
             print("⚠️ Nessun progresso, fermo per evitare loop infinito.")
             break
@@ -180,4 +196,14 @@ def sync_allestimenti_usato():
 
 
 if __name__ == "__main__":
-    sync_allestimenti_usato()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--marca")
+    parser.add_argument("--anno", type=int)
+    parser.add_argument("--codice")
+    args = parser.parse_args()
+
+    if args.marca and args.anno and args.codice:
+        sync_allestimenti_usato(start_from=(args.marca, args.anno, args.codice))
+    else:
+        sync_allestimenti_usato()
