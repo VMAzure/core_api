@@ -2495,17 +2495,20 @@ def motornet_by_targa(
     for v in (raw.get("versioni") or []):
         try:
             versioni_out.append(VersioneOut(
-                codice_motornet_uni=_safe_str(v.get("codiceMotornetUnivoco")) or "",
+                # Usa codiceMotornet se presente, altrimenti Eurotax come fallback
+                codice_motornet_uni=_safe_str(v.get("codiceMotornet")) 
+                                    or _safe_str(v.get("codiceEurotax")) 
+                                    or "",
                 versione=_safe_str(v.get("versione")) or "",
-                prezzo_vendita=(v.get("prezzoVendita")),
+                prezzo_vendita=v.get("prezzoVendita"),
                 da=_safe_str(v.get("da")),
                 a=_safe_str(v.get("a")),
                 codice_costruttore=_safe_str(v.get("codiceCostruttore")),
                 porte=int(v.get("porte")) if v.get("porte") is not None else porte_val
             ))
         except Exception:
-            # ignora voce malformata
             continue
+
 
     if not versioni_out:
         # fallback: alcune targhe potrebbero non avere "versioni" pur avendo gamma
