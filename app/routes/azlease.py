@@ -5,6 +5,8 @@ from app.database import get_db, supabase_client, SUPABASE_URL
 from app.models import AZLeaseUsatoAuto, AZLeaseUsatoIn, User, AZUsatoInsertRequest, AZLeaseQuotazioni, SiteAdminSettings
 from app.models import AutousatoAccessoriOptional
 
+import json, re
+
 
 from app.schemas import AutoUsataCreate
 from app.auth_helpers import get_admin_id, get_dealer_id, is_admin_user, is_dealer_user
@@ -373,31 +375,60 @@ async def crea_boost(
     id_auto = UUID(str(id_auto_str))
 
     # 5) In parallelo: prezzo (solo numero, browsing) + descrizione
+
+    def _estrai_prezzo_pulito(txt: str) -> int:
+        if not txt:
+            return 0
+        # 1) prova JSON
+        m = re.search(r"\{.*?\}", txt, flags=re.S)
+        if m:
+            try:
+                obj = json.loads(m.group(0))
+                v = int(str(obj.get("prezzo_euro", "")).replace(".", "").replace(",", ""))
+                if 500 <= v <= 200000 and not (1900 <= v <= 2099):
+                    return v
+            except Exception:
+                pass
+        # 2) fallback: importi con € o “euro” vicini
+        candidati = []
+        for mm in re.finditer(r"(€|\beuro\b)\s*([0-9]{1,3}(?:[.,][0-9]{3})+|\d{3,7})", txt, flags=re.I):
+            n = int(mm.group(2).replace(".", "").replace(",", ""))
+            if 500 <= n <= 200000 and not (1900 <= n <= 2099):
+                candidati.append(n)
+        # 3) ultimo fallback: tutte le cifre, filtrate
+        if not candidati:
+            for s in re.findall(r"\d{3,7}", txt):
+                n = int(s)
+                if 500 <= n <= 200000 and not (1900 <= n <= 2099):
+                    candidati.append(n)
+        if not candidati:
+            return 0
+        candidati.sort()
+        return candidati[len(candidati)//2]  # mediana
+
     async def _get_prezzo():
-        price_prompt = (
-            f"""Trova online il prezzo di vendita consigliato in Italia per questo veicolo usato.
-
-Usa come chiavi: "{marca} {allestimento}".
-Filtra per anno ≈ {anno} (±1) e chilometraggio comparabile a {int(body.km_certificati)} km.
-Per marche con accenti usa anche la variante senza accento (es. Citroën/Citroen).
-
-OUTPUT: scrivi SOLO un numero intero in euro, senza simboli, punti, virgole o testo. Esempio: 18490
-"""
-        )
+        prompt = f"""Trova online il prezzo di vendita consigliato in Italia per questo veicolo usato.
+    Modello: {marca} {allestimento}
+    Anno target: {anno} (±1)
+    Chilometraggio comparabile: {int(body.km_certificati)} km
+    Rispondi SOLO in JSON con questa forma esatta:
+    {{"prezzo_euro": 18490}}
+    Niente testo extra, niente spiegazioni, niente valuta o punti/virgole.
+    """
         resp = await genera_testo(
             payload=PromptRequest(
-                prompt=price_prompt,
+                prompt=prompt,
                 model="gpt-4o-search-preview",
                 web_research=True,
-                max_tokens=12,
+                max_tokens=48,
                 temperature=0.0
             ),
             Authorize=Authorize,
             db=db
         )
-        out = (getattr(resp, "output", None) or (resp.get("output") if isinstance(resp, dict) else "") or "").strip()
-        m = re.search(r"\d{3,7}", out)
-        return int(m.group(0)) if m else 0
+        out = (getattr(resp, "output", None) or (isinstance(resp, dict) and resp.get("output")) or "") or ""
+        return _estrai_prezzo_pulito(str(out))
+
 
     async def _get_descrizione():
         prompt = (
