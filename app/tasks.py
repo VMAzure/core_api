@@ -14,10 +14,10 @@ from app.routes.sync_allestimenti_nuovo import sync_allestimenti as sync_allesti
 from app.routes.sync_dettagli_nuovo import sync_dettagli_auto as sync_dettagli_nuovo
 
 # === Catena USATO ===
-from app.routes.sync_marche_usato import sync_marche as sync_marche_usato
-from app.routes.sync_modelli_usato import sync_modelli as sync_modelli_usato
-from app.routes.sync_allestimenti_usato import sync_allestimenti as sync_allestimenti_usato
-from app.routes.sync_dettagli_usato import sync_dettagli_auto as sync_dettagli_usato
+from app.routes.sync_marche_usato import sync_marche_usato as sync_marche_usato
+from app.routes.sync_modelli_usato import sync_modelli_usato as sync_modelli_usato
+from app.routes.sync_allestimenti_usato import sync_allestimenti_usato as sync_allestimenti_usato
+from app.routes.sync_dettagli_usato import sync_dettagli_usato as sync_dettagli_usato
 from app.routes.sync_anni_usato import sync_anni_usato
 
 
