@@ -821,6 +821,7 @@ async def genera_image_hero_veo3(
 
 
 
+
         # Upload su Supabase
         ext = ".png"
         path = f"{str(rec.id_auto)}/{str(rec.id)}{ext}"
