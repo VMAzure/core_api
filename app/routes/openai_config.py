@@ -181,6 +181,8 @@ from fastapi_jwt_auth import AuthJWT
 from app.models import User, CreditTransaction, AZLeaseUsatoAuto, MnetDettaglioUsato, UsatoLeonardo
 from app.routes.notifiche import inserisci_notifica
 from app.auth_helpers import is_dealer_user
+from uuid import UUID
+
 
 # ENV
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
