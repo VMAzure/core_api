@@ -2409,7 +2409,7 @@ def motornet_by_targa(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Token Motornet non disponibile: {e}")
 
-    url = "https://webservice.motornet.it/api/v3_0/rest/public/usato/generali/targa"
+    url = "https://webservice.motornet.it/api/v2_0/rest/public/usato/generali/targa"
     hdr = {"Authorization": f"Bearer {mtoken}"}
     try:
         r = requests.get(url, params={"targa": plate}, headers=hdr, timeout=6.0)
