@@ -1316,44 +1316,36 @@ from io import BytesIO
 
 SUPABASE_BUCKET_SCENARI = os.getenv("SUPABASE_BUCKET_SCENARI", "scenari-dealer")
 
-def _sb_upload_scenario(path: str, blob: bytes, content_type: str | None = None) -> tuple[str, str | None]:
-    # content-type
-    if not content_type or "/" not in content_type:
-        content_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
-
-    # file-like per SDK
-    fh = BytesIO(blob)
-    fh.seek(0)
-
-    # upload con upsert
+def _sb_upload_scenario(path: str, blob: bytes, content_type: str = "image/png") -> tuple[str, str | None]:
+    # upload con bytes grezzi, come per _sb_upload_and_sign
     up = supabase_client.storage.from_(SUPABASE_BUCKET_SCENARI).upload(
         path=path,
-        file=fh,
+        file=blob,
         file_options={"content-type": content_type, "upsert": "true"}
     )
-
-    # alcune versioni ritornano dict; se c’è errore esplicitalo
+    # log e hard-fail se l’SDK ritorna error
     if isinstance(up, dict) and up.get("error"):
-        raise HTTPException(502, f"Supabase upload error: {up['error'].get('message','unknown')}")
+        msg = up["error"].get("message", "unknown")
+        logging.error(f"[SCENARIO-UPLOAD] error bucket={SUPABASE_BUCKET_SCENARI} path={path}: {msg}")
+        raise HTTPException(502, f"Supabase upload error: {msg}")
 
-    # URL firmata 30 giorni
     res = supabase_client.storage.from_(SUPABASE_BUCKET_SCENARI).create_signed_url(
-        path=path, expires_in=60 * 60 * 24 * 30
+        path=path, expires_in=60*60*24*30
     )
     url = res.get("signedURL") or res.get("signed_url") or res.get("signedUrl")
 
-    # fallback public url se signed mancante
+    # fallback public url
     if not url:
         pub = supabase_client.storage.from_(SUPABASE_BUCKET_SCENARI).get_public_url(path)
         url = pub.get("publicURL") or pub.get("publicUrl") or pub.get("public_url")
 
-    # normalizza base
     if url and url.startswith("/storage"):
         base = os.getenv("SUPABASE_URL", "").rstrip("/")
         url = f"{base}{url}"
 
-    logging.warning(f"[SCENARIO-UPLOAD] bucket={SUPABASE_BUCKET_SCENARI} path={path} url={url}")
+    logging.warning(f"[SCENARIO-UPLOAD] ok bucket={SUPABASE_BUCKET_SCENARI} path={path} url={url}")
     return path, url
+
 
 
 class ScenarioDealerRequest(BaseModel):
@@ -1384,7 +1376,7 @@ async def upload_scenario_image(
     ext = os.path.splitext(file.filename or "")[-1].lower() or ".png"
     path = f"{user.id}/{uuid4()}{ext}"
     blob = await file.read()
-    ctype = file.content_type or mimetypes.guess_type(file.filename or "")[0] or "image/png"
+    ctype = file.content_type or "image/png"
 
     try:
         _, signed_url = _sb_upload_scenario(path, blob, ctype)
