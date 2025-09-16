@@ -247,14 +247,21 @@ class GeminiImageHeroResponse(BaseModel):
 
 
 async def _fetch_image_base64_from_url(url: str) -> tuple[str, str]:
-    """Scarica immagine da URL e restituisce (mime_type, base64string)."""
+    """Scarica immagine da URL, ridimensiona a 1024x1024 e restituisce (mime_type, base64string)."""
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.get(url)
         if r.status_code >= 300:
             raise HTTPException(502, f"Download immagine fallito: {r.text}")
         mime = r.headers.get("content-type", "image/png")
-        b64 = base64.b64encode(r.content).decode("utf-8")
-        return mime, b64
+
+        # Apri immagine e forza resize
+        img = Image.open(BytesIO(r.content)).convert("RGB")
+        img = img.resize((1024, 1024), Image.LANCZOS)
+
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+        return "image/png", b64
 
 
 async def _gemini_start_video(prompt: str, start_image_url: Optional[str] = None) -> str:
