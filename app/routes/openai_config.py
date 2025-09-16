@@ -1,7 +1,7 @@
 ﻿# app/routes/openai_config.py
 
 # --- FastAPI / Auth / DB ---
-from fastapi import APIRouter, HTTPException, Depends, Request, Response
+from fastapi import APIRouter, HTTPException, Depends, Request, Response, UploadFile, File
 from fastapi_jwt_auth import AuthJWT
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
@@ -1311,6 +1311,24 @@ def usa_hero_media(id: UUID, Authorize: AuthJWT = Depends(), db: Session = Depen
     return {"success": True}
 
 
+SUPABASE_BUCKET_SCENARI = os.getenv("SUPABASE_BUCKET_SCENARI", "scenari-dealer")
+
+def _sb_upload_scenario(path: str, blob: bytes, content_type: str = "image/png") -> tuple[str, str | None]:
+    supabase_client.storage.from_(SUPABASE_BUCKET_SCENARI).upload(
+        path=path,
+        file=blob,
+        file_options={"content-type": content_type, "upsert": "true"}
+    )
+    res = supabase_client.storage.from_(SUPABASE_BUCKET_SCENARI).create_signed_url(
+        path=path,
+        expires_in=60 * 60 * 24 * 30  # 30 giorni
+    )
+    signed = res.get("signedURL") or res.get("signed_url") or res.get("signedUrl")
+    if signed and signed.startswith("/storage"):
+        base = os.getenv("SUPABASE_URL", "").rstrip("/")
+        signed = f"{base}{signed}"
+    return path, signed
+
 class ScenarioDealerRequest(BaseModel):
     titolo: Optional[str] = None
     descrizione: str
@@ -1324,38 +1342,27 @@ class ScenarioDealerUpdateRequest(BaseModel):
     image_url: Optional[str] = None  # 👈 nuovo campo
 
 
-@router.post("/scenario-dealer", tags=["Scenario Dealer"])
-async def crea_scenario_dealer(
-    payload: ScenarioDealerRequest,
+@router.post("/scenario-dealer/upload", tags=["Scenario Dealer"])
+async def upload_scenario_image(
+    file: UploadFile = File(...),
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
-    # Autenticazione
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(403, "Utente non trovato")
 
-    # ✅ Inserisci record
-    rec = ScenarioDealer(
-        dealer_id=user.id,
-        titolo=payload.titolo,
-        descrizione=payload.descrizione,
-        tags=payload.tags
-    )
-    db.add(rec)
-    db.commit()
-    db.refresh(rec)
+    ext = os.path.splitext(file.filename)[-1].lower() or ".png"
+    path = f"{user.id}/{uuid4()}{ext}"   # 👈 cartella per dealer
+    blob = await file.read()
 
-    return {
-        "success": True,
-        "id": str(rec.id),
-        "titolo": rec.titolo,
-        "descrizione": rec.descrizione,
-        "tags": rec.tags,
-        "created_at": rec.created_at.isoformat()
-    }
+    try:
+        _, signed_url = _sb_upload_scenario(path, blob, "image/png")
+        return {"success": True, "url": signed_url}
+    except Exception as e:
+        raise HTTPException(500, f"Upload fallito: {e}")
 
 
 @router.get("/scenario-dealer/miei", tags=["Scenario Dealer"])
