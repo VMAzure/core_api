@@ -1315,6 +1315,13 @@ class ScenarioDealerRequest(BaseModel):
     titolo: Optional[str] = None
     descrizione: str
     tags: Optional[str] = None
+    image_url: Optional[str] = None  # 👈 nuovo campo
+
+class ScenarioDealerUpdateRequest(BaseModel):
+    titolo: Optional[str] = None
+    descrizione: Optional[str] = None
+    tags: Optional[str] = None
+    image_url: Optional[str] = None  # 👈 nuovo campo
 
 
 @router.post("/scenario-dealer", tags=["Scenario Dealer"])
@@ -1362,13 +1369,18 @@ async def lista_scenari_dealer(
     if not user:
         raise HTTPException(403, "Utente non trovato")
 
-    records = db.query(ScenarioDealer).filter(ScenarioDealer.dealer_id == user.id).order_by(ScenarioDealer.created_at.desc()).all()
+    records = db.query(ScenarioDealer)\
+                .filter(ScenarioDealer.dealer_id == user.id)\
+                .order_by(ScenarioDealer.created_at.desc())\
+                .all()
+
     return [
         {
             "id": str(r.id),
             "titolo": r.titolo,
             "descrizione": r.descrizione,
             "tags": r.tags,
+            "image_url": r.image_url,   # 👈 esponi url
             "created_at": r.created_at.isoformat(),
             "updated_at": r.updated_at.isoformat() if r.updated_at else None
         }
@@ -1376,10 +1388,38 @@ async def lista_scenari_dealer(
     ]
 
 
-class ScenarioDealerUpdateRequest(BaseModel):
-    titolo: Optional[str] = None
-    descrizione: Optional[str] = None
-    tags: Optional[str] = None
+@router.post("/scenario-dealer", tags=["Scenario Dealer"])
+async def crea_scenario_dealer(
+    payload: ScenarioDealerRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(403, "Utente non trovato")
+
+    rec = ScenarioDealer(
+        dealer_id=user.id,
+        titolo=payload.titolo,
+        descrizione=payload.descrizione,
+        tags=payload.tags,
+        image_url=payload.image_url   # 👈 salva url immagine
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+
+    return {
+        "success": True,
+        "id": str(rec.id),
+        "titolo": rec.titolo,
+        "descrizione": rec.descrizione,
+        "tags": rec.tags,
+        "image_url": rec.image_url,
+        "created_at": rec.created_at.isoformat()
+    }
 
 
 @router.patch("/scenario-dealer/{id}", tags=["Scenario Dealer"])
@@ -1395,7 +1435,10 @@ async def aggiorna_scenario_dealer(
     if not user:
         raise HTTPException(403, "Utente non trovato")
 
-    rec = db.query(ScenarioDealer).filter(ScenarioDealer.id == id, ScenarioDealer.dealer_id == user.id).first()
+    rec = db.query(ScenarioDealer).filter(
+        ScenarioDealer.id == id,
+        ScenarioDealer.dealer_id == user.id
+    ).first()
     if not rec:
         raise HTTPException(404, "Scenario non trovato")
 
@@ -1405,10 +1448,21 @@ async def aggiorna_scenario_dealer(
         rec.descrizione = payload.descrizione
     if payload.tags is not None:
         rec.tags = payload.tags
+    if payload.image_url is not None:
+        rec.image_url = payload.image_url
 
     db.commit()
     db.refresh(rec)
-    return {"success": True, "id": str(rec.id)}
+    return {
+        "success": True,
+        "id": str(rec.id),
+        "titolo": rec.titolo,
+        "descrizione": rec.descrizione,
+        "tags": rec.tags,
+        "image_url": rec.image_url,
+        "updated_at": rec.updated_at.isoformat() if rec.updated_at else None
+    }
+
 
 
 @router.delete("/scenario-dealer/{id}", tags=["Scenario Dealer"])

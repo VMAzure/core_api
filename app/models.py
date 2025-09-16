@@ -1494,14 +1494,18 @@ class ScenarioDealer(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     dealer_id = Column(Integer, ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False)
 
-    titolo = Column(String(255), nullable=True)        # opzionale, per identificare
-    descrizione = Column(Text, nullable=False)         # testo libero scritto dal dealer
-    tags = Column(String(255), nullable=True)          # opzionale: parole chiave/categorie
+    titolo = Column(String(255), nullable=True)
+    descrizione = Column(Text, nullable=False)
+    tags = Column(String(255), nullable=True)
+
+    # nuovo campo
+    image_url = Column(String(1024), nullable=True)
 
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
 
     dealer = relationship("User", backref="scenari")
+
 
 class MnetImmagini(Base):
     __tablename__ = "mnet_immagini"
