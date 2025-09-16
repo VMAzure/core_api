@@ -1541,3 +1541,219 @@ async def genera_image_webp(payload: WebpImageRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore generazione immagine: {e}")
 
+
+    # --- DALLE COMBINE (JWT + credito + upload + storico) -----------------------
+from fastapi import Form
+from fastapi.responses import Response
+from uuid import UUID as _UUID
+from io import BytesIO
+from PIL import Image
+from datetime import datetime
+from uuid import uuid4
+import base64, requests, os
+
+from openai import OpenAI
+client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    organization=os.getenv("OPENAI_ORG_ID")
+)
+
+DALLE_CREDIT_COST = float(os.getenv("DALLE_CREDIT_COST", "1.5"))
+
+QUALITY_MAP = {"standard": "medium", "hd": "high"}
+ALLOWED_QUALITY = {"low", "medium", "high", "auto"}
+ORIENTATION_SIZE = {
+    "square": "1024x1024",
+    "landscape": "1792x1024",
+    "portrait": "1024x1792"
+}
+
+class DalleCombineResponse(BaseModel):
+    success: bool
+    id_auto: _UUID
+    public_url: str
+    usato_leonardo_id: _UUID
+    status: str = "completed"
+
+def _load_image_from_url(url: str, field: str) -> Image.Image:
+    try:
+        r = requests.get(url, timeout=30)
+        r.raise_for_status()
+        return Image.open(BytesIO(r.content)).convert("RGB")
+    except Exception:
+        raise HTTPException(400, f"Invalid image URL for '{field}'")
+
+@router.post("/ai/dalle/combine", response_model=DalleCombineResponse, tags=["OpenAI"])
+async def dalle_combine(
+    id_auto: _UUID = Form(...),
+    prompt: str = Form(...),
+    img1_url: str = Form(...),
+    img2_url: str = Form(...),
+    quality: str = Form("medium"),
+    orientation: str = Form("square"),
+    logo_url: str | None = Form(None),
+    logo_height: int = Form(100),
+    logo_offset_y: int = Form(100),
+    as_file: bool = Form(True),
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    # --- JWT + user ---
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(403, "Utente non trovato")
+
+    # --- credito dealer ---
+    is_dealer = is_dealer_user(user)
+    if is_dealer and (user.credit is None or user.credit < DALLE_CREDIT_COST):
+        raise HTTPException(402, "Credito insufficiente")
+
+    # --- validazioni qualità/orientamento ---
+    q = QUALITY_MAP.get(quality.lower(), quality.lower())
+    if q not in ALLOWED_QUALITY:
+        raise HTTPException(400, "quality must be one of: low, medium, high, auto (or standard/hd)")
+    if orientation not in ORIENTATION_SIZE:
+        raise HTTPException(400, "orientation must be one of: square, landscape, portrait")
+    size = ORIENTATION_SIZE[orientation]
+
+    # --- carica immagini e composizione ---
+    i1 = _load_image_from_url(img1_url, "img1_url")
+    i2 = _load_image_from_url(img2_url, "img2_url")
+    w, h = i1.width + i2.width, max(i1.height, i2.height)
+    canvas = Image.new("RGB", (w, h), (255, 255, 255))
+    canvas.paste(i1, (0, 0))
+    canvas.paste(i2, (i1.width, 0))
+
+    buf = BytesIO()
+    canvas.save(buf, format="PNG")
+    buf.seek(0)
+    buf.name = "canvas.png"
+
+    # --- crea record storico (queued) ---
+    rec = UsatoLeonardo(
+        id_auto=id_auto,
+        provider="dalle",
+        generation_id=None,
+        status="queued",
+        media_type="image",
+        mime_type="image/png",
+        prompt=prompt,
+        negative_prompt=None,
+        model_id="gpt-image-1",
+        aspect_ratio=orientation,
+        credit_cost=DALLE_CREDIT_COST if is_dealer else 0.0,
+        user_id=user.id
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+
+    # --- chiamata DALL·E ---
+    try:
+        dalle_res = client.images.edit(
+            model="gpt-image-1",
+            prompt=prompt,
+            image=buf,
+            size=size,
+            quality=q,
+        )
+    except Exception as e:
+        rec.status = "failed"
+        rec.error_message = f"DALL·E error: {str(e)}"
+        db.commit()
+        raise HTTPException(500, rec.error_message)
+
+    # --- decodifica immagine ---
+    try:
+        img_b64 = dalle_res.data[0].b64_json
+        img_bytes = base64.b64decode(img_b64)
+        final = Image.open(BytesIO(img_bytes)).convert("RGBA")
+    except Exception as e:
+        rec.status = "failed"
+        rec.error_message = f"Image decode error: {str(e)}"
+        db.commit()
+        raise HTTPException(500, rec.error_message)
+
+    # --- applica logo opzionale ---
+    if logo_url:
+        try:
+            r = requests.get(logo_url, timeout=30)
+            r.raise_for_status()
+            logo = Image.open(BytesIO(r.content)).convert("RGBA")
+            ow, oh = logo.size
+            new_h = max(1, int(logo_height))
+            new_w = int((ow / oh) * new_h)
+            logo = logo.resize((new_w, new_h))
+            if final.height < new_h + logo_offset_y:
+                raise HTTPException(400, f"image too small for logo offset {logo_offset_y}px")
+            logo_x = (final.width - new_w) // 2
+            logo_y = logo_offset_y
+            final.paste(logo, (logo_x, logo_y), logo)
+        except HTTPException:
+            raise
+        except Exception as e:
+            rec.status = "failed"
+            rec.error_message = f"logo_url error: {str(e)}"
+            db.commit()
+            raise HTTPException(400, rec.error_message)
+
+    # --- serializza PNG ---
+    output_png = BytesIO()
+    final.save(output_png, format="PNG")
+    output_png.seek(0)
+
+    # --- upload su Supabase + finalize ---
+    try:
+        path = f"{str(rec.id_auto)}/{str(rec.id)}.png"
+        _, signed_url = _sb_upload_and_sign(path, output_png.getvalue(), "image/png")
+        rec.public_url = signed_url
+        rec.storage_path = path
+        rec.status = "completed"
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        rec.status = "failed"
+        rec.error_message = f"Upload error: {str(e)}"
+        db.commit()
+        raise HTTPException(500, rec.error_message)
+
+    # --- addebito credito dealer ---
+    if is_dealer:
+        try:
+            user.credit = float(user.credit or 0) - DALLE_CREDIT_COST
+            db.add(CreditTransaction(
+                dealer_id=user.id,
+                amount=-DALLE_CREDIT_COST,
+                transaction_type="USE",
+                note="Immagine DALL·E combine"
+            ))
+            inserisci_notifica(
+                db=db,
+                utente_id=user.id,
+                tipo_codice="CREDITO_USATO",
+                messaggio=f"Hai utilizzato {DALLE_CREDIT_COST:g} crediti per la generazione immagine DALL·E."
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            # non annullo l'immagine già generata: traccio l'anomalia in log
+            logging.error("Errore addebito credito DALL·E per user_id=%s rec_id=%s", user.id, rec.id)
+
+    # --- risposta ---
+    if as_file:
+        fname = f"dalle_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}.png"
+        return Response(
+            content=output_png.getvalue(),
+            media_type="image/png",
+            headers={"Content-Disposition": f'inline; filename="{fname}"'}
+        )
+
+    return DalleCombineResponse(
+        success=True,
+        id_auto=id_auto,
+        public_url=rec.public_url,
+        usato_leonardo_id=rec.id,
+        status="completed"
+    )
