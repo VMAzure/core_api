@@ -1311,23 +1311,50 @@ def usa_hero_media(id: UUID, Authorize: AuthJWT = Depends(), db: Session = Depen
     return {"success": True}
 
 
+import mimetypes
+from io import BytesIO
+
 SUPABASE_BUCKET_SCENARI = os.getenv("SUPABASE_BUCKET_SCENARI", "scenari-dealer")
 
-def _sb_upload_scenario(path: str, blob: bytes, content_type: str = "image/png") -> tuple[str, str | None]:
-    supabase_client.storage.from_(SUPABASE_BUCKET_SCENARI).upload(
+def _sb_upload_scenario(path: str, blob: bytes, content_type: str | None = None) -> tuple[str, str | None]:
+    # content-type
+    if not content_type or "/" not in content_type:
+        content_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
+
+    # file-like per SDK
+    fh = BytesIO(blob)
+    fh.seek(0)
+
+    # upload con upsert
+    up = supabase_client.storage.from_(SUPABASE_BUCKET_SCENARI).upload(
         path=path,
-        file=blob,
+        file=fh,
         file_options={"content-type": content_type, "upsert": "true"}
     )
+
+    # alcune versioni ritornano dict; se c’è errore esplicitalo
+    if isinstance(up, dict) and up.get("error"):
+        raise HTTPException(502, f"Supabase upload error: {up['error'].get('message','unknown')}")
+
+    # URL firmata 30 giorni
     res = supabase_client.storage.from_(SUPABASE_BUCKET_SCENARI).create_signed_url(
-        path=path,
-        expires_in=60 * 60 * 24 * 30  # 30 giorni
+        path=path, expires_in=60 * 60 * 24 * 30
     )
-    signed = res.get("signedURL") or res.get("signed_url") or res.get("signedUrl")
-    if signed and signed.startswith("/storage"):
+    url = res.get("signedURL") or res.get("signed_url") or res.get("signedUrl")
+
+    # fallback public url se signed mancante
+    if not url:
+        pub = supabase_client.storage.from_(SUPABASE_BUCKET_SCENARI).get_public_url(path)
+        url = pub.get("publicURL") or pub.get("publicUrl") or pub.get("public_url")
+
+    # normalizza base
+    if url and url.startswith("/storage"):
         base = os.getenv("SUPABASE_URL", "").rstrip("/")
-        signed = f"{base}{signed}"
-    return path, signed
+        url = f"{base}{url}"
+
+    logging.warning(f"[SCENARIO-UPLOAD] bucket={SUPABASE_BUCKET_SCENARI} path={path} url={url}")
+    return path, url
+
 
 class ScenarioDealerRequest(BaseModel):
     titolo: Optional[str] = None
@@ -1354,15 +1381,18 @@ async def upload_scenario_image(
     if not user:
         raise HTTPException(403, "Utente non trovato")
 
-    ext = os.path.splitext(file.filename)[-1].lower() or ".png"
-    path = f"{user.id}/{uuid4()}{ext}"   # 👈 cartella per dealer
+    ext = os.path.splitext(file.filename or "")[-1].lower() or ".png"
+    path = f"{user.id}/{uuid4()}{ext}"
     blob = await file.read()
+    ctype = file.content_type or mimetypes.guess_type(file.filename or "")[0] or "image/png"
 
     try:
-        _, signed_url = _sb_upload_scenario(path, blob, "image/png")
+        _, signed_url = _sb_upload_scenario(path, blob, ctype)
         return {"success": True, "url": signed_url}
     except Exception as e:
+        logging.exception("Scenario upload failed")
         raise HTTPException(500, f"Upload fallito: {e}")
+
 
 
 @router.get("/scenario-dealer/miei", tags=["Scenario Dealer"])
