@@ -1664,6 +1664,134 @@ async def dalle_combine(
         raise HTTPException(402, "Credito insufficiente")
 
     # --- validazioni qualità/orientamento ---
+    if payload.orientation not in ORIENTATION_SIZE:
+        raise HTTPException(400, "orientation must be one of: square, landscape, portrait")
+
+    # --- crea record storico (queued) ---
+    rec = UsatoLeonardo(
+        id_auto=payload.id_auto,
+        provider="gemini",
+        generation_id=None,
+        status="queued",
+        media_type="image",
+        mime_type="image/png",
+        prompt=payload.prompt,
+        negative_prompt=None,
+        model_id="gemini-2.5-flash-image-preview",
+        aspect_ratio=payload.orientation,
+        credit_cost=DALLE_CREDIT_COST if is_dealer else 0.0,
+        user_id=user.id
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+
+    # --- chiamata GEMINI ---
+    try:
+        img_bytes = await _gemini_generate_image_sync(
+            payload.prompt,
+            subject_image_url=payload.img1_url,
+            background_image_url=payload.img2_url
+        )
+        final = Image.open(BytesIO(img_bytes)).convert("RGBA")
+    except Exception as e:
+        rec.status = "failed"
+        rec.error_message = f"Gemini error: {str(e)}"
+        db.commit()
+        raise HTTPException(500, rec.error_message)
+
+    # --- applica logo opzionale ---
+    if payload.logo_url:
+        try:
+            r = requests.get(payload.logo_url, timeout=30)
+            r.raise_for_status()
+            logo = Image.open(BytesIO(r.content)).convert("RGBA")
+            ow, oh = logo.size
+            new_h = max(1, int(payload.logo_height))
+            new_w = int((ow / oh) * new_h)
+            logo = logo.resize((new_w, new_h))
+            if final.height < new_h + payload.logo_offset_y:
+                raise HTTPException(400, f"image too small for logo offset {payload.logo_offset_y}px")
+            logo_x = (final.width - new_w) // 2
+            logo_y = payload.logo_offset_y
+            final.paste(logo, (logo_x, logo_y), logo)
+        except HTTPException:
+            raise
+        except Exception as e:
+            rec.status = "failed"
+            rec.error_message = f"logo_url error: {str(e)}"
+            db.commit()
+            raise HTTPException(400, rec.error_message)
+
+    # --- serializza PNG ---
+    output_png = BytesIO()
+    final.save(output_png, format="PNG")
+    output_png.seek(0)
+
+    # --- upload su Supabase + finalize ---
+    try:
+        path = f"{str(rec.id_auto)}/{str(rec.id)}.png"
+        _, signed_url = _sb_upload_and_sign(path, output_png.getvalue(), "image/png")
+        rec.public_url = signed_url
+        rec.storage_path = path
+        rec.status = "completed"
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        rec.status = "failed"
+        rec.error_message = f"Upload error: {str(e)}"
+        db.commit()
+        raise HTTPException(500, rec.error_message)
+
+    # --- addebito credito dealer ---
+    if is_dealer:
+        try:
+            user.credit = float(user.credit or 0) - DALLE_CREDIT_COST
+            db.add(CreditTransaction(
+                dealer_id=user.id,
+                amount=-DALLE_CREDIT_COST,
+                transaction_type="USE",
+                note="Immagine Gemini combine"
+            ))
+            inserisci_notifica(
+                db=db,
+                utente_id=user.id,
+                tipo_codice="CREDITO_USATO",
+                messaggio=f"Hai utilizzato {DALLE_CREDIT_COST:g} crediti per la generazione immagine Gemini."
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            logging.error("Errore addebito credito Gemini per user_id=%s rec_id=%s", user.id, rec.id)
+
+    # --- risposta ---
+    return DalleCombineResponse(
+        success=True,
+        id_auto=payload.id_auto,
+        public_url=rec.public_url,
+        usato_leonardo_id=rec.id,
+        status="completed"
+    )
+
+
+@router.post("old/ai/dalle/combine", response_model=DalleCombineResponse, tags=["OpenAI"])
+async def dalle_combine(
+    payload: DalleCombineRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    # --- JWT + user ---
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(403, "Utente non trovato")
+
+    is_dealer = is_dealer_user(user)
+    if is_dealer and (user.credit is None or user.credit < DALLE_CREDIT_COST):
+        raise HTTPException(402, "Credito insufficiente")
+
+    # --- validazioni qualità/orientamento ---
     q = QUALITY_MAP.get(payload.quality.lower(), payload.quality.lower())
     if q not in ALLOWED_QUALITY:
         raise HTTPException(400, "quality must be one of: low, medium, high, auto (or standard/hd)")
