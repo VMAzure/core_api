@@ -1,25 +1,50 @@
 ﻿# app/routes/openai_config.py
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+# --- FastAPI / Auth / DB ---
+from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from fastapi_jwt_auth import AuthJWT
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+# --- Utilità app interne ---
 from app.database import get_db, supabase_client
-from app.models import User, PurchasedServices, Services, CreditTransaction, ScenarioDealer
+from app.models import (
+    User,
+    PurchasedServices,
+    Services,
+    CreditTransaction,
+    ScenarioDealer,
+    AZLeaseUsatoAuto,
+    MnetDettaglioUsato,
+    UsatoLeonardo,
+)
 from app.auth_helpers import is_admin_user, is_dealer_user
 from app.routes.notifiche import inserisci_notifica
 from app.openai_utils import genera_descrizione_gpt
-from typing import Optional, Any
-from uuid import uuid4
 
-from fastapi import APIRouter, Request, HTTPException, Depends
-from sqlalchemy.orm import Session
+# --- Librerie standard ---
+import os
+import io
+import re
 import json
+import base64
+import asyncio
+import logging
 import requests
-import re, unicodedata
+import unicodedata
+from datetime import datetime, timedelta
+from uuid import uuid4, UUID
+from typing import Optional, Any
+from uuid import UUID as _UUID
+from io import BytesIO
+
+# --- Librerie esterne ---
+import httpx
+import google.generativeai as genai
+from PIL import Image
+from openai import OpenAI
 
 
-import logging, json, os
 GEMINI_DEBUG = os.getenv("GEMINI_DEBUG", "0") == "1"
 
 def _log_op(op: dict):
@@ -166,22 +191,6 @@ async def genera_testo_old(
 
 
 # --- VIDEO HERO GEMINI (JWT + credito) -------------------------------------
-import os
-import httpx
-from uuid import UUID as _UUID
-from typing import Optional
-
-from pydantic import BaseModel
-import google.generativeai as genai
-
-from fastapi import HTTPException, Depends
-from sqlalchemy.orm import Session
-from fastapi_jwt_auth import AuthJWT
-
-from app.models import User, CreditTransaction, AZLeaseUsatoAuto, MnetDettaglioUsato, UsatoLeonardo
-from app.routes.notifiche import inserisci_notifica
-from app.auth_helpers import is_dealer_user
-from uuid import UUID
 
 
 # ENV
@@ -236,7 +245,6 @@ class GeminiImageHeroResponse(BaseModel):
     generation_id: Optional[str] = None  # ✅ aggiunto
 
 
-import base64
 
 async def _fetch_image_base64_from_url(url: str) -> tuple[str, str]:
     """Scarica immagine da URL e restituisce (mime_type, base64string)."""
@@ -398,7 +406,6 @@ async def _download_bytes(url: str) -> bytes:
             raise HTTPException(502, f"Download video fallito: {r.text}")
         return r.content
 
-import httpx
 
 
 async def _gemini_get_operation(op_name: str) -> dict:
@@ -607,9 +614,7 @@ async def check_video_status(
         raise HTTPException(500, detail=rec.error_message)
 
 # --- GEMINI IMAGE (start + status) ------------------------------------------
-from uuid import UUID as _UUID
-from typing import Optional
-from pydantic import BaseModel
+
 
 # --- GEMINI IMAGE (sincrona) -------------------------------------------------
 GEMINI_IMG_CREDIT_COST = float(os.getenv("GEMINI_IMG_CREDIT_COST", "1.0"))
@@ -924,28 +929,7 @@ async def check_image_status(
 
 
 # --- VIDEO HERO LEONARDO (JWT + credito) -------------------------------------
-import os
-import asyncio
-import httpx
-from datetime import timedelta
-from uuid import UUID as _UUID
-from typing import Optional
 
-from fastapi import HTTPException, Depends
-from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
-
-from app.database import get_db
-from app.models import (
-    User,
-    CreditTransaction,
-    AZLeaseUsatoAuto,
-    MnetDettaglioUsato,     # se il nome reale differisce, sostituisci
-    UsatoLeonardo,
-)
-from app.routes.notifiche import inserisci_notifica
-from app.auth_helpers import is_admin_user, is_dealer_user
-from fastapi_jwt_auth import AuthJWT
 
 # === ENV / CONFIG ===
 LEONARDO_API_KEY = os.getenv("LEONARDO_API_KEY", "")
@@ -1306,8 +1290,6 @@ async def leonardo_webhook(payload: dict, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
-from uuid import UUID
-
 @router.patch("/usato-leonardo/{id}/usa", tags=["Usato AI"])
 def usa_hero_media(id: UUID, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
@@ -1452,12 +1434,7 @@ async def elimina_scenario_dealer(
 
 ##ROTTA TEST per immagini download
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import Response
-from pydantic import BaseModel
-from typing import Optional
-import io
-from PIL import Image
+
 
 class WebpImageRequest(BaseModel):
     prompt: str
@@ -1542,16 +1519,8 @@ async def genera_image_webp(payload: WebpImageRequest):
         raise HTTPException(status_code=500, detail=f"Errore generazione immagine: {e}")
 
 
-    # --- DALLE COMBINE (JWT + credito + upload + storico) -----------------------
 # --- DALLE COMBINE (JWT + credito + upload + storico) -----------------------
-from uuid import UUID as _UUID
-from io import BytesIO
-from PIL import Image
-from datetime import datetime
-from uuid import uuid4
-import base64, requests, os, logging
 
-from openai import OpenAI
 client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
     organization=os.getenv("OPENAI_ORG_ID")
