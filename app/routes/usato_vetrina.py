@@ -1,4 +1,4 @@
-# usato_vetrina.py
+Ôªø# usato_vetrina.py
 
 from fastapi import APIRouter, Depends, HTTPException, Body
 from fastapi_jwt_auth import AuthJWT
@@ -63,7 +63,7 @@ def add_media_vetrina(
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
-    """Aggiunge un media alla vetrina (se non gi‡ presente)"""
+    """Aggiunge un media alla vetrina (se non gi√† presente)"""
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
     user = db.query(User).filter(User.email == user_email).first()
@@ -78,7 +78,7 @@ def add_media_vetrina(
         .first()
     )
     if exists:
-        raise HTTPException(409, "Media gi‡ presente in vetrina")
+        raise HTTPException(409, "Media gi√† presente in vetrina")
 
     rec = UsatoVetrina(
         id=uuid.uuid4(),
@@ -101,7 +101,7 @@ def update_media_vetrina(
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
-    """Aggiorna la priorit‡ di un media nella vetrina"""
+    """Aggiorna la priorit√† di un media nella vetrina"""
     Authorize.jwt_required()
     rec = db.query(UsatoVetrina).filter(UsatoVetrina.id == id).first()
     if not rec:
@@ -170,7 +170,7 @@ def lista_vetrina_cards(slug: str, db: Session = Depends(get_db)):
           a.anno_immatricolazione,
           i.prezzo_vendita,
           i.iva_esposta,
-          -- cover (priority 1 o pi˘ bassa)
+          -- cover (priority 1 o pi√π bassa)
           CASE v.media_type
             WHEN 'foto' THEN (SELECT foto FROM azlease_usatoimg WHERE id = v.media_id)
             WHEN 'ai'   THEN (SELECT public_url FROM usato_leonardo WHERE id = v.media_id)

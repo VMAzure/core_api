@@ -61,6 +61,7 @@ from app.routes.videos import router as videos_router
 from app.routes import video_maker
 from app.routes.modelli_ai_test import router as modelli_ai_test_router
 from app.routes import immagini_nuovo
+from app.routes import usato_vetrina
 
 
 
@@ -223,6 +224,7 @@ app.include_router(videos_router)
 app.include_router(video_maker.router)
 app.include_router(modelli_ai_test_router)
 app.include_router(immagini_nuovo.router)
+app.include_router(usato_vetrina.router)
 
 
 
