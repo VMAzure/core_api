@@ -76,7 +76,7 @@ def get_vetrina_auto(id_auto: UUID, db: Session = Depends(get_db)):
 
 
 
-@router.post("/{id_auto}/vetrina", response_model=VetrinaOut)
+@router.post("/{id_auto}/vetrina", response_model=VetrinaOutExtended)
 def add_media_vetrina(
     id_auto: UUID,
     data: VetrinaCreate,
@@ -92,9 +92,11 @@ def add_media_vetrina(
 
     exists = (
         db.query(UsatoVetrina)
-        .filter(UsatoVetrina.id_auto == id_auto,
-                UsatoVetrina.media_type == data.media_type,
-                UsatoVetrina.media_id == data.media_id)
+        .filter(
+            UsatoVetrina.id_auto == id_auto,
+            UsatoVetrina.media_type == data.media_type,
+            UsatoVetrina.media_id == data.media_id,
+        )
         .first()
     )
     if exists:
@@ -106,12 +108,36 @@ def add_media_vetrina(
         media_type=data.media_type,
         media_id=data.media_id,
         priority=None,
-        created_by=user.id
+        created_by=user.id,
     )
     db.add(rec)
     db.commit()
     db.refresh(rec)
-    return rec
+
+    # 🔎 Lookup URL
+    media_url = None
+    if data.media_type == "foto":
+        row = db.execute(
+            text("SELECT foto FROM public.azlease_usatoimg WHERE id = :id"),
+            {"id": str(data.media_id)},
+        ).fetchone()
+        media_url = row.foto if row else None
+    elif data.media_type == "ai":
+        row = db.execute(
+            text("SELECT public_url FROM public.usato_leonardo WHERE id = :id"),
+            {"id": str(data.media_id)},
+        ).fetchone()
+        media_url = row.public_url if row else None
+
+    return VetrinaOutExtended(
+        id=rec.id,
+        id_auto=rec.id_auto,
+        media_type=rec.media_type,
+        media_id=rec.media_id,
+        priority=rec.priority,
+        created_at=rec.created_at,
+        media_url=media_url,
+    )
 
 
 @router.patch("/vetrina/{id}", response_model=VetrinaOut)
