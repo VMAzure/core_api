@@ -603,6 +603,18 @@ class MnetModelliAIFoto(Base):
 
     modello = relationship("MnetModelli", back_populates="ai_foto")
 
+class UsatoVetrina(Base):
+    __tablename__ = "usato_vetrina"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_auto = Column(UUID(as_uuid=True),
+                     ForeignKey("azlease_usatoauto.id", ondelete="CASCADE"),
+                     nullable=False)
+    media_type = Column(Text, nullable=False)  # 'foto' o 'ai'
+    media_id = Column(UUID(as_uuid=True), nullable=False)
+    priority = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_by = Column(Integer, ForeignKey("utenti.id"), nullable=True)
 
 class MnetAllestimenti(Base):
     __tablename__ = "mnet_allestimenti"
