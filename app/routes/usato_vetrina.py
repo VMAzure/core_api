@@ -5,12 +5,9 @@ from fastapi_jwt_auth import AuthJWT
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from uuid import UUID
-
 from app.database import get_db
 from app.models import UsatoVetrina, User, SiteAdminSettings
-
 from datetime import datetime
-
 from pydantic import BaseModel
 from typing import Optional, List
 import uuid
