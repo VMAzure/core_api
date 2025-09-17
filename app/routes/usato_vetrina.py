@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 import uuid
 
-router = APIRouter(prefix="/usato", tags=["AZLease Vetrina"])
+router = APIRouter(prefix="/api/azlease/usato", tags=["AZLease Vetrina"])
 
 
 # === Schemi ===
