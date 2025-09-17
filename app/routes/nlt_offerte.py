@@ -4,7 +4,7 @@ from sqlalchemy import func
 
 from typing import Optional, List
 from app.database import get_db
-from app.models import Services, MnetModelliAIFoto, PurchasedServices, NltOfferteRating, MnetDettagli,NltPneumatici, NltAutoSostitutiva, NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt, NltOfferteClick
+from app.models import Services, PurchasedServices, NltOfferteRating, MnetDettagli,NltPneumatici, NltAutoSostitutiva, NltQuotazioni, NltPlayers, NltImmagini,MnetModelli, NltOfferteTag, NltOffertaTag, User, NltOffertaAccessori,SiteAdminSettings, NltOfferte, SmtpSettings, ImmaginiNlt, NltOfferteClick
 from app.auth_helpers import is_admin_user, is_dealer_user, get_admin_id, get_dealer_id
 from app.routes.nlt import get_current_user  
 from datetime import date, datetime
@@ -942,19 +942,11 @@ async def offerte_filtrate_nlt_pubbliche(
         tipo_descrizione = dettagli.tipo_descrizione if dettagli else None
         segmento_descrizione = dettagli.segmento_descrizione if dettagli else None
 
-       # 🔥 nuova logica immagine: milano → mediterraneo → default
-        foto_ai = (
-            db.query(MnetModelliAIFoto)
-            .filter(
-                MnetModelliAIFoto.codice_modello == offerta.codice_modello,
-                MnetModelliAIFoto.scenario.in_(["milano", "mediterraneo"])
-            )
-            .all()
-        )
+        modello_db = db.query(MnetModelli).filter(
+            MnetModelli.codice_modello == offerta.codice_modello
+        ).first()
 
-        scenari = {f.scenario: f.ai_foto_url for f in foto_ai}
-        immagine_url = scenari.get("milano") or scenari.get("mediterraneo") or "/default-placeholder.png"
-
+        immagine_url = modello_db.default_img if modello_db and modello_db.default_img else "/default-placeholder.png"
 
         risultato.append({
             "id_offerta": offerta.id_offerta,
