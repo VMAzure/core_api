@@ -760,21 +760,22 @@ async def popola_accessori_usato(
     if not auto:
         raise HTTPException(status_code=404, detail="Auto non trovata")
 
-    # 🔁 Fetch da Motornet
+    # 🔁 Fetch da Motornet v2_0
     try:
         token = get_motornet_token()
         headers = {"Authorization": f"Bearer {token}"}
         url = (
-            "https://webservice.motornet.it/api/v3_0/rest/public/usato/auto/accessori"
-            f"?codice_motornet_uni={payload.codice_motornet}&anno={payload.anno}&mese={payload.mese}"
+            "https://webservice.motornet.it/api/v2_0/rest/public/usato/auto/accessori"
+            f"?codice_motornet={payload.codice_motornet}"
+            f"&anno={payload.anno}&mese={payload.mese}"
         )
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         data = response.json()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Errore chiamata Motornet: {str(e)}")
 
-    # ⛔️ Svuota precedenti (eventuale reinvocazione)
+    # ⛔️ Svuota precedenti
     db.execute(text("DELETE FROM public.autousato_accessori_serie WHERE id_auto = :id"), {"id": str(payload.id_auto)})
     db.execute(text("DELETE FROM public.autousato_accessori_optional WHERE id_auto = :id"), {"id": str(payload.id_auto)})
     db.execute(text("DELETE FROM public.autousato_accessori_pacchetti WHERE id_auto = :id"), {"id": str(payload.id_auto)})
@@ -809,22 +810,19 @@ async def popola_accessori_usato(
     # ✅ Pacchetti
     for pac in data.get("pacchetti", []):
         db.execute(text("""
-            INSERT INTO public.autousato_accessori_pacchetti
-                (id, id_auto, codice, descrizione, prezzo, presente)
+            INSERT INTO public.autousato_accessori_pacchetti (id, id_auto, codice, descrizione, prezzo, presente)
             VALUES (:id, :auto, :codice, :descrizione, :prezzo, false)
         """), {
             "id": str(uuid.uuid4()),
             "auto": str(payload.id_auto),
-            "codice": pac.get("codice"),                         # 👈 nuovo
+            "codice": pac.get("codice"),
             "descrizione": pac.get("descrizione"),
-            "prezzo": pac.get("prezzo"),
+            "prezzo": pac.get("prezzo")
         })
 
-
-    
-
     db.commit()
-    return {"message": "Accessori e colori salvati correttamente"}
+    return {"message": "Accessori e pacchetti salvati correttamente"}
+
 
 
 # NEW
