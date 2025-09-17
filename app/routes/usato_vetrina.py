@@ -36,22 +36,44 @@ class VetrinaOut(BaseModel):
         orm_mode = True
 
 
+class VetrinaOutExtended(BaseModel):
+    id: UUID
+    id_auto: UUID
+    media_type: str           # "foto" o "ai"
+    media_id: UUID
+    priority: Optional[int]
+    created_at: Optional[datetime]
+    media_url: Optional[str]  # URL risolto (foto o AI)
+
+    class Config:
+        orm_mode = True
 # === Rotte ===
 
-@router.get("/{id_auto}/vetrina", response_model=List[VetrinaOut])
-def get_vetrina_auto(
-    id_auto: UUID,
-    db: Session = Depends(get_db)
-):
-    """Restituisce i media pubblicati in vetrina per una certa auto"""
-    rows = (
-        db.query(UsatoVetrina)
-        .filter(UsatoVetrina.id_auto == id_auto)
-        .order_by(UsatoVetrina.priority.asc().nullslast(),
-                  UsatoVetrina.created_at.asc())
-        .all()
-    )
-    return rows
+@router.get("/{id_auto}/vetrina", response_model=List[VetrinaOutExtended])
+def get_vetrina_auto(id_auto: UUID, db: Session = Depends(get_db)):
+    """
+    Restituisce i media pubblicati in vetrina per una certa auto,
+    arricchiti con l'URL reale (foto o AI).
+    """
+    query = text("""
+        SELECT
+            v.id,
+            v.id_auto,
+            v.media_type,
+            v.media_id,
+            v.priority,
+            v.created_at,
+            CASE v.media_type
+              WHEN 'foto' THEN (SELECT foto FROM public.azlease_usatoimg WHERE id = v.media_id)
+              WHEN 'ai'   THEN (SELECT public_url FROM public.usato_leonardo WHERE id = v.media_id)
+            END AS media_url
+        FROM public.usato_vetrina v
+        WHERE v.id_auto = :id_auto
+        ORDER BY v.priority ASC NULLS LAST, v.created_at ASC
+    """)
+    rows = db.execute(query, {"id_auto": str(id_auto)}).mappings().all()
+    return [VetrinaOutExtended(**r) for r in rows]
+
 
 
 @router.post("/{id_auto}/vetrina", response_model=VetrinaOut)
