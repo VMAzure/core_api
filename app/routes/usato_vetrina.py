@@ -9,6 +9,8 @@ from uuid import UUID
 from app.database import get_db
 from app.models import UsatoVetrina, User, SiteAdminSettings
 
+from datetime import datetime
+
 from pydantic import BaseModel
 from typing import Optional, List
 import uuid
@@ -16,7 +18,6 @@ import uuid
 router = APIRouter(prefix="/api/azlease/usato", tags=["AZLease Vetrina"])
 
 
-# === Schemi ===
 class VetrinaCreate(BaseModel):
     media_type: str  # "foto" o "ai"
     media_id: UUID
@@ -32,7 +33,7 @@ class VetrinaOut(BaseModel):
     media_type: str
     media_id: UUID
     priority: Optional[int]
-    created_at: Optional[str]
+    created_at: Optional[datetime]   # meglio datetime che str
 
     class Config:
         orm_mode = True
