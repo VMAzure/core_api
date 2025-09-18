@@ -1962,6 +1962,18 @@ def elimina_perizia_usato(
 
     return {"message": "Perizia eliminata correttamente"}
 
+# usato_pubblico.py
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from app.database import get_db
+from app.models import SiteAdminSettings
+from uuid import UUID
+
+router = APIRouter(prefix="/api/azlease", tags=["Public AZLease"])
+
+
 @router.get("/usato-pubblico/{slug}", tags=["Public AZLease"])
 async def lista_usato_pubblico(
     slug: str,
@@ -1975,7 +1987,7 @@ async def lista_usato_pubblico(
     admin_id = settings.admin_id
     slug_dealer_id = settings.dealer_id  # None se brand admin
 
-    # Lista auto + dealer che le ha inserite
+    # Lista auto base
     rows = db.execute(text("""
         SELECT 
             a.id AS id_auto,
@@ -2001,7 +2013,7 @@ async def lista_usato_pubblico(
         ORDER BY i.data_inserimento DESC
     """), {"admin_id": admin_id, "dealer_id": slug_dealer_id}).fetchall()
 
-    # Prefetch settings per tutti i dealer coinvolti
+    # Prefetch settings per i dealer
     dealer_ids = {r.dealer_id for r in rows if getattr(r, "dealer_id", None) is not None}
     dealer_settings = {}
     if dealer_ids:
@@ -2019,7 +2031,6 @@ async def lista_usato_pubblico(
                 "indirizzo": r.contact_address,
             }
 
-    # Fallback admin settings
     admin_defaults = {
         "logo": settings.logo_web,
         "nome": settings.meta_title,
@@ -2030,6 +2041,7 @@ async def lista_usato_pubblico(
     for row in rows:
         auto = dict(row._mapping)
 
+        # immagini classiche (fallback)
         immagini = db.execute(text("""
             SELECT id, foto AS foto_url, principale
             FROM azlease_usatoimg
@@ -2037,7 +2049,7 @@ async def lista_usato_pubblico(
             ORDER BY principale DESC, id ASC
         """), {"id_auto": auto["id_auto"]}).fetchall()
 
-        # Immagine AI attiva
+        # immagine AI attiva (fallback)
         img_ai = db.execute(text("""
             SELECT public_url
             FROM usato_leonardo
@@ -2045,7 +2057,7 @@ async def lista_usato_pubblico(
             ORDER BY id DESC LIMIT 1
         """), {"id_auto": auto["id_auto"]}).fetchone()
 
-        # Video AI attivo
+        # video AI attivo (fallback)
         vid_ai = db.execute(text("""
             SELECT public_url
             FROM usato_leonardo
@@ -2053,7 +2065,7 @@ async def lista_usato_pubblico(
             ORDER BY id DESC LIMIT 1
         """), {"id_auto": auto["id_auto"]}).fetchone()
 
-
+        # dettagli tecnici
         dettagli = db.execute(text("""
             SELECT 
                 alimentazione, cambio, trazione, hp, kw, cilindrata,
@@ -2068,9 +2080,28 @@ async def lista_usato_pubblico(
             WHERE codice_motornet_uni = :codice
         """), {"codice": auto["codice_motornet"]}).fetchone()
 
-        # Dealer effettivo dell’auto o admin come fallback
+        # Dealer effettivo
         auto_dealer_id = row.dealer_id if getattr(row, "dealer_id", None) is not None else None
         info = dealer_settings.get(auto_dealer_id, admin_defaults)
+
+        # Cover da vetrina (priority=1)
+        cover = db.execute(text("""
+            SELECT
+              CASE v.media_type
+                WHEN 'foto' THEN (SELECT foto FROM public.azlease_usatoimg WHERE id = v.media_id)
+                WHEN 'ai'   THEN (SELECT public_url FROM public.usato_leonardo WHERE id = v.media_id)
+              END AS url
+            FROM public.usato_vetrina v
+            WHERE v.id_auto = :id_auto
+            ORDER BY v.priority ASC NULLS LAST, v.created_at ASC
+            LIMIT 1
+        """), {"id_auto": auto["id_auto"]}).fetchone()
+        cover_url = cover.url if cover else (img_ai.public_url if img_ai else (immagini[0].foto_url if immagini else None))
+
+        # Conteggio totale media vetrina
+        total_media = db.execute(text("""
+            SELECT COUNT(*) FROM public.usato_vetrina WHERE id_auto = :id_auto
+        """), {"id_auto": auto["id_auto"]}).scalar()
 
         risultato.append({
             "auto": auto,
@@ -2082,10 +2113,12 @@ async def lista_usato_pubblico(
             "dealer_indirizzo": info["indirizzo"],
             "immagine_ai": img_ai.public_url if img_ai else None,
             "video_ai": vid_ai.public_url if vid_ai else None,
-
+            "cover_url": cover_url,
+            "total_media": total_media or 0,
         })
 
     return risultato
+
 
 
 
