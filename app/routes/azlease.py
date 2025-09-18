@@ -1962,16 +1962,6 @@ def elimina_perizia_usato(
 
     return {"message": "Perizia eliminata correttamente"}
 
-# usato_pubblico.py
-
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-from app.database import get_db
-from app.models import SiteAdminSettings
-from uuid import UUID
-
-router = APIRouter(prefix="/api/azlease", tags=["Public AZLease"])
 
 
 @router.get("/usato-pubblico/{slug}", tags=["Public AZLease"])
