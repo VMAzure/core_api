@@ -586,6 +586,7 @@ class MnetModelli(Base):
     ultima_modifica = Column(DateTime, server_default=func.now(), onupdate=func.now())
     default_img = Column(String(1000), nullable=True)
     ai_foto = relationship("MnetModelliAIFoto", back_populates="modello", cascade="all, delete-orphan")
+    default_img_ai = Column(Text)  # 👈 nuovo campo
 
 
 class MnetModelliAIFoto(Base):
