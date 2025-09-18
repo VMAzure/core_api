@@ -47,3 +47,20 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def upload_to_supabase(file_bytes: bytes, filename: str, bucket: str, content_type: str = "image/webp") -> str:
+    """
+    Carica un file su Supabase Storage e restituisce l'URL pubblico.
+    """
+    res = supabase_client.storage.from_(bucket).upload(
+        path=filename,
+        file=file_bytes,
+        file_options={"content-type": content_type}
+    )
+
+    if isinstance(res, dict) and res.get("error"):
+        raise RuntimeError(f"Errore upload Supabase: {res['error']}")
+
+    public_url = f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{filename}"
+    return public_url

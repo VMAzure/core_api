@@ -584,9 +584,12 @@ class MnetModelli(Base):
     prezzo_minimo = Column(String, nullable=True)
     modello_breve_carrozzeria = Column(String, nullable=True)
     ultima_modifica = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # URL immagine principale (ora popolato dal bucket nuovo)
     default_img = Column(String(1000), nullable=True)
+
+    # Relazione con eventuali altre immagini AI
     ai_foto = relationship("MnetModelliAIFoto", back_populates="modello", cascade="all, delete-orphan")
-    default_img_ai = Column(Text)  # 👈 nuovo campo
 
 
 class MnetModelliAIFoto(Base):
