@@ -1636,7 +1636,7 @@ class DalleCombineRequest(BaseModel):
     logo_url: str | None = None
     logo_height: int = 100
     logo_offset_y: int = 100
-    as_file: bool = True
+    
 
 class DalleCombineResponse(BaseModel):
     success: bool
