@@ -423,6 +423,10 @@ scheduler.add_job(sync_foto_mnet_missing, 'cron', day_of_week='sat', hour=4, min
 # Polling Gemini video ogni 60 secondi
 scheduler.add_job(polla_video_gemini, IntervalTrigger(seconds=60))
 
+# Polling Gemini immagini ogni 60 secondi
+scheduler.add_job(processa_immagini_gemini, IntervalTrigger(seconds=60))
+
+
 
 for job in scheduler.get_jobs():
     print("JOB:", job.id, "→", job.func)
