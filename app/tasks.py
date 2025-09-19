@@ -301,6 +301,7 @@ import logging
 from io import BytesIO
 from PIL import Image
 import requests
+from collections import defaultdict
 
 from app.database import SessionLocal
 from app.models import UsatoLeonardo
@@ -335,46 +336,90 @@ async def processa_immagini_gemini():
 
         logging.info(f"📊 Trovati {len(recs)} record immagine in coda")
 
+        # --- Raggruppa per (id_auto, prompt, subject_url, background_url, logo_url) ---
+        grouped = defaultdict(list)
         for rec in recs:
+            key = (rec.id_auto, rec.prompt, rec.subject_url, rec.background_url, rec.logo_url)
+            grouped[key].append(rec)
+
+        for key, batch in grouped.items():
             try:
-                logging.info(f"🟡 Generazione immagine per rec_id={rec.id}, auto={rec.id_auto}")
+                logging.info(f"🟡 Generazione batch da {len(batch)} immagini per auto={batch[0].id_auto}")
 
-                # 1) chiamata Gemini con i dati già presenti nel record
-                img_bytes = await _gemini_generate_image_sync(
-                    rec.prompt,
-                    subject_image_url=rec.subject_url,      # deve esistere nella tabella
-                    background_image_url=rec.background_url # deve esistere nella tabella
+                # 1) chiamata Gemini per N immagini
+                responses = await _gemini_generate_image_sync(
+                    batch[0].prompt,
+                    subject_image_url=batch[0].subject_url,
+                    background_image_url=batch[0].background_url,
+                    num_images=len(batch)   # <-- importante
                 )
-                final = Image.open(BytesIO(img_bytes)).convert("RGBA")
 
-                # 2) logo opzionale
-                if rec.logo_url:
-                    final = _apply_logo(final, rec.logo_url, rec.logo_height or 100, rec.logo_offset_y or 100)
+                # responses = lista di byte immagini
+                if not isinstance(responses, list):
+                    responses = [responses]
 
-                # 3) salva PNG
-                buf = BytesIO()
-                final.save(buf, format="PNG")
-                buf.seek(0)
+                # 2) assegna immagini ai record disponibili
+                for rec, img_bytes in zip(batch, responses):
+                    try:
+                        final = Image.open(BytesIO(img_bytes)).convert("RGBA")
 
-                path = f"{str(rec.id_auto)}/{str(rec.id)}.png"
-                _, public_url = _sb_upload_and_sign(path, buf.getvalue(), "image/png")
+                        # logo opzionale
+                        if rec.logo_url:
+                            final = _apply_logo(final, rec.logo_url, rec.logo_height or 100, rec.logo_offset_y or 100)
 
-                rec.public_url = public_url
-                rec.storage_path = path
-                rec.status = "completed"
-                rec.retry_count = 0
-                db.commit()
+                        # salva PNG
+                        buf = BytesIO()
+                        final.save(buf, format="PNG")
+                        buf.seek(0)
 
-                logging.info(f"✅ Immagine completata per rec_id={rec.id}")
+                        path = f"{str(rec.id_auto)}/{str(rec.id)}.png"
+                        _, public_url = _sb_upload_and_sign(path, buf.getvalue(), "image/png")
+
+                        rec.public_url = public_url
+                        rec.storage_path = path
+                        rec.status = "completed"
+                        rec.retry_count = 0
+                        db.commit()
+
+                        logging.info(f"✅ Immagine completata per rec_id={rec.id}")
+
+                    except Exception as e:
+                        db.rollback()
+                        rec.retry_count = (rec.retry_count or 0) + 1
+                        if rec.retry_count >= MAX_RETRY:
+                            rec.status = "failed"
+                        rec.error_message = str(e)
+                        db.commit()
+                        logging.error(f"❌ Errore singolo rec_id={rec.id}: {e}")
+
+                # 3) se Gemini ha restituito meno immagini del richiesto
+                if len(responses) < len(batch):
+                    missing = batch[len(responses):]
+                    for rec in missing:
+                        rec.retry_count = (rec.retry_count or 0) + 1
+                        if rec.retry_count >= MAX_RETRY:
+                            rec.status = "failed"
+                        else:
+                            rec.status = "queued"  # tornerà al prossimo giro
+                        rec.error_message = (
+                            f"Gemini non ha generato abbastanza immagini "
+                            f"(richieste {len(batch)}, ricevute {len(responses)})"
+                        )
+                    db.commit()
+                    logging.warning(
+                        f"⚠️ Ricevute solo {len(responses)} immagini su {len(batch)} "
+                        f"per auto={batch[0].id_auto}"
+                    )
 
             except Exception as e:
                 db.rollback()
-                rec.retry_count = (rec.retry_count or 0) + 1
-                if rec.retry_count >= MAX_RETRY:
-                    rec.status = "failed"
-                rec.error_message = str(e)
+                for rec in batch:
+                    rec.retry_count = (rec.retry_count or 0) + 1
+                    if rec.retry_count >= MAX_RETRY:
+                        rec.status = "failed"
+                    rec.error_message = str(e)
                 db.commit()
-                logging.error(f"❌ Errore generazione immagine rec_id={rec.id}: {e}")
+                logging.error(f"❌ Errore batch {len(batch)} recs per auto={batch[0].id_auto}: {e}")
 
     except Exception as e:
         db.rollback()

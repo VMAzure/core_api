@@ -646,8 +646,13 @@ async def _gemini_generate_image_sync(
     start_image_url: Optional[str] = None,
     start_image_bytes: Optional[bytes] = None,
     subject_image_url: Optional[str] = None,
-    background_image_url: Optional[str] = None
-) -> bytes:
+    background_image_url: Optional[str] = None,
+    num_images: int = 1
+) -> list[bytes]:
+    """
+    Genera una o più immagini con Gemini.
+    Ritorna sempre una lista di bytes (anche se num_images=1).
+    """
     _gemini_assert_api()
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent"
 
@@ -688,7 +693,10 @@ async def _gemini_generate_image_sync(
                 }
             })
 
-    payload = {"contents": [{"parts": parts}]}
+    payload = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {"candidateCount": num_images}
+    }
 
     async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(url, json=payload, headers={
@@ -699,21 +707,24 @@ async def _gemini_generate_image_sync(
             raise HTTPException(r.status_code, f"Errore Gemini image: {r.text}")
 
         data = r.json()
-        parts = (
-            data.get("candidates", [{}])[0]
-            .get("content", {})
-            .get("parts", [])
-        )
-        for p in parts:
-            inline = (
-                p.get("inline_data")
-                or p.get("inlineData")
-                or p.get("inline")
-            )
-            if inline and inline.get("data"):
-                return base64.b64decode(inline["data"])
+        images: list[bytes] = []
 
-        raise HTTPException(502, f"Gemini image: nessuna immagine trovata. Resp: {data}")
+        candidates = data.get("candidates", [])
+        for cand in candidates:
+            parts = cand.get("content", {}).get("parts", [])
+            for p in parts:
+                inline = (
+                    p.get("inline_data")
+                    or p.get("inlineData")
+                    or p.get("inline")
+                )
+                if inline and inline.get("data"):
+                    images.append(base64.b64decode(inline["data"]))
+
+        if not images:
+            raise HTTPException(502, f"Gemini image: nessuna immagine trovata. Resp: {data}")
+
+        return images
 
 
 async def _nano_banana_generate_image(
@@ -1680,42 +1691,37 @@ ORIENTATION_SIZE = {
 }
 
 class DalleCombineRequest(BaseModel):
-    id_auto: _UUID                       # obbligatorio
-    prompt: str                          # obbligatorio
-    img1_url: str | None = None          # opzionale
-    img2_url: str | None = None          # opzionale
-    quality: str = "medium"              # obbligatorio, default medium
-    orientation: str = "square"          # obbligatorio, default square
-    logo_url: str | None = None          # opzionale
-    logo_height: int = 100               # opzionale
-    logo_offset_y: int = 100             # opzionale
-
+    id_auto: _UUID
+    prompt: str
+    img1_url: str | None = None     # opzionale
+    img2_url: str | None = None     # opzionale
+    quality: str = "medium"
+    orientation: str = "square"
+    logo_url: str | None = None
+    logo_height: int = 100
+    logo_offset_y: int = 100
+    num_images: int = 1             # nuovo parametro (1–4)
 
 class DalleCombineResponse(BaseModel):
     success: bool
     id_auto: _UUID
-    public_url: str | None
-    usato_leonardo_id: _UUID
-    status: str  # queued | completed | failed
+    public_urls: list[str | None]   # lista, verrà popolata dal cron
+    usato_leonardo_ids: list[_UUID] # lista di record creati
+    status: str                     # queued | completed | failed
+
 
 def _validate_payload(p: DalleCombineRequest):
-    # Prompt obbligatorio
     if not p.prompt or not p.prompt.strip():
         raise HTTPException(400, "prompt is required")
 
-    # Controllo orientation
-    if p.orientation not in ORIENTATION_SIZE:
-        raise HTTPException(
-            400,
-            f"orientation must be one of: {', '.join(ORIENTATION_SIZE)}"
-        )
+    if not (1 <= p.num_images <= 4):
+        raise HTTPException(400, "num_images must be between 1 and 4")
 
-    # Controllo quality
+    if p.orientation not in ORIENTATION_SIZE:
+        raise HTTPException(400, f"orientation must be one of: {', '.join(ORIENTATION_SIZE)}")
+
     if p.quality.lower() not in ALLOWED_QUALITY:
-        raise HTTPException(
-            400,
-            f"quality must be one of: {', '.join(ALLOWED_QUALITY)}"
-        )
+        raise HTTPException(400, f"quality must be one of: {', '.join(ALLOWED_QUALITY)}")
 
 
 @router.post("/ai/dalle/combine", response_model=DalleCombineResponse, tags=["OpenAI"])
@@ -1731,39 +1737,43 @@ async def dalle_combine(
     if not user:
         raise HTTPException(403, "Utente non trovato")
 
-    is_dealer = is_dealer_user(user)  # funzione già presente nel tuo progetto
-    if is_dealer and (user.credit is None or user.credit < DALLE_CREDIT_COST):
+    is_dealer = is_dealer_user(user)
+    total_cost = DALLE_CREDIT_COST * payload.num_images
+
+    if is_dealer and (user.credit is None or user.credit < total_cost):
         raise HTTPException(402, "Credito insufficiente")
 
     # --- Validazioni ---
     _validate_payload(payload)
 
-    # --- Crea record storico in QUEUE (niente chiamate Gemini qui) ---
+    created_ids = []
     try:
-        rec = UsatoLeonardo(
-            id_auto=payload.id_auto,
-            provider="gemini",
-            generation_id=None,
-            status="queued",
-            media_type="image",
-            mime_type="image/png",
-            prompt=payload.prompt,
-            negative_prompt=None,
-            model_id=GEMINI_MODEL_ID,
-            aspect_ratio=payload.orientation,
-            credit_cost=DALLE_CREDIT_COST if is_dealer else 0.0,
-            user_id=user.id,
-            # campi per il cron immagini
-            subject_url=payload.img1_url,
-            background_url=payload.img2_url,
-            logo_url=payload.logo_url,
-            logo_height=payload.logo_height,
-            logo_offset_y=payload.logo_offset_y,
-            retry_count=0
-        )
-        db.add(rec)
-        db.commit()
-        db.refresh(rec)
+        for i in range(payload.num_images):
+            rec = UsatoLeonardo(
+                id_auto=payload.id_auto,
+                provider="gemini",
+                generation_id=None,
+                status="queued",
+                media_type="image",
+                mime_type="image/png",
+                prompt=payload.prompt,
+                negative_prompt=None,
+                model_id=GEMINI_MODEL_ID,
+                aspect_ratio=payload.orientation,
+                credit_cost=DALLE_CREDIT_COST if is_dealer else 0.0,
+                user_id=user.id,
+                subject_url=payload.img1_url,
+                background_url=payload.img2_url,
+                logo_url=payload.logo_url,
+                logo_height=payload.logo_height,
+                logo_offset_y=payload.logo_offset_y,
+                retry_count=0
+            )
+            db.add(rec)
+            db.commit()
+            db.refresh(rec)
+            created_ids.append(rec.id)
+
     except Exception as e:
         db.rollback()
         logging.error("Errore creazione record UsatoLeonardo: %s", e)
@@ -1772,33 +1782,33 @@ async def dalle_combine(
     # --- Addebito credito immediato (solo dealer) ---
     if is_dealer:
         try:
-            user.credit = float(user.credit or 0) - DALLE_CREDIT_COST
+            user.credit = float(user.credit or 0) - total_cost
             db.add(CreditTransaction(
                 dealer_id=user.id,
-                amount=-DALLE_CREDIT_COST,
+                amount=-total_cost,
                 transaction_type="USE",
-                note="Immagine Gemini combine (enqueue)"
+                note=f"Immagini Gemini combine (enqueue) x{payload.num_images}"
             ))
             inserisci_notifica(
                 db=db,
                 utente_id=user.id,
                 tipo_codice="CREDITO_USATO",
-                messaggio=f"Hai utilizzato {DALLE_CREDIT_COST:g} crediti per la generazione immagine Gemini."
+                messaggio=f"Hai utilizzato {total_cost:g} crediti per la generazione di {payload.num_images} immagine/i Gemini."
             )
             db.commit()
         except Exception as e:
             db.rollback()
-            logging.error("Errore addebito credito per user_id=%s rec_id=%s: %s", user.id, rec.id, e)
-            # non blocco l'enqueue: il job resta queued; valuta se ripristinare credito su failure successivi
+            logging.error("Errore addebito credito per user_id=%s rec_ids=%s: %s", user.id, created_ids, e)
 
     # --- Risposta immediata ---
     return DalleCombineResponse(
         success=True,
         id_auto=payload.id_auto,
-        public_url=None,            # sarà valorizzato dal cron quando completo
-        usato_leonardo_id=rec.id,
+        public_urls=[None] * payload.num_images,
+        usato_leonardo_ids=created_ids,
         status="queued"
     )
+
 
 
 @router.post("old/ai/dalle/combine", response_model=DalleCombineResponse, tags=["OpenAI"])
