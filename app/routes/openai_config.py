@@ -1680,15 +1680,16 @@ ORIENTATION_SIZE = {
 }
 
 class DalleCombineRequest(BaseModel):
-    id_auto: _UUID
-    prompt: str
-    img1_url: str   # subject
-    img2_url: str   # background
-    quality: str = "medium"
-    orientation: str = "square"
-    logo_url: str | None = None
-    logo_height: int = 100
-    logo_offset_y: int = 100
+    id_auto: _UUID                       # obbligatorio
+    prompt: str                          # obbligatorio
+    img1_url: str | None = None          # opzionale
+    img2_url: str | None = None          # opzionale
+    quality: str = "medium"              # obbligatorio, default medium
+    orientation: str = "square"          # obbligatorio, default square
+    logo_url: str | None = None          # opzionale
+    logo_height: int = 100               # opzionale
+    logo_offset_y: int = 100             # opzionale
+
 
 class DalleCombineResponse(BaseModel):
     success: bool
@@ -1698,14 +1699,24 @@ class DalleCombineResponse(BaseModel):
     status: str  # queued | completed | failed
 
 def _validate_payload(p: DalleCombineRequest):
-    if not p.img1_url:
-        raise HTTPException(400, "img1_url is required")
-    if not p.img2_url:
-        raise HTTPException(400, "img2_url is required")
+    # Prompt obbligatorio
+    if not p.prompt or not p.prompt.strip():
+        raise HTTPException(400, "prompt is required")
+
+    # Controllo orientation
     if p.orientation not in ORIENTATION_SIZE:
-        raise HTTPException(400, "orientation must be one of: square, landscape, portrait")
+        raise HTTPException(
+            400,
+            f"orientation must be one of: {', '.join(ORIENTATION_SIZE)}"
+        )
+
+    # Controllo quality
     if p.quality.lower() not in ALLOWED_QUALITY:
-        raise HTTPException(400, "quality must be one of: low, medium, high, auto")
+        raise HTTPException(
+            400,
+            f"quality must be one of: {', '.join(ALLOWED_QUALITY)}"
+        )
+
 
 @router.post("/ai/dalle/combine", response_model=DalleCombineResponse, tags=["OpenAI"])
 async def dalle_combine(
