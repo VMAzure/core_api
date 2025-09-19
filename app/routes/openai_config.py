@@ -1653,66 +1653,138 @@ def _load_image_from_url(url: str, field: str) -> Image.Image:
     except Exception:
         raise HTTPException(400, f"Invalid image URL for '{field}'")
 
+
+# --- DALLE COMBINE (enqueue asincrono: JWT + credito + storico) ------------
+import os
+import logging
+from uuid import UUID as _UUID
+from pydantic import BaseModel
+from fastapi import Depends, HTTPException
+from fastapi_jwt_auth import AuthJWT
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models import User, UsatoLeonardo, CreditTransaction
+from app.utils.notifications import inserisci_notifica
+# usa la tua funzione esistente
+# from app.utils.roles import is_dealer_user  # se serve, altrimenti lascialo com'è nel tuo file
+
+DALLE_CREDIT_COST = float(os.getenv("DALLE_CREDIT_COST", "1.5"))
+GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-2.5-flash-image-preview")
+
+ALLOWED_QUALITY = {"low", "medium", "high", "auto"}  # solo validazione, non usata da Gemini
+ORIENTATION_SIZE = {
+    "square": "1024x1024",
+    "landscape": "1792x1024",
+    "portrait": "1024x1792"
+}
+
+class DalleCombineRequest(BaseModel):
+    id_auto: _UUID
+    prompt: str
+    img1_url: str   # subject
+    img2_url: str   # background
+    quality: str = "medium"
+    orientation: str = "square"
+    logo_url: str | None = None
+    logo_height: int = 100
+    logo_offset_y: int = 100
+
+class DalleCombineResponse(BaseModel):
+    success: bool
+    id_auto: _UUID
+    public_url: str | None
+    usato_leonardo_id: _UUID
+    status: str  # queued | completed | failed
+
+def _validate_payload(p: DalleCombineRequest):
+    if not p.img1_url:
+        raise HTTPException(400, "img1_url is required")
+    if not p.img2_url:
+        raise HTTPException(400, "img2_url is required")
+    if p.orientation not in ORIENTATION_SIZE:
+        raise HTTPException(400, "orientation must be one of: square, landscape, portrait")
+    if p.quality.lower() not in ALLOWED_QUALITY:
+        raise HTTPException(400, "quality must be one of: low, medium, high, auto")
+
 @router.post("/ai/dalle/combine", response_model=DalleCombineResponse, tags=["OpenAI"])
 async def dalle_combine(
     payload: DalleCombineRequest,
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
+    # --- Auth ---
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(403, "Utente non trovato")
 
-    is_dealer = is_dealer_user(user)
+    is_dealer = is_dealer_user(user)  # funzione già presente nel tuo progetto
     if is_dealer and (user.credit is None or user.credit < DALLE_CREDIT_COST):
         raise HTTPException(402, "Credito insufficiente")
 
-    # validazioni base
+    # --- Validazioni ---
     _validate_payload(payload)
 
-    # record queued
-    rec = UsatoLeonardo(
-        id_auto=payload.id_auto,
-        provider="gemini",
-        generation_id=None,
-        status="queued",
-        media_type="image",
-        mime_type="image/png",
-        prompt=payload.prompt,
-        negative_prompt=None,
-        model_id=GEMINI_MODEL_ID,
-        aspect_ratio=payload.orientation,
-        credit_cost=DALLE_CREDIT_COST if is_dealer else 0.0,
-        user_id=user.id,
-        retry_count=0   # nuovo campo da gestire
-    )
-    db.add(rec)
-    db.commit()
-    db.refresh(rec)
-
-    # addebito immediato del credito
-    if is_dealer:
-        user.credit = float(user.credit or 0) - DALLE_CREDIT_COST
-        db.add(CreditTransaction(
-            dealer_id=user.id,
-            amount=-DALLE_CREDIT_COST,
-            transaction_type="USE",
-            note="Immagine Gemini combine"
-        ))
-        inserisci_notifica(
-            db=db,
-            utente_id=user.id,
-            tipo_codice="CREDITO_USATO",
-            messaggio=f"Hai utilizzato {DALLE_CREDIT_COST:g} crediti per la generazione immagine Gemini."
+    # --- Crea record storico in QUEUE (niente chiamate Gemini qui) ---
+    try:
+        rec = UsatoLeonardo(
+            id_auto=payload.id_auto,
+            provider="gemini",
+            generation_id=None,
+            status="queued",
+            media_type="image",
+            mime_type="image/png",
+            prompt=payload.prompt,
+            negative_prompt=None,
+            model_id=GEMINI_MODEL_ID,
+            aspect_ratio=payload.orientation,
+            credit_cost=DALLE_CREDIT_COST if is_dealer else 0.0,
+            user_id=user.id,
+            # campi per il cron immagini
+            subject_url=payload.img1_url,
+            background_url=payload.img2_url,
+            logo_url=payload.logo_url,
+            logo_height=payload.logo_height,
+            logo_offset_y=payload.logo_offset_y,
+            retry_count=0
         )
+        db.add(rec)
         db.commit()
+        db.refresh(rec)
+    except Exception as e:
+        db.rollback()
+        logging.error("Errore creazione record UsatoLeonardo: %s", e)
+        raise HTTPException(500, "Errore creazione job immagine")
 
+    # --- Addebito credito immediato (solo dealer) ---
+    if is_dealer:
+        try:
+            user.credit = float(user.credit or 0) - DALLE_CREDIT_COST
+            db.add(CreditTransaction(
+                dealer_id=user.id,
+                amount=-DALLE_CREDIT_COST,
+                transaction_type="USE",
+                note="Immagine Gemini combine (enqueue)"
+            ))
+            inserisci_notifica(
+                db=db,
+                utente_id=user.id,
+                tipo_codice="CREDITO_USATO",
+                messaggio=f"Hai utilizzato {DALLE_CREDIT_COST:g} crediti per la generazione immagine Gemini."
+            )
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logging.error("Errore addebito credito per user_id=%s rec_id=%s: %s", user.id, rec.id, e)
+            # non blocco l'enqueue: il job resta queued; valuta se ripristinare credito su failure successivi
+
+    # --- Risposta immediata ---
     return DalleCombineResponse(
         success=True,
         id_auto=payload.id_auto,
-        public_url=None,   # ancora non pronto
+        public_url=None,            # sarà valorizzato dal cron quando completo
         usato_leonardo_id=rec.id,
         status="queued"
     )

@@ -297,6 +297,92 @@ async def polla_video_gemini():
         db.close()
         logging.warning("✅ Fine polling Gemini video VEO3\n")
 
+import logging
+from io import BytesIO
+from PIL import Image
+import requests
+
+from app.database import SessionLocal
+from app.models import UsatoLeonardo
+from app.routes.openai_config import _gemini_generate_image_sync, _sb_upload_and_sign
+
+MAX_RETRY = 3
+
+def _apply_logo(final: Image.Image, logo_url: str, logo_height: int, offset_y: int) -> Image.Image:
+    """Scarica e applica il logo sull'immagine finale."""
+    r = requests.get(logo_url, timeout=30)
+    r.raise_for_status()
+    logo = Image.open(BytesIO(r.content)).convert("RGBA")
+    ow, oh = logo.size
+    new_h = max(1, int(logo_height or 100))
+    new_w = int((ow / oh) * new_h)
+    logo = logo.resize((new_w, new_h))
+    if final.height < new_h + offset_y:
+        raise ValueError(f"image too small for logo offset {offset_y}px")
+    logo_x = (final.width - new_w) // 2
+    logo_y = offset_y
+    final.paste(logo, (logo_x, logo_y), logo)
+    return final
+
+async def processa_immagini_gemini():
+    logging.info("🚀 INIZIO cronjob processa_immagini_gemini")
+    db = SessionLocal()
+    try:
+        recs = db.query(UsatoLeonardo).filter(
+            UsatoLeonardo.media_type == "image",
+            UsatoLeonardo.status == "queued"
+        ).all()
+
+        logging.info(f"📊 Trovati {len(recs)} record immagine in coda")
+
+        for rec in recs:
+            try:
+                logging.info(f"🟡 Generazione immagine per rec_id={rec.id}, auto={rec.id_auto}")
+
+                # 1) chiamata Gemini con i dati già presenti nel record
+                img_bytes = await _gemini_generate_image_sync(
+                    rec.prompt,
+                    subject_image_url=rec.subject_url,      # deve esistere nella tabella
+                    background_image_url=rec.background_url # deve esistere nella tabella
+                )
+                final = Image.open(BytesIO(img_bytes)).convert("RGBA")
+
+                # 2) logo opzionale
+                if rec.logo_url:
+                    final = _apply_logo(final, rec.logo_url, rec.logo_height or 100, rec.logo_offset_y or 100)
+
+                # 3) salva PNG
+                buf = BytesIO()
+                final.save(buf, format="PNG")
+                buf.seek(0)
+
+                path = f"{str(rec.id_auto)}/{str(rec.id)}.png"
+                _, public_url = _sb_upload_and_sign(path, buf.getvalue(), "image/png")
+
+                rec.public_url = public_url
+                rec.storage_path = path
+                rec.status = "completed"
+                rec.retry_count = 0
+                db.commit()
+
+                logging.info(f"✅ Immagine completata per rec_id={rec.id}")
+
+            except Exception as e:
+                db.rollback()
+                rec.retry_count = (rec.retry_count or 0) + 1
+                if rec.retry_count >= MAX_RETRY:
+                    rec.status = "failed"
+                rec.error_message = str(e)
+                db.commit()
+                logging.error(f"❌ Errore generazione immagine rec_id={rec.id}: {e}")
+
+    except Exception as e:
+        db.rollback()
+        logging.critical(f"🔥 Errore fatale cron immagini: {e}")
+    finally:
+        db.close()
+        logging.info("✅ Fine cronjob immagini Gemini\n")
+
 
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler

@@ -1475,15 +1475,12 @@ class UsatoLeonardo(Base):
     id_auto = Column(PG_UUID(as_uuid=True), ForeignKey("public.azlease_usatoauto.id", ondelete="CASCADE"), nullable=False)
     is_active = Column(Boolean, default=False, nullable=False)
 
-
     provider = Column(String, nullable=False, default="leonardo")
     generation_id = Column(String, unique=True, nullable=True)
-
     status = Column(String, nullable=False, default="queued")
 
-    # NEW
-    media_type = Column(String, nullable=False, default=MediaType.video.value)  # 'video' | 'image'
-    mime_type  = Column(String, nullable=True)  # es. 'video/mp4', 'image/png'
+    media_type = Column(String, nullable=False, default="video")  # 'video' | 'image'
+    mime_type  = Column(String, nullable=True)
 
     prompt = Column(Text, nullable=False)
     negative_prompt = Column(Text, nullable=True)
@@ -1497,7 +1494,6 @@ class UsatoLeonardo(Base):
     height = Column(Integer, nullable=True)
     credit_cost = Column(Numeric(10, 2), nullable=True)
 
-
     storage_path = Column(Text, nullable=True)
     public_url = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
@@ -1507,9 +1503,18 @@ class UsatoLeonardo(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # backref generici (non “video_”)
+    # ✅ nuovi campi per immagini Gemini
+    subject_url = Column(Text, nullable=True)
+    background_url = Column(Text, nullable=True)
+    logo_url = Column(Text, nullable=True)
+    logo_height = Column(Integer, nullable=True)
+    logo_offset_y = Column(Integer, nullable=True)
+    retry_count = Column(Integer, nullable=False, default=0)
+
+    # backref
     utente = relationship("User", backref="usato_media")
     auto = relationship("AZLeaseUsatoAuto", backref="usato_media")
+
 
 class ScenarioDealer(Base):
     __tablename__ = "scenario_dealer"
