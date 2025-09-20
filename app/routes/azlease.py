@@ -6,6 +6,7 @@ from app.models import AZLeaseUsatoAuto, AZLeaseUsatoIn, User, AZUsatoInsertRequ
 from app.models import AutousatoAccessoriOptional
 
 import json, re
+import logging
 
 
 from app.schemas import AutoUsataCreate
@@ -478,14 +479,23 @@ async def crea_boost(
         )
         image_url = getattr(img_res, "public_url", None) or (img_res.get("public_url") if isinstance(img_res, dict) else None)
         img_id = getattr(img_res, "usato_leonardo_id", None) or (img_res.get("usato_leonardo_id") if isinstance(img_res, dict) else None)
+
         if img_id:
-            # route function sync: chiamala senza await
             usa_hero_media(img_id, Authorize=Authorize, db=db)
-        if image_url:
-            await patch_auto_usata(id_auto=str(id_auto), body={"visibile": True}, Authorize=Authorize, db=db)
-            visibile = True
-    except Exception:
-        image_url = None  # non bloccare
+
+    except Exception as e:
+        logging.error(f"❌ Boost: generazione immagine fallita per auto {id_auto}: {e}")
+        image_url = None
+
+    # 👉 comunque pubblica l’auto
+    await patch_auto_usata(
+        id_auto=str(id_auto),
+        body={"visibile": True},
+        Authorize=Authorize,
+        db=db
+    )
+    visibile = True
+
 
     # 8) Video AI asincrono
     try:
