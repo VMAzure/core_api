@@ -388,22 +388,31 @@ def _plate_text_from_user(user: User) -> str:
 
 
 def _gemini_build_prompt(
-    marca: str, modello: str, anno: int, colore: Optional[str],
-    allestimento: Optional[str] = None, plate_text: Optional[str] = None
+    marca: str,
+    modello: str,
+    anno: int,
+    colore: Optional[str],
+    allestimento: Optional[str] = None,
+    plate_text: Optional[str] = None,
+    precisazioni: Optional[str] = None   # 👈 nuovo
 ) -> str:
     colore_txt = f" {colore}" if colore else ""
     anno_txt = f" {anno}" if anno else ""
     allest_txt = f" {allestimento}" if allestimento else ""
     base = f"{marca} {modello}{allest_txt}{anno_txt}{colore_txt}"
+
+    extra = f" Visual details: {precisazioni}." if precisazioni else ""
     plate = f'Show a visible license plate that reads "{plate_text}" in a racing-style font. ' if plate_text else ""
+
     return (
         f"Generate a cinematic video of a {base}. "
         "Keep proportions, design and color factory-accurate. "
         "Place the car in a modern urban setting at dusk with realistic lighting and reflections. "
         "Smooth orbiting camera, three-quarter front view, natural motion. "
-        f"{plate}"
+        f"{extra}{plate}"
         "No overlaid text or subtitles, no non-Latin characters."
     )
+
 
 async def _download_bytes(url: str) -> bytes:
     headers = {"x-goog-api-key": GEMINI_API_KEY}
@@ -468,12 +477,16 @@ async def genera_video_hero_veo3(
         f"The vehicle is a {marca} {modello} {allestimento or ''} {anno} in {colore}. "
         "Keep proportions, design and color factory-accurate. "
         f'Show a visible license plate that reads \"{plate_text}\" in a racing-style font. '
+        f"{'Visual details: ' + auto.precisazioni if auto.precisazioni else ''} "
         "No overlaid text or subtitles, no non-Latin characters."
     ) if payload.scenario else (
         payload.prompt_override or _gemini_build_prompt(
-            marca, modello, anno, colore, allestimento, plate_text=plate_text
+            marca, modello, anno, colore, allestimento,
+            plate_text=plate_text,
+            precisazioni=auto.precisazioni
         )
     )
+
 
     _gemini_assert_api()
 
@@ -628,18 +641,31 @@ GEMINI_IMG_CREDIT_COST = float(os.getenv("GEMINI_IMG_CREDIT_COST", "1.0"))
 
 
 
-def _gemini_build_image_prompt(marca: str, modello: str, anno: int, colore: Optional[str], allestimento: Optional[str] = None) -> str:
+def _gemini_build_image_prompt(
+    marca: str,
+    modello: str,
+    anno: int,
+    colore: Optional[str],
+    allestimento: Optional[str] = None,
+    precisazioni: Optional[str] = None   # 👈 nuovo
+) -> str:
     colore_txt = f" {colore}" if colore else ""
     anno_txt = f" {anno}" if anno else ""
     allest_txt = f" {allestimento}" if allestimento else ""
     base = f"{marca} {modello}{allest_txt}{anno_txt}{colore_txt}"
+
+    extra = f" Visual details: {precisazioni}." if precisazioni else ""
+
     return (
         f"Create a high-quality photo of a {base}. "
         "Factory-accurate proportions, design, color, branding. "
         "Luxury urban setting at dusk with realistic lighting and reflections. "
         "Three-quarter front view, crisp details, photographic realism. "
+        f"{extra}"
         "No text, no watermarks, no non-Latin characters."
     )
+
+
 
 async def _gemini_generate_image_sync(
     prompt: str,
@@ -812,7 +838,9 @@ async def genera_image_hero_veo3(
         raise HTTPException(422, "Marca/Modello/Anno non disponibili")
 
     # Prompt di fallback
-    prompt = payload.prompt_override or _gemini_build_image_prompt(marca, modello, anno, colore, allestimento)
+    prompt = payload.prompt_override or _gemini_build_image_prompt(
+        marca, modello, anno, colore, allestimento, auto.precisazioni
+    )
 
     _gemini_assert_api()
 
@@ -1179,87 +1207,6 @@ async def _leonardo_fetch_job_once(client: httpx.AsyncClient, generation_id: str
             urls.append(u)
     return status, urls
 
-
-@router.post("/veo3/video-hero", response_model=GeminiVideoHeroResponse, tags=["Gemini VEO 3"])
-async def genera_video_hero_veo3(
-    payload: GeminiVideoHeroRequest,
-    Authorize: AuthJWT = Depends(),
-    db: Session = Depends(get_db)
-):
-    Authorize.jwt_required()
-    user_email = Authorize.get_jwt_subject()
-    user = db.query(User).filter(User.email == user_email).first()
-    if not user:
-        raise HTTPException(403, "Utente non trovato")
-
-    if is_dealer_user(user):
-        VEO_COST = float(os.getenv("GEMINI_VEO3_CREDIT_COST", "5.0"))
-        if user.credit is None or user.credit < VEO_COST:
-            raise HTTPException(402, "Credito insufficiente")
-
-    auto = db.query(AZLeaseUsatoAuto).filter(AZLeaseUsatoAuto.id == payload.id_auto).first()
-    if not auto:
-        raise HTTPException(404, "Auto non trovata")
-
-    det = None
-    if getattr(auto, "codice_motornet", None):
-        det = db.query(MnetDettaglioUsato)\
-                .filter(MnetDettaglioUsato.codice_motornet_uni == auto.codice_motornet)\
-                .first()
-
-    marca = (getattr(det, "marca_nome", None) or "").strip()
-    modello = (getattr(det, "modello", None) or "").strip()
-    allestimento = (getattr(det, "allestimento", None) or "").strip() if det else None
-    anno = int(getattr(auto, "anno_immatricolazione", 0) or 0)
-    colore = (getattr(auto, "colore", None) or "").strip()
-    if not (marca and modello and anno > 0):
-        raise HTTPException(422, "Marca/Modello/Anno non disponibili")
-
-    # 🔴 SOLO prompt_override
-    prompt = payload.prompt_override or _gemini_build_prompt(marca, modello, anno, colore, allestimento)
-
-    _gemini_assert_api()
-
-    rec = UsatoLeonardo(
-        id_auto=payload.id_auto,
-        provider="gemini",
-        generation_id=None,
-        status="queued",
-        media_type="video",
-        mime_type="video/mp4",
-        prompt=prompt,
-        negative_prompt=None,
-        model_id="veo-3.0",
-        duration_seconds=None,
-        fps=None,
-        aspect_ratio="16:9",
-        seed=None,
-        credit_cost=os.getenv("GEMINI_VEO3_CREDIT_COST", None),
-        user_id=user.id
-    )
-    db.add(rec)
-    db.commit()
-    db.refresh(rec)
-
-    try:
-        operation_id = await _gemini_start_video(prompt)
-    except Exception as e:
-        rec.status = "failed"
-        rec.error_message = str(e)
-        db.commit()
-        raise
-
-    rec.generation_id = operation_id
-    rec.status = "processing"
-    db.commit()
-
-    return GeminiVideoHeroResponse(
-        success=True,
-        id_auto=payload.id_auto,
-        gemini_operation_id=operation_id,
-        status="processing",
-        usato_leonardo_id=rec.id
-    )
 
 
 

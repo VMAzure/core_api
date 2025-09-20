@@ -249,7 +249,9 @@ class BoostRequest(BaseModel):
     targa: str
     km_certificati: int
     colore: str
-    codice_motornet_univoco: str  # allestimento scelto nel modale
+    codice_motornet_univoco: str  
+    precisazioni: Optional[str] = None   
+
 
 class BoostResponse(BaseModel):
     id_auto: UUID
@@ -369,7 +371,9 @@ async def crea_boost(
         venduto_il=None,
         visibile=False,
         iva_esposta=False,
-        descrizione=""
+        descrizione="",
+        precisazioni=body.precisazioni or None
+
     )
     created = await inserisci_auto_usata(insert_payload, Authorize=Authorize, db=db)
     id_auto_str = getattr(created, "id_auto", None) or (created.get("id_auto") if isinstance(created, dict) else None)
@@ -506,83 +510,6 @@ async def crea_boost(
     )
 
 
-
-    async def _get_descrizione():
-        prompt = (
-            "Scrivi una descrizione breve e commerciale per un'auto usata.\n"
-            f"Marca: {marca}\nModello: {modello}\nAllestimento: {allestimento}\n"
-            f"Anno: {anno}\nKM: {int(body.km_certificati)}\nColore: {body.colore.strip()}\n"
-            "Tono chiaro, concreto, 3-5 frasi, senza superlativi inutili."
-        )
-        resp = await genera_testo(
-            payload=PromptRequest(prompt=prompt, model="gpt-4o", web_research=False, max_tokens=220, temperature=0.4),
-            Authorize=Authorize,
-            db=db
-        )
-        return getattr(resp, "output", None) or (resp.get("output") if isinstance(resp, dict) else "")
-
-    prezzo_vendita, descr = await asyncio.gather(_get_prezzo(), _get_descrizione())
-
-    # 6) PATCH unico (service esistente)
-    await patch_auto_usata(
-        id_auto=str(id_auto),                 # <-- stringa, non UUID
-        body={
-            "prezzo_costo": 0.0,
-            "prezzo_vendita": float(prezzo_vendita or 0.0),
-            "visibile": False,
-            "iva_esposta": False,
-            "descrizione": descr or ""
-        },
-        Authorize=Authorize,
-        db=db
-    )
-
-
-    # 7) Immagine AI sincrona → attiva → publish
-    image_url = None
-    try:
-        img_res = await genera_image_hero_veo3(
-            payload=GeminiImageHeroRequest(id_auto=id_auto, prompt_override=None),
-            Authorize=Authorize,
-            db=db
-        )
-        image_url = getattr(img_res, "public_url", None) or (img_res.get("public_url") if isinstance(img_res, dict) else None)
-        img_id = getattr(img_res, "usato_leonardo_id", None) or (img_res.get("usato_leonardo_id") if isinstance(img_res, dict) else None)
-        if img_id:
-            try:
-                await usa_media_media(img_id, Authorize=Authorize, db=db)
-            except TypeError:
-                # se la funzione è sync nel tuo progetto
-                usa_media_media(img_id, Authorize=Authorize, db=db)
-
-        if image_url:
-            await patch_auto_usata(id_auto=str(id_auto), body={"visibile": True}, Authorize=Authorize, db=db)
-            visibile = True
-
-        else:
-            visibile = False
-    except Exception:
-        image_url = None  # non bloccare
-
-
-    # 8) Video AI asincrono (job + webhook) – avvio e stop
-    try:
-        vid_res = await genera_video_hero_veo3(
-            payload=GeminiVideoHeroRequest(id_auto=id_auto, prompt_override=None),
-            Authorize=Authorize,
-            db=db
-        )
-        video_status = "processing" if (getattr(vid_res, "gemini_operation_id", None) or (isinstance(vid_res, dict) and vid_res.get("gemini_operation_id"))) else "failed"
-    except Exception:
-        video_status = "failed"
-
-    return BoostResponse(
-        id_auto=id_auto,
-        visibile=visibile,
-        prezzo_vendita=float(prezzo_vendita or 0.0),
-        image_url=image_url,
-        video_status=video_status
-    )
 
 
 @router.patch("/usato/{id_auto}", tags=["AZLease Usato"])
