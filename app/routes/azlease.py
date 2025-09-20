@@ -86,13 +86,14 @@ async def inserisci_auto_usata(
         INSERT INTO azlease_usatoauto (
             id, targa, anno_immatricolazione, mese_immatricolazione, data_passaggio_proprieta,
             km_certificati, data_ultimo_intervento, descrizione_ultimo_intervento,
-            cronologia_tagliandi, doppie_chiavi, codice_motornet, colore, id_usatoin
+            cronologia_tagliandi, doppie_chiavi, codice_motornet, colore, precisazioni, id_usatoin
         )
         VALUES (
             :id, :targa, :anno, :mese, :passaggio,
             :km, :intervento_data, :intervento_desc,
-            :tagliandi, :chiavi, :codice, :colore, :usatoin_id
+            :tagliandi, :chiavi, :codice, :colore, :precisazioni, :usatoin_id
         )
+
 
     """), {
         "id": str(auto_id),
@@ -107,7 +108,9 @@ async def inserisci_auto_usata(
         "chiavi": payload.doppie_chiavi,
         "codice": payload.codice_motornet,
         "colore": payload.colore,
-        "usatoin_id": str(usatoin_id)
+        "usatoin_id": str(usatoin_id),
+        "precisazioni": payload.precisazioni,
+
     })
    
     # === SYNC DETTAGLI MOTORNET se mancanti ===
@@ -610,8 +613,10 @@ async def patch_auto_usata(
         "targa", "anno_immatricolazione", "mese_immatricolazione",
         "data_passaggio_proprieta", "km_certificati",
         "data_ultimo_intervento", "descrizione_ultimo_intervento",
-        "cronologia_tagliandi", "doppie_chiavi", "codice_motornet", "colore"
+        "cronologia_tagliandi", "doppie_chiavi", "codice_motornet", "colore",
+        "precisazioni"
     ]
+
     for field in auto_fields:
         if field in body:
             setattr(auto, field, body[field])
@@ -704,7 +709,9 @@ async def aggiorna_auto_usata(
             cronologia_tagliandi = :tagliandi,
             doppie_chiavi = :chiavi,
             codice_motornet = :codice,
-            colore = :colore
+            colore = :colore,
+            precisazioni = :precisazioni
+
         WHERE id = :id_auto
     """), {
         "targa": payload.targa,
@@ -718,7 +725,9 @@ async def aggiorna_auto_usata(
         "chiavi": payload.doppie_chiavi,
         "codice": payload.codice_motornet,
         "colore": payload.colore,
-        "id_auto": str(id_auto)
+        "id_auto": str(id_auto),
+        "precisazioni": payload.precisazioni,
+
     })
 
     db.commit()

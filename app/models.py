@@ -437,6 +437,8 @@ class AZUsatoInsertRequest(BaseModel):
     visibile: Optional[bool] = True
     iva_esposta: Optional[bool] = False
     descrizione: Optional[str] = ""
+    precisazioni: Optional[str] = None   # 👈 nuovo campo
+
 
 
 
@@ -816,6 +818,7 @@ class AZLeaseUsatoAuto(Base):
     codice_motornet = Column(Text, nullable=True)
     colore = Column(Text, nullable=True)
     mese_immatricolazione = Column(SmallInteger, nullable=True)  # valori 1–12
+    precisazioni = Column(Text, nullable=True)   # dettagli visivi liberi inseriti dal dealer
 
     id_usatoin = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoin.id"), nullable=True)  # ✅ FIX
 
