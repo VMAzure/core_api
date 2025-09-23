@@ -808,13 +808,8 @@ class AZLeaseUsatoAuto(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     anno_immatricolazione = Column(Integer, nullable=False)
-    data_ultimo_intervento = Column(Date, nullable=True)
-    cronologia_tagliandi = Column(Boolean, default=False)
-    doppie_chiavi = Column(Boolean, default=False)
-    data_passaggio_proprieta = Column(Date, nullable=True)
     km_certificati = Column(Integer, nullable=False)
     targa = Column(Text, nullable=False, unique=True)
-    descrizione_ultimo_intervento = Column(Text, nullable=True)
     codice_motornet = Column(Text, nullable=True)
     colore = Column(Text, nullable=True)
     mese_immatricolazione = Column(SmallInteger, nullable=True)
@@ -822,18 +817,8 @@ class AZLeaseUsatoAuto(Base):
 
     id_usatoin = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoin.id"), nullable=True)
 
-    # relazioni già presenti
     usatoin = relationship("AZLeaseUsatoIn", backref="auto_usate")
-    accessori_serie = relationship("AutousatoAccessoriSerie", backref="auto")
-    accessori_optional = relationship("AutousatoAccessoriOptional", backref="auto")
-
-    # nuova relazione diretta verso pacchetti
-    accessori_pacchetti = relationship(
-        "AutousatoAccessoriPacchetti",
-        backref="auto",
-        cascade="all, delete-orphan"
-    )
-
+    # 🔹 niente relazioni dirette qui: ci pensano i backref dei figli
 
 class AutousatoAccessoriSerie(Base):
     __tablename__ = "autousato_accessori_serie"
@@ -861,31 +846,18 @@ class AutousatoAccessoriOptional(Base):
 
     auto = relationship("AZLeaseUsatoAuto", backref="accessori_optional")
 
-    pacchetti = relationship(
-        "AutousatoAccessoriPacchetti",
-        secondary="public.autousato_pacchetto_optional",
-        back_populates="optional"
-    )
-
 class AutousatoAccessoriPacchetti(Base):
     __tablename__ = "autousato_accessori_pacchetti"
     __table_args__ = {"schema": "public"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    id_auto = Column(UUID(as_uuid=True),
-                     ForeignKey("public.azlease_usatoauto.id", ondelete="CASCADE"),
-                     nullable=False)
-    codice = Column(String(32), nullable=True)                     # 👈 nuovo
+    id_auto = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoauto.id", ondelete="CASCADE"), nullable=False)
+    codice = Column(String(32), nullable=True)
     descrizione = Column(Text, nullable=False)
     prezzo = Column(Numeric(10, 2))
     presente = Column(Boolean, nullable=False, default=False, server_default="false")
 
-    optional = relationship(
-        "AutousatoAccessoriOptional",
-        secondary="public.autousato_pacchetto_optional",
-        back_populates="pacchetti"
-    )
-
+    auto = relationship("AZLeaseUsatoAuto", backref="accessori_pacchetti")
 
 class AutousatoPacchettoOptional(Base):
     __tablename__ = "autousato_pacchetto_optional"
