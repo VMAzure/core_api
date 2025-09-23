@@ -1557,3 +1557,74 @@ class MnetImmagini(Base):
     risoluzione = Column(String(2), nullable=True)  # L, M, H
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+
+class AIAssistente(Base):
+    __tablename__ = "ai_assistenti"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dealer_user_id = Column(Integer, ForeignKey("utenti.id", ondelete="CASCADE"), nullable=False)
+    slug = Column(Text, nullable=False)
+    nome = Column(Text, nullable=False)
+    modello = Column(Text, nullable=False)
+    temperatura = Column(Numeric(3, 2), default=0.30)
+    top_p = Column(Numeric(3, 2), default=0.90)
+    max_tokens = Column(Integer, default=500)
+    lingua = Column(Text, default="it")
+    persona = Column(Text)
+    istruzioni = Column(Text)
+    contesto = Column(Text)
+    attivo = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("dealer_user_id", "nome", name="uq_ai_assistenti_dealer_nome"),
+        UniqueConstraint("slug", "nome", name="uq_ai_assistenti_slug_nome"),
+    )
+
+    whatsapp_numbers = relationship("AIWhatsappNumber", back_populates="assistant")
+    chat_logs = relationship("AIChatLog", back_populates="assistant")
+
+
+class AIWhatsappNumber(Base):
+    __tablename__ = "ai_whatsapp_numbers"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dealer_user_id = Column(Integer, ForeignKey("utenti.id", ondelete="CASCADE"), nullable=False)
+    assistant_id = Column(UUID(as_uuid=True), ForeignKey("ai_assistenti.id", ondelete="SET NULL"))
+    numero_wa = Column(Text, nullable=False, unique=True)
+    provider = Column(Text, nullable=False)
+    provider_config = Column(JSONB, default=dict)
+    attivo = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    assistant = relationship("AIAssistente", back_populates="whatsapp_numbers")
+
+
+class AIChatLog(Base):
+    __tablename__ = "ai_chat_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dealer_user_id = Column(Integer, ForeignKey("utenti.id", ondelete="SET NULL"))
+    assistant_id = Column(UUID(as_uuid=True), ForeignKey("ai_assistenti.id", ondelete="SET NULL"))
+    slug = Column(Text, nullable=False)
+    sorgente = Column(Text, nullable=False)  # 'web' | 'whatsapp'
+    utente_ref = Column(Text)  # numero WA o session id
+    domanda = Column(Text, nullable=False)
+    risposta = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    assistant = relationship("AIAssistente", back_populates="chat_logs")
+    autos = relationship("AIChatLogAuto", back_populates="chat_log", cascade="all, delete-orphan")
+
+
+class AIChatLogAuto(Base):
+    __tablename__ = "ai_chat_logs_auto"
+
+    chat_log_id = Column(UUID(as_uuid=True), ForeignKey("ai_chat_logs.id", ondelete="CASCADE"), primary_key=True)
+    id_auto = Column(UUID(as_uuid=True), ForeignKey("azlease_usatoauto.id", ondelete="CASCADE"), primary_key=True)
+
+    chat_log = relationship("AIChatLog", back_populates="autos")
