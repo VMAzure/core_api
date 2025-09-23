@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import AIAssistente, AIChatLog, AIChatLogAuto, AzLeaseUsatoAuto
+from app.models import AIAssistente, AIChatLog, AIChatLogAuto, AZLeaseUsatoAuto
 import httpx, os
 from sqlalchemy.orm import joinedload
 
@@ -66,14 +66,14 @@ async def call_ai(assistente: AIAssistente, domanda: str, auto: List[dict]) -> s
 
 
 def get_auto_for_assistant(db: Session, assistente: AIAssistente, slug: str):
-    query = db.query(AzLeaseUsatoAuto).filter(AzLeaseUsatoAuto.status == "attivo")
+    query = db.query(AZLeaseUsatoAuto).filter(AZLeaseUsatoAuto.status == "attivo")
 
     if slug != "azure-automotive":  # se NON è admin → filtro sullo slug
-        query = query.filter(AzLeaseUsatoAuto.slug == slug)
+        query = query.filter(AZLeaseUsatoAuto.slug == slug)
 
     query = query.options(
-        joinedload(AzLeaseUsatoAuto.accessori_optional),
-        joinedload(AzLeaseUsatoAuto.pacchetti)
+        joinedload(AZLeaseUsatoAuto.accessori_optional),
+        joinedload(AZLeaseUsatoAuto.pacchetti)
     )
 
     results = []
