@@ -12,6 +12,10 @@ from app.models import (
 )
 
 import httpx, os
+import logging
+
+logger = logging.getLogger("uvicorn.error")  # agganciato ai log di uvicorn
+
 
 router = APIRouter(prefix="/api/assistente", tags=["Assistente"])
 
@@ -82,6 +86,7 @@ async def call_ai(assistente: AIAssistente, domanda: str, auto: List[dict]) -> s
 
 
 def get_auto_for_assistant(db: Session, assistente: AIAssistente, slug: str):
+
     print("=== DEBUG get_auto_for_assistant ===")
     print("Slug richiesto:", slug)
     print("Assistente:", {
@@ -148,6 +153,8 @@ def get_auto_for_assistant(db: Session, assistente: AIAssistente, slug: str):
 # -------------------- Endpoint --------------------
 @router.post("/chat/{slug}", response_model=ChatResponse)
 async def chat_with_assistant(slug: str, req: ChatRequest, db: Session = Depends(get_db)):
+    logger.info("Assistente caricato %s", assistente.id)
+
     assistente = db.query(AIAssistente).filter_by(slug=slug, attivo=True).first()
     if not assistente:
         raise HTTPException(status_code=404, detail="Assistente non trovato")
