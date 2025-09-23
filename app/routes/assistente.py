@@ -153,24 +153,34 @@ def get_auto_for_assistant(db: Session, assistente: AIAssistente, slug: str):
 # -------------------- Endpoint --------------------
 @router.post("/chat/{slug}", response_model=ChatResponse)
 async def chat_with_assistant(slug: str, req: ChatRequest, db: Session = Depends(get_db)):
-    logger.info("Assistente caricato %s", assistente.id)
+    # Recupera l'assistente dal DB
+    assistente = db.query(AIAssistente).filter_by(slug=slug, attivo=True).first()
 
-    assistente = db.query(AIAssistente).filter_by(slug=slug).first()
-    logger.info("DEBUG assistente query (senza filtro attivo): %s", assistente)
-    
     if not assistente:
+        logger.warning("Assistente NON trovato per slug=%s", slug)
         raise HTTPException(status_code=404, detail="Assistente non trovato")
 
+    # Ora possiamo loggare i dati perché esiste
+    logger.info(
+        "Assistente caricato id=%s dealer_user_id=%s modello=%s",
+        assistente.id, assistente.dealer_user_id, assistente.modello
+    )
+
+    # Recupera le auto
     auto = get_auto_for_assistant(db, assistente, slug)
+    logger.info("Auto trovate per slug=%s: %s", slug, [a['id'] for a in auto])
+
     if not auto:
         return ChatResponse(
             risposta="Al momento non ci sono auto disponibili per questo dealer.",
             auto_riferite=[],
         )
 
+    # Chiamata al modello AI
     risposta = await call_ai(assistente, req.domanda, auto)
+    logger.info("Risposta AI generata: %s", risposta)
 
-    # log della conversazione
+    # Log conversazione nel DB
     chat_log = AIChatLog(
         dealer_user_id=assistente.dealer_user_id,
         assistant_id=assistente.id,
