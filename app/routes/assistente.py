@@ -155,7 +155,9 @@ def get_auto_for_assistant(db: Session, assistente: AIAssistente, slug: str):
 async def chat_with_assistant(slug: str, req: ChatRequest, db: Session = Depends(get_db)):
     logger.info("Assistente caricato %s", assistente.id)
 
-    assistente = db.query(AIAssistente).filter_by(slug=slug, attivo=True).first()
+    assistente = db.query(AIAssistente).filter_by(slug=slug).first()
+    logger.info("DEBUG assistente query (senza filtro attivo): %s", assistente)
+    
     if not assistente:
         raise HTTPException(status_code=404, detail="Assistente non trovato")
 
