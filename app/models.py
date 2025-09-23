@@ -817,12 +817,23 @@ class AZLeaseUsatoAuto(Base):
     descrizione_ultimo_intervento = Column(Text, nullable=True)
     codice_motornet = Column(Text, nullable=True)
     colore = Column(Text, nullable=True)
-    mese_immatricolazione = Column(SmallInteger, nullable=True)  # valori 1–12
-    precisazioni = Column(Text, nullable=True)   # dettagli visivi liberi inseriti dal dealer
+    mese_immatricolazione = Column(SmallInteger, nullable=True)
+    precisazioni = Column(Text, nullable=True)
 
-    id_usatoin = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoin.id"), nullable=True)  # ✅ FIX
+    id_usatoin = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoin.id"), nullable=True)
 
+    # relazioni già presenti
     usatoin = relationship("AZLeaseUsatoIn", backref="auto_usate")
+    accessori_serie = relationship("AutousatoAccessoriSerie", backref="auto")
+    accessori_optional = relationship("AutousatoAccessoriOptional", backref="auto")
+
+    # nuova relazione diretta verso pacchetti
+    accessori_pacchetti = relationship(
+        "AutousatoAccessoriPacchetti",
+        backref="auto",
+        cascade="all, delete-orphan"
+    )
+
 
 class AutousatoAccessoriSerie(Base):
     __tablename__ = "autousato_accessori_serie"

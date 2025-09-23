@@ -74,8 +74,7 @@ def get_auto_for_assistant(db: Session, assistente: AIAssistente, slug: str):
         .filter(AZLeaseUsatoIn.visibile == True)
     )
 
-    # se non è admin → filtro sullo slug del dealer
-    if slug != "azure-automotive":
+    if slug != "azure-automotive":  # se non admin → filtro sul dealer
         query = query.filter(AZLeaseUsatoIn.dealer_id == assistente.dealer_user_id)
 
     results = []
@@ -92,12 +91,13 @@ def get_auto_for_assistant(db: Session, assistente: AIAssistente, slug: str):
         results.append({
             "id": str(auto.id),
             "marca": auto.codice_motornet or "n.d.",
-            "modello": "",  # se serve, da join a mnet_dettagli_usato
+            "modello": "",  # da integrare se vuoi con join su mnet_dettagli_usato
             "anno": auto.anno_immatricolazione,
             "prezzo": auto.usatoin.prezzo_vendita,
             "descrizione": descr
         })
     return results
+
 
 
 
