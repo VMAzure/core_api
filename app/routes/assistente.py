@@ -82,38 +82,67 @@ async def call_ai(assistente: AIAssistente, domanda: str, auto: List[dict]) -> s
 
 
 def get_auto_for_assistant(db: Session, assistente: AIAssistente, slug: str):
-    query = (
-        db.query(AZLeaseUsatoAuto)
-        .join(AZLeaseUsatoIn, AZLeaseUsatoAuto.id_usatoin == AZLeaseUsatoIn.id)
-        .filter(AZLeaseUsatoIn.visibile == True)
-    )
+    print("=== DEBUG get_auto_for_assistant ===")
+    print("Slug richiesto:", slug)
+    print("Assistente:", {
+        "id": str(assistente.id),
+        "dealer_user_id": assistente.dealer_user_id,
+        "slug": assistente.slug,
+        "modello": assistente.modello,
+        "attivo": assistente.attivo
+    })
 
-    # se non admin → filtro per dealer
-    if slug != "azure-automotive":
-        query = query.filter(AZLeaseUsatoIn.dealer_id == assistente.dealer_user_id)
-
-    results = []
-    for auto in query.all():
-        accessori = [a.descrizione for a in auto.accessori_optional if a.presente]
-        pacchetti = [p.descrizione for p in auto.accessori_pacchetti if p.presente]
-
-        descr = auto.precisazioni or ""
-        if accessori:
-            descr += " Accessori: " + ", ".join(accessori)
-        if pacchetti:
-            descr += " Pacchetti: " + ", ".join(pacchetti)
-
-        results.append(
-            {
-                "id": str(auto.id),
-                "marca": auto.codice_motornet or "n.d.",
-                "modello": "",  # TODO: arricchire da mnet_dettagli_usato
-                "anno": auto.anno_immatricolazione,
-                "prezzo": auto.usatoin.prezzo_vendita,
-                "descrizione": descr,
-            }
+    try:
+        query = (
+            db.query(AZLeaseUsatoAuto)
+            .join(AZLeaseUsatoIn, AZLeaseUsatoAuto.id_usatoin == AZLeaseUsatoIn.id)
+            .filter(AZLeaseUsatoIn.visibile == True)
         )
-    return results
+
+        if slug != "azure-automotive":  # se non admin → filtro per dealer
+            query = query.filter(AZLeaseUsatoIn.dealer_id == assistente.dealer_user_id)
+
+        autos = query.all()
+        print(f"Numero auto trovate: {len(autos)}")
+
+        results = []
+        for auto in autos:
+            try:
+                print(">> Auto:", str(auto.id), "targa:", auto.targa)
+
+                accessori = [a.descrizione for a in auto.accessori_optional if a.presente]
+                pacchetti = [p.descrizione for p in auto.accessori_pacchetti if p.presente]
+
+                descr = auto.precisazioni or ""
+                if accessori:
+                    descr += " Accessori: " + ", ".join(accessori)
+                if pacchetti:
+                    descr += " Pacchetti: " + ", ".join(pacchetti)
+
+                prezzo = None
+                if auto.usatoin:
+                    prezzo = auto.usatoin.prezzo_vendita
+                else:
+                    print("⚠️  Attenzione: usatoin mancante per auto", str(auto.id))
+
+                results.append({
+                    "id": str(auto.id),
+                    "marca": auto.codice_motornet or "n.d.",
+                    "modello": "",  # TODO: join su mnet_dettagli_usato
+                    "anno": auto.anno_immatricolazione,
+                    "prezzo": prezzo,
+                    "descrizione": descr
+                })
+            except Exception as e:
+                print("❌ Errore processando auto", str(auto.id), ":", e)
+
+        print("=== Fine DEBUG get_auto_for_assistant ===")
+        return results
+
+    except Exception as e:
+        print("❌ Errore generale in get_auto_for_assistant:", e)
+        raise
+
 
 
 # -------------------- Endpoint --------------------
