@@ -1545,9 +1545,10 @@ class MnetImmagini(Base):
 
 class AIAssistente(Base):
     __tablename__ = "ai_assistenti"
+    __table_args__ = {"schema": "public"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    dealer_user_id = Column(Integer, ForeignKey("utenti.id", ondelete="CASCADE"), nullable=False)
+    dealer_user_id = Column(Integer, ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False)
     slug = Column(Text, nullable=False)
     nome = Column(Text, nullable=False)
     modello = Column(Text, nullable=False)
@@ -1565,6 +1566,7 @@ class AIAssistente(Base):
     __table_args__ = (
         UniqueConstraint("dealer_user_id", "nome", name="uq_ai_assistenti_dealer_nome"),
         UniqueConstraint("slug", "nome", name="uq_ai_assistenti_slug_nome"),
+        {"schema": "public"},
     )
 
     whatsapp_numbers = relationship("AIWhatsappNumber", back_populates="assistant")
@@ -1573,10 +1575,11 @@ class AIAssistente(Base):
 
 class AIWhatsappNumber(Base):
     __tablename__ = "ai_whatsapp_numbers"
+    __table_args__ = {"schema": "public"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    dealer_user_id = Column(Integer, ForeignKey("utenti.id", ondelete="CASCADE"), nullable=False)
-    assistant_id = Column(UUID(as_uuid=True), ForeignKey("ai_assistenti.id", ondelete="SET NULL"))
+    dealer_user_id = Column(Integer, ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False)
+    assistant_id = Column(UUID(as_uuid=True), ForeignKey("public.ai_assistenti.id", ondelete="SET NULL"))
     numero_wa = Column(Text, nullable=False, unique=True)
     provider = Column(Text, nullable=False)
     provider_config = Column(JSONB, default=dict)
@@ -1589,10 +1592,11 @@ class AIWhatsappNumber(Base):
 
 class AIChatLog(Base):
     __tablename__ = "ai_chat_logs"
+    __table_args__ = {"schema": "public"}
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    dealer_user_id = Column(Integer, ForeignKey("utenti.id", ondelete="SET NULL"))
-    assistant_id = Column(UUID(as_uuid=True), ForeignKey("ai_assistenti.id", ondelete="SET NULL"))
+    dealer_user_id = Column(Integer, ForeignKey("public.utenti.id", ondelete="SET NULL"))
+    assistant_id = Column(UUID(as_uuid=True), ForeignKey("public.ai_assistenti.id", ondelete="SET NULL"))
     slug = Column(Text, nullable=False)
     sorgente = Column(Text, nullable=False)  # 'web' | 'whatsapp'
     utente_ref = Column(Text)  # numero WA o session id
@@ -1606,8 +1610,9 @@ class AIChatLog(Base):
 
 class AIChatLogAuto(Base):
     __tablename__ = "ai_chat_logs_auto"
+    __table_args__ = {"schema": "public"}
 
-    chat_log_id = Column(UUID(as_uuid=True), ForeignKey("ai_chat_logs.id", ondelete="CASCADE"), primary_key=True)
-    id_auto = Column(UUID(as_uuid=True), ForeignKey("azlease_usatoauto.id", ondelete="CASCADE"), primary_key=True)
+    chat_log_id = Column(UUID(as_uuid=True), ForeignKey("public.ai_chat_logs.id", ondelete="CASCADE"), primary_key=True)
+    id_auto = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoauto.id", ondelete="CASCADE"), primary_key=True)
 
     chat_log = relationship("AIChatLog", back_populates="autos")
