@@ -722,8 +722,7 @@ async def _gemini_generate_image_sync(
     payload = {
         "contents": [{"parts": parts}],
         "generationConfig": {"candidateCount": num_images},
-        "temperature": 0.4,
-        "topP": 0.05
+
     }
 
     async with httpx.AsyncClient(timeout=120) as client:
