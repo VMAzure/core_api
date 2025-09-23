@@ -2,7 +2,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from database import get_db
+from app.database import get_db
 from models import AIAssistente, AIChatLog, AIChatLogAuto, AzLeaseUsatoAuto
 import httpx, os
 from sqlalchemy.orm import joinedload
