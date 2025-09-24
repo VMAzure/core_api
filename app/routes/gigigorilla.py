@@ -53,7 +53,7 @@ class GigiJobStatus(BaseModel):
     outputs: list[str] = []
     error_message: str | None = None
 
-@router.post("/ai/gigi-gorilla/jobs", response_model=GigiJobCreated)
+@router.post("/jobs", response_model=GigiJobCreated)
 def create_job(payload: GigiJobCreate, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
     email = Authorize.get_jwt_subject()
@@ -99,7 +99,7 @@ def create_job(payload: GigiJobCreate, Authorize: AuthJWT = Depends(), db: Sessi
     db.commit()
     return GigiJobCreated(job_id=job_id)
 
-@router.get("/ai/gigi-gorilla/jobs/{job_id}", response_model=GigiJobStatus)
+@router.get("/jobs/{job_id}", response_model=GigiJobStatus)
 def job_status(job_id: _UUID, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
     email = Authorize.get_jwt_subject()
