@@ -5,7 +5,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db, supabase_client
 from app.models import User
 from uuid import UUID as _UUID
+
 import os
+import base64
+import uuid
 from sqlalchemy import text
 
 # helpers ruoli
@@ -13,6 +16,8 @@ from app.auth_helpers import is_dealer_user
 
 # riusa util di Gemini già presenti
 from app.routes.openai_config import _gemini_generate_image_sync
+from app.openai_utils import genera_descrizione_gpt
+
 
 router = APIRouter()
 
@@ -30,19 +35,29 @@ SIZE_MAP = {
 
 class GigiJobCreate(BaseModel):
     prompt: str = Field(min_length=3)
+
+    # Modalità URL (attuale)
     subject_url: HttpUrl | None = None
     background_url: HttpUrl | None = None
     logo_url: HttpUrl | None = None
+
+    # Modalità base64 (nuova)
+    subject_base64: str | None = None
+    background_base64: str | None = None
+    logo_base64: str | None = None
+
     logo_height: int = 100
     logo_offset_y: int = 100
     num_images: int = Field(1, ge=1, le=4)
-    quality: str = "medium"            # low|medium|high|auto|standard|hd
-    orientation: str = "square"        # square|landscape|portrait
-    output_format: str = "png"         # png|webp
+    quality: str = "medium"
+    orientation: str = "square"
+    output_format: str = "png"
+
 
 class GigiJobCreated(BaseModel):
-    job_id: _UUID
+    job_ids: list[_UUID]
     status: str = "queued"
+
 
 class GigiJobStatus(BaseModel):
     job_id: _UUID
@@ -50,10 +65,56 @@ class GigiJobStatus(BaseModel):
     outputs: list[str] = []
     error_message: str | None = None
 
+def upload_base64_to_supabase(base64_data: str, user_id: str, label: str) -> str:
+    if "," in base64_data:
+        base64_data = base64_data.split(",")[1]  # rimuove "data:image/png;base64,..."
+
+    binary = base64.b64decode(base64_data)
+    filename = f"{user_id}/{label}-{uuid.uuid4().hex}.png"
+
+    supabase_client.storage.from_("gigi-gorilla").upload(
+        path=filename,
+        file=binary,
+        file_options={"content-type": "image/png"},
+        upsert=True
+    )
+
+    return supabase_client.storage.from_("gigi-gorilla").get_public_url(filename)
+
+
+async def genera_varianti_prompt(prompt_base: str, num_variants: int = 3) -> list[str]:
+    """
+    Genera varianti visive di un prompt di input usando GPT.
+    Restituisce una lista di stringhe diverse, lunghezza = num_variants (o meno se GPT ne produce di meno).
+    """
+    # Prompt per GPT
+    prompt_llm = (
+        f"Prompt originale: \"{prompt_base}\"\n\n"
+        f"Genera {num_variants} prompt diversi per la generazione di immagini AI.\n"
+        "Ogni variante deve mantenere il soggetto principale, ma cambiare almeno uno di questi aspetti: "
+        "angolazione, composizione, stile, azione o contesto visivo.\n"
+        "Rispondi solo con un elenco di frasi, una per riga, senza numeri o testo extra."
+    )
+
+    try:
+        raw = await genera_descrizione_gpt(
+            prompt=prompt_llm,
+            max_tokens=600,
+            temperature=0.85,
+            model="gpt-4o"
+        )
+    except Exception as e:
+        raise RuntimeError(f"Errore generazione prompt varianti: {e}")
+
+    # Cleanup: normalizza in lista
+    variants = [line.strip("-•*– ").strip() for line in raw.splitlines() if line.strip()]
+    return variants[:num_variants] if variants else [prompt_base] * num_variants
+
+
 # --------- CREATE JOB ----------
 
 @router.post("/jobs", response_model=GigiJobCreated)
-def create_job(
+async def create_job(
     payload: GigiJobCreate,
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
@@ -88,44 +149,71 @@ def create_job(
             )
         )
 
+    # --- Prompt variants se num_images > 1 ---
+    if payload.num_images > 1:
+        # genera N prompt diversi usando GPT
+        prompt_variants = await genera_varianti_prompt(payload.prompt, payload.num_images)
+    else:
+        prompt_variants = [payload.prompt]
+
     size = SIZE_MAP[payload.orientation]
     storage_prefix = f"{user.id}/"
 
-    job_id = db.execute(
-        text(
-            """
-        insert into public.gigi_gorilla_jobs
-          (user_id, prompt, subject_url, background_url, logo_url,
-           logo_height, logo_offset_y, num_images, quality, orientation,
-           output_format, aspect_ratio, size, status, bucket, storage_prefix)
-        values
-          (:uid, :p, :s, :b, :l, :lh, :lo, :n, :q, :o, :f,
-           case when :o='square' then '1:1'
-                when :o='landscape' then '16:9'
-                else '9:16' end,
-           :size, 'queued', 'gigi-gorilla', :pref)
-        returning id
-        """
-        ),
-        {
-            "uid": user.id,
-            "p": payload.prompt,
-            "s": payload.subject_url,
-            "b": payload.background_url,
-            "l": payload.logo_url,
-            "lh": payload.logo_height,
-            "lo": payload.logo_offset_y,
-            "n": payload.num_images,
-            "q": q,
-            "o": payload.orientation,
-            "f": payload.output_format,
-            "size": size,
-            "pref": storage_prefix,
-        },
-    ).scalar()
+    subject_url = payload.subject_url
+    background_url = payload.background_url
+    logo_url = payload.logo_url
+
+    if payload.subject_base64:
+        subject_url = upload_base64_to_supabase(payload.subject_base64, user.id, "subject")
+
+    if payload.background_base64:
+        background_url = upload_base64_to_supabase(payload.background_base64, user.id, "background")
+
+    if payload.logo_base64:
+        logo_url = upload_base64_to_supabase(payload.logo_base64, user.id, "logo")
+
+
+    job_ids = []
+
+    for i, prompt_variant in enumerate(prompt_variants):
+        job_id = db.execute(
+            text(
+                """
+                insert into public.gigi_gorilla_jobs
+                  (user_id, prompt, subject_url, background_url, logo_url,
+                   logo_height, logo_offset_y, num_images, quality, orientation,
+                   output_format, aspect_ratio, size, status, bucket, storage_prefix)
+                values
+                  (:uid, :p, :s, :b, :l, :lh, :lo, :n, :q, :o, :f,
+                   case when :o='square' then '1:1'
+                        when :o='landscape' then '16:9'
+                        else '9:16' end,
+                   :size, 'queued', 'gigi-gorilla', :pref)
+                returning id
+                """
+            ),
+            {
+                "uid": user.id,
+                "p": prompt_variant,    # 👈 usa prompt variato
+                "s": subject_url,
+                "b": background_url,
+                "l": logo_url,
+                "lh": payload.logo_height,
+                "lo": payload.logo_offset_y,
+                "n": 1,                 # 👈 forza sempre 1 per Gemini
+                "q": q,
+                "o": payload.orientation,
+                "f": payload.output_format,
+                "size": SIZE_MAP[payload.orientation],
+                "pref": f"{user.id}/",
+            },
+        ).scalar()
+
+        job_ids.append(job_id)
 
     db.commit()
-    return GigiJobCreated(job_id=job_id)
+
+    return {"job_ids": job_ids, "status": "queued"}
 
 # --------- JOB STATUS ----------
 
