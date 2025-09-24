@@ -106,15 +106,17 @@ def job_status(job_id: _UUID, Authorize: AuthJWT = Depends(), db: Session = Depe
     user = db.query(User).filter(User.email == email).first()
     if not user: raise HTTPException(403, "Utente non trovato")
 
-    row = db.execute("""
-      select id, user_id, status, error_message
-      from public.gigi_gorilla_jobs where id=:id
-    """, {"id": job_id}).first()
-    if not row or row.user_id != user.id: raise HTTPException(404, "Job non trovato")
+    row = db.execute(text("""
+        select id, user_id, status, error_message
+        from public.gigi_gorilla_jobs where id = :id
+    """), {"id": job_id}).first()
 
-    outs = db.execute("""
-      select public_url from public.gigi_gorilla_job_outputs
-      where job_id=:id and status='completed' order by idx
-    """, {"id": job_id}).scalars().all()
+    outs = db.execute(text("""
+        select public_url
+        from public.gigi_gorilla_job_outputs
+        where job_id = :id and status = 'completed'
+        order by idx
+    """), {"id": job_id}).scalars().all()
+
 
     return GigiJobStatus(job_id=row.id, status=row.status, outputs=outs, error_message=row.error_message)
