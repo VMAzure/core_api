@@ -199,7 +199,8 @@ def get_gallery(
         from public.gigi_gorilla_job_outputs o
         join public.gigi_gorilla_jobs j on j.id = o.job_id
         where j.user_id = :uid
-          and o.status = 'completed'
+        and o.status = 'completed'
+        and o.is_deleted is not true
         order by o.created_at desc
         offset :off limit :lim
         """
@@ -208,3 +209,35 @@ def get_gallery(
     ).mappings().all()
 
     return {"items": [dict(r) for r in rows]}
+
+from fastapi import status
+
+@router.patch("/outputs/{output_id}/delete", status_code=status.HTTP_204_NO_CONTENT)
+def soft_delete_output(
+    output_id: _UUID,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    Authorize.jwt_required()
+    email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(403, "Utente non trovato")
+
+    result = db.execute(
+        text("""
+            update public.gigi_gorilla_job_outputs
+            set is_deleted = true
+            where id = :id and job_id in (
+                select id from public.gigi_gorilla_jobs
+                where user_id = :uid
+            )
+        """),
+        {"id": output_id, "uid": user.id}
+    )
+
+    if result.rowcount == 0:
+        raise HTTPException(404, "Output non trovato o accesso negato")
+
+    db.commit()
+
