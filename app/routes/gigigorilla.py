@@ -14,7 +14,7 @@ from app.auth_helpers import is_dealer_user
 # riusa util di Gemini già presenti
 from app.routes.openai_config import _gemini_generate_image_sync
 
-router = APIRouter(prefix="/ai/gigi-gorilla", tags=["gigi-gorilla"])
+router = APIRouter()
 
 GIGI_CREDIT_COST = float(os.getenv("GIGI_CREDIT_COST", "1.5"))
 
