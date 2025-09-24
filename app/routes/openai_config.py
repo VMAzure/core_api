@@ -677,81 +677,105 @@ async def _gemini_generate_image_sync(
 ) -> list[bytes]:
     """
     Genera una o più immagini con Gemini.
-    Ritorna sempre una lista di bytes (anche se num_images=1).
+    Retry in memoria su errori transitori o risposte vuote.
     """
     _gemini_assert_api()
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent"
 
-    parts = [{"text": prompt}]
+    MAX_RETRIES = 3
+    images: list[bytes] = []
 
-    # compatibilità: start_image
-    if start_image_bytes:
-        parts.append({
-            "inline_data": {
-                "mime_type": "image/png",
-                "data": base64.b64encode(start_image_bytes).decode("utf-8")
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            # ---- build parts ----
+            parts = [{"text": prompt}]
+            if start_image_bytes:
+                parts.append({
+                    "inline_data": {
+                        "mime_type": "image/png",
+                        "data": base64.b64encode(start_image_bytes).decode("utf-8")
+                    }
+                })
+            elif start_image_url and start_image_url.strip():
+                mime, b64 = await _fetch_image_base64_from_url(start_image_url.strip())
+                parts.append({"inline_data": {"mime_type": mime, "data": b64}})
+
+            for name, img_url in {
+                "subject_image_url": subject_image_url,
+                "background_image_url": background_image_url
+            }.items():
+                if img_url and img_url.strip():
+                    mime, b64 = await _fetch_image_base64_from_url(img_url.strip())
+                    parts.append({"inline_data": {"mime_type": mime, "data": b64}})
+
+            payload = {
+                "contents": [{"parts": parts}],
+                "generationConfig": {"candidateCount": num_images},
             }
-        })
-    elif start_image_url and start_image_url.strip():
-        if not isinstance(start_image_url, str):
-            raise HTTPException(422, "start_image_url deve essere una stringa valida")
-        mime, b64 = await _fetch_image_base64_from_url(start_image_url.strip())
-        parts.append({
-            "inline_data": {
-                "mime_type": mime,
-                "data": b64
-            }
-        })
 
-    # opzionali: subject/background
-    for name, img_url in {
-        "subject_image_url": subject_image_url,
-        "background_image_url": background_image_url
-    }.items():
-        if img_url and img_url.strip():
-            if not isinstance(img_url, str):
-                raise HTTPException(422, f"{name} deve essere una stringa valida")
-            mime, b64 = await _fetch_image_base64_from_url(img_url.strip())
-            parts.append({
-                "inline_data": {
-                    "mime_type": mime,
-                    "data": b64
-                }
-            })
-
-    payload = {
-        "contents": [{"parts": parts}],
-        "generationConfig": {"candidateCount": num_images},
-
-    }
-
-    async with httpx.AsyncClient(timeout=120) as client:
-        r = await client.post(url, json=payload, headers={
-            "x-goog-api-key": GEMINI_API_KEY,
-            "Content-Type": "application/json"
-        })
-        if r.status_code >= 300:
-            raise HTTPException(r.status_code, f"Errore Gemini image: {r.text}")
-
-        data = r.json()
-        images: list[bytes] = []
-
-        candidates = data.get("candidates", [])
-        for cand in candidates:
-            parts = cand.get("content", {}).get("parts", [])
-            for p in parts:
-                inline = (
-                    p.get("inline_data")
-                    or p.get("inlineData")
-                    or p.get("inline")
+            async with httpx.AsyncClient(timeout=120) as client:
+                r = await client.post(
+                    url, json=payload,
+                    headers={
+                        "x-goog-api-key": GEMINI_API_KEY,
+                        "Content-Type": "application/json"
+                    }
                 )
-                if inline and inline.get("data"):
-                    images.append(base64.b64decode(inline["data"]))
 
-        if not images:
+            if r.status_code >= 300:
+                # policy/safety → non retry
+                if r.status_code == 400 and "safety" in r.text.lower():
+                    raise HTTPException(400, f"Gemini policy violation: {r.text}")
+                raise HTTPException(r.status_code, f"Errore Gemini image: {r.text}")
+
+            data = r.json()
+
+            # ---- extract images ----
+            candidates = data.get("candidates", [])
+            images = []
+            for cand in candidates:
+                parts = cand.get("content", {}).get("parts", [])
+                for p in parts:
+                    inline = (
+                        p.get("inline_data")
+                        or p.get("inlineData")
+                        or p.get("inline")
+                    )
+                    if inline and inline.get("data"):
+                        images.append(base64.b64decode(inline["data"]))
+
+            if images:
+                return images  # ✅ successo
+
+            # se nessuna immagine ma solo testo → retry
+            msg = (
+                candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                if candidates else ""
+            )
+            if "immagine" in msg.lower() or "image" in msg.lower():
+                logging.warning(f"[Gemini Retry] Tentativo {attempt}/{MAX_RETRIES}: solo testo")
+                await asyncio.sleep(attempt * 2)
+                continue
+
+            # altrimenti errore serio
             raise HTTPException(502, f"Gemini image: nessuna immagine trovata. Resp: {data}")
 
-        return images
+        except HTTPException as e:
+            # policy/safety → stop subito
+            if "policy" in str(e).lower() or "safety" in str(e).lower():
+                logging.error(f"[Gemini STOP] Violazione policy: {e}")
+                raise
+            logging.warning(f"[Gemini Retry] Tentativo {attempt}/{MAX_RETRIES} fallito: {e}")
+            await asyncio.sleep(attempt * 2)
+            continue
+        except Exception as e:
+            logging.warning(f"[Gemini Retry] Tentativo {attempt}/{MAX_RETRIES} errore generico: {e}")
+            await asyncio.sleep(attempt * 2)
+            continue
+
+    # se arriviamo qui → retry esauriti
+    raise HTTPException(502, f"Gemini image fallita dopo {MAX_RETRIES} tentativi")
+
 
 
 async def _nano_banana_generate_image(
