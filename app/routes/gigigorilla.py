@@ -9,6 +9,8 @@ from uuid import UUID as _UUID
 import os, base64
 from io import BytesIO
 from PIL import Image
+from sqlalchemy import text
+
 
 # riusa util di Gemini già presenti
 from app.routes.openai_config import _gemini_generate_image_sync
@@ -78,21 +80,22 @@ def create_job(payload: GigiJobCreate, Authorize: AuthJWT = Depends(), db: Sessi
     # insert job
     size = SIZE_MAP[payload.orientation]
     storage_prefix = f"{user.id}/"  # base path
-    job_id = db.execute("""
-      insert into public.gigi_gorilla_jobs
-        (user_id,prompt,subject_url,background_url,logo_url,logo_height,logo_offset_y,
-         num_images,quality,orientation,output_format,aspect_ratio,size,status,bucket,storage_prefix)
-      values
-        (:uid,:p,:s,:b,:l,:lh,:lo,:n,:q,:o,:f,
-         case when :o='square' then '1:1' when :o='landscape' then '16:9' else '9:16' end,
-         :size,'queued','gigi-gorilla',:pref)
-      returning id
-    """, {
-      "uid": user.id, "p": payload.prompt, "s": payload.subject_url, "b": payload.background_url,
-      "l": payload.logo_url, "lh": payload.logo_height, "lo": payload.logo_offset_y,
-      "n": payload.num_images, "q": q, "o": payload.orientation, "f": payload.output_format,
-      "size": size, "pref": storage_prefix
+    job_id = db.execute(text("""
+        insert into public.gigi_gorilla_jobs
+          (user_id, prompt, subject_url, background_url, logo_url, logo_height, logo_offset_y,
+           num_images, quality, orientation, output_format, aspect_ratio, size, status, bucket, storage_prefix)
+        values
+          (:uid, :p, :s, :b, :l, :lh, :lo, :n, :q, :o, :f,
+           case when :o='square' then '1:1' when :o='landscape' then '16:9' else '9:16' end,
+           :size, 'queued', 'gigi-gorilla', :pref)
+        returning id
+    """), {
+        "uid": user.id, "p": payload.prompt, "s": payload.subject_url, "b": payload.background_url,
+        "l": payload.logo_url, "lh": payload.logo_height, "lo": payload.logo_offset_y,
+        "n": payload.num_images, "q": q, "o": payload.orientation, "f": payload.output_format,
+        "size": size, "pref": storage_prefix
     }).scalar()
+
     db.commit()
     return GigiJobCreated(job_id=job_id)
 
