@@ -63,7 +63,7 @@ from app.routes.modelli_ai_test import router as modelli_ai_test_router
 from app.routes import immagini_nuovo
 from app.routes import usato_vetrina
 from app.routes import assistente
-from app.routes import router_gigi_gorilla
+from app.routes.gigigorilla import router as gigi_router
 
 
 
@@ -230,7 +230,7 @@ app.include_router(modelli_ai_test_router)
 app.include_router(immagini_nuovo.router)
 app.include_router(usato_vetrina.router)
 app.include_router(assistente.router)
-app.include_router(router_gigi_gorilla.router, tags=["Gigi Gorilla"])
+app.include_router(gigi_router, prefix="/ai/gigi-gorilla", tags=["Gigi Gorilla"])
 
 
 @app.get("/")
