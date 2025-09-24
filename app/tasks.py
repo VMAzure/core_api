@@ -46,7 +46,7 @@ from app.routes.openai_config import _gemini_get_operation, _download_bytes, _sb
 from app.models import UsatoLeonardo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from task_gigi import processa_gigi_gorilla_jobs
+from app.task_gigi import processa_gigi_gorilla_jobs
 
 
 from pytz import timezone
