@@ -46,6 +46,9 @@ from app.routes.openai_config import _gemini_get_operation, _download_bytes, _sb
 from app.models import UsatoLeonardo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from task_gigi import processa_gigi_gorilla_jobs
+
+
 from pytz import timezone
 TZ = timezone("Europe/Rome")
 
@@ -470,6 +473,10 @@ scheduler.add_job(polla_video_gemini, IntervalTrigger(seconds=60))
 
 # Polling Gemini immagini ogni 30 secondi
 scheduler.add_job(processa_immagini_gemini, IntervalTrigger(seconds=30))
+
+# Polling Gigi Gorilla immagini ogni 30 secondi
+scheduler.add_job(processa_gigi_gorilla_jobs, 'interval', seconds=25)
+
 
 
 
