@@ -66,20 +66,43 @@ class GigiJobStatus(BaseModel):
     error_message: str | None = None
 
 def upload_base64_to_supabase(base64_data: str, user_id: str, label: str) -> str:
-    if "," in base64_data:
-        base64_data = base64_data.split(",")[1]  # rimuove "data:image/png;base64,..."
+    """
+    Carica un'immagine codificata in base64 nello storage Supabase e restituisce l'URL pubblico.
+    - base64_data: stringa con o senza prefisso data:image/...
+    - user_id: id dell'utente (usato come prefisso cartella)
+    - label: 'subject', 'background' o 'logo'
+    """
 
-    binary = base64.b64decode(base64_data)
+    # 🔹 rimuove eventuale prefisso data:image/...
+    if "," in base64_data:
+        base64_data = base64_data.split(",")[1]
+
+    try:
+        binary = base64.b64decode(base64_data)
+    except Exception as e:
+        raise ValueError(f"Base64 non valido: {e}")
+
+    # 🔹 nome file unico
     filename = f"{user_id}/{label}-{uuid.uuid4().hex}.png"
 
-    supabase_client.storage.from_("gigi-gorilla").upload(
-        path=filename,
-        file=binary,
-        file_options={"content-type": "image/png"},
-        upsert=True
-    )
+    try:
+        # upload senza upsert (non supportato dalla SDK Python)
+        supabase_client.storage.from_("gigi-gorilla").upload(
+            path=filename,
+            file=binary,
+            file_options={"content-type": "image/png"}
+        )
+    except Exception as e:
+        raise RuntimeError(f"Errore upload su Supabase: {e}")
 
-    return supabase_client.storage.from_("gigi-gorilla").get_public_url(filename)
+    # 🔹 genera URL pubblico
+    try:
+        public_url = supabase_client.storage.from_("gigi-gorilla").get_public_url(filename)
+    except Exception as e:
+        raise RuntimeError(f"Errore generazione URL pubblico: {e}")
+
+    return public_url
+
 
 
 async def genera_varianti_prompt(prompt_base: str, num_variants: int = 3) -> list[str]:
