@@ -673,7 +673,8 @@ async def _gemini_generate_image_sync(
     start_image_bytes: Optional[bytes] = None,
     subject_image_url: Optional[str] = None,
     background_image_url: Optional[str] = None,
-    num_images: int = 1
+    num_images: int = 1,
+    size: Optional[str] = None
 ) -> list[bytes]:
     """
     Genera una o più immagini con Gemini.
@@ -712,6 +713,9 @@ async def _gemini_generate_image_sync(
                 "contents": [{"parts": parts}],
                 "generationConfig": {"candidateCount": num_images},
             }
+            
+            if size:
+                payload["generationConfig"]["size"] = size  # 👈 qui
 
             async with httpx.AsyncClient(timeout=120) as client:
                 r = await client.post(
