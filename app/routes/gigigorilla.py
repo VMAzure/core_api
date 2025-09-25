@@ -66,43 +66,20 @@ class GigiJobStatus(BaseModel):
     error_message: str | None = None
 
 def upload_base64_to_supabase(base64_data: str, user_id: str, label: str) -> str:
-    """
-    Carica un'immagine codificata in base64 nello storage Supabase e restituisce l'URL pubblico.
-    - base64_data: stringa con o senza prefisso data:image/...
-    - user_id: id dell'utente (usato come prefisso cartella)
-    - label: 'subject', 'background' o 'logo'
-    """
-
-    # 🔹 rimuove eventuale prefisso data:image/...
     if "," in base64_data:
-        base64_data = base64_data.split(",")[1]
+        base64_data = base64_data.split(",")[1]  # rimuove "data:image/png;base64,..."
 
-    try:
-        binary = base64.b64decode(base64_data)
-    except Exception as e:
-        raise ValueError(f"Base64 non valido: {e}")
-
-    # 🔹 nome file unico
+    binary = base64.b64decode(base64_data)
     filename = f"{user_id}/{label}-{uuid.uuid4().hex}.png"
 
-    try:
-        # upload senza upsert (non supportato dalla SDK Python)
-        supabase_client.storage.from_("gigi-gorilla").upload(
-            path=filename,
-            file=binary,
-            file_options={"content-type": "image/png"}
-        )
-    except Exception as e:
-        raise RuntimeError(f"Errore upload su Supabase: {e}")
+    supabase_client.storage.from_("gigi-gorilla").upload(
+        path=filename,
+        file=binary,
+        file_options={"content-type": "image/png"},
+        upsert=True
+    )
 
-    # 🔹 genera URL pubblico
-    try:
-        public_url = supabase_client.storage.from_("gigi-gorilla").get_public_url(filename)
-    except Exception as e:
-        raise RuntimeError(f"Errore generazione URL pubblico: {e}")
-
-    return public_url
-
+    return supabase_client.storage.from_("gigi-gorilla").get_public_url(filename)
 
 
 async def genera_varianti_prompt(prompt_base: str, num_variants: int = 3) -> list[str]:
@@ -182,18 +159,30 @@ async def create_job(
     size = SIZE_MAP[payload.orientation]
     storage_prefix = f"{user.id}/"
 
-    subject_url = payload.subject_url
-    background_url = payload.background_url
-    logo_url = payload.logo_url
-
-    if payload.subject_base64:
+    # subject (img_1)
+    if payload.subject_url:
+        subject_url = payload.subject_url
+    elif payload.subject_base64:
         subject_url = upload_base64_to_supabase(payload.subject_base64, user.id, "subject")
+    else:
+        subject_url = None
 
-    if payload.background_base64:
+    # background (img_2)
+    if payload.background_url:
+        background_url = payload.background_url
+    elif payload.background_base64:
         background_url = upload_base64_to_supabase(payload.background_base64, user.id, "background")
+    else:
+        background_url = None
 
-    if payload.logo_base64:
+    # logo
+    if payload.logo_url:
+        logo_url = payload.logo_url
+    elif payload.logo_base64:
         logo_url = upload_base64_to_supabase(payload.logo_base64, user.id, "logo")
+    else:
+        logo_url = None
+
 
 
     job_ids = []
