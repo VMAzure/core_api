@@ -67,19 +67,20 @@ class GigiJobStatus(BaseModel):
 
 def upload_base64_to_supabase(base64_data: str, user_id: str, label: str) -> str:
     if "," in base64_data:
-        base64_data = base64_data.split(",")[1]  # rimuove "data:image/png;base64,..."
+        base64_data = base64_data.split(",")[1]
 
     binary = base64.b64decode(base64_data)
     filename = f"{user_id}/{label}-{uuid.uuid4().hex}.png"
 
+    # ✅ RIMUOVI upsert=True, non è supportato in supabase-py
     supabase_client.storage.from_("gigi-gorilla").upload(
         path=filename,
         file=binary,
-        file_options={"content-type": "image/png"},
-        upsert=True
+        file_options={"content-type": "image/png"}
     )
 
     return supabase_client.storage.from_("gigi-gorilla").get_public_url(filename)
+
 
 
 async def genera_varianti_prompt(prompt_base: str, num_variants: int = 3) -> list[str]:
