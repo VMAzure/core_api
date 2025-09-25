@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException, Body
 from fastapi_jwt_auth import AuthJWT
 from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy.orm import Session
@@ -32,26 +32,26 @@ SIZE_MAP = {
 }
 
 # --------- MODELS ----------
-
 class GigiJobCreate(BaseModel):
     prompt: str = Field(min_length=3)
 
-    # Modalità URL (attuale)
+    # URL (opzionali)
     subject_url: HttpUrl | None = None
     background_url: HttpUrl | None = None
     logo_url: HttpUrl | None = None
 
-    # Modalità base64 (nuova)
+    # base64 (opzionali)
     subject_base64: str | None = None
     background_base64: str | None = None
     logo_base64: str | None = None
 
-    logo_height: int = 100
-    logo_offset_y: int = 100
-    num_images: int = Field(1, ge=1, le=4)
-    quality: str = "medium"
-    orientation: str = "square"
-    output_format: str = "png"
+    # tutto opzionale
+    logo_height: int | None = None
+    logo_offset_y: int | None = None
+    num_images: int | None = None
+    quality: str | None = None
+    orientation: str | None = None
+    output_format: str | None = None
 
 
 class GigiJobCreated(BaseModel):
@@ -80,7 +80,6 @@ def upload_base64_to_supabase(base64_data: str, user_id: str, label: str) -> str
     )
 
     return supabase_client.storage.from_("gigi-gorilla").get_public_url(filename)
-
 
 
 async def genera_varianti_prompt(prompt_base: str, num_variants: int = 3) -> list[str]:
@@ -113,12 +112,11 @@ async def genera_varianti_prompt(prompt_base: str, num_variants: int = 3) -> lis
 
 
 # --------- CREATE JOB ----------
-
 @router.post("/jobs", response_model=GigiJobCreated)
 async def create_job(
-    payload: GigiJobCreate,
+    payload: dict = Body(...),
     Authorize: AuthJWT = Depends(),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     Authorize.jwt_required()
     email = Authorize.get_jwt_subject()
@@ -126,72 +124,79 @@ async def create_job(
     if not user:
         raise HTTPException(403, "Utente non trovato")
 
-    q = payload.quality.lower()
+    # --- defaults e validazioni leggere ---
+    prompt = (payload.get("prompt") or "").strip()
+    if len(prompt) < 3:
+        raise HTTPException(422, "prompt mancante o troppo corto")
+
+    q = str((payload.get("quality") or "medium")).lower()
     if q not in ALLOWED_Q:
         raise HTTPException(400, "quality non valida")
     q = {"standard": "medium", "hd": "high"}.get(q, q)
 
-    if payload.orientation not in ALLOWED_ORIENT:
+    o = payload.get("orientation") or "square"
+    if o not in ALLOWED_ORIENT:
         raise HTTPException(400, "orientation non valida")
 
-    # scala credito se dealer
+    fmt = payload.get("output_format") or "png"
+
+    try:
+        n_images = int(payload.get("num_images") or 1)
+    except Exception:
+        n_images = 1
+    if n_images < 1 or n_images > 4:
+        n_images = 1
+
+    try:
+        lh = int(payload.get("logo_height") or 100)
+    except Exception:
+        lh = 100
+    try:
+        lo = int(payload.get("logo_offset_y") or 100)
+    except Exception:
+        lo = 100
+
+    # --- credito dealer ---
     if is_dealer_user(user):
-        tot = GIGI_CREDIT_COST * payload.num_images
+        tot = GIGI_CREDIT_COST * n_images
         if (user.credit or 0) < tot:
             raise HTTPException(402, "Credito insufficiente")
         user.credit = float(user.credit or 0) - tot
         from app.models import CreditTransaction
-        db.add(
-            CreditTransaction(
-                dealer_id=user.id,
-                amount=-tot,
-                transaction_type="USE",
-                note=f"Gigi Gorilla x{payload.num_images}",
-            )
-        )
+        db.add(CreditTransaction(
+            dealer_id=user.id,
+            amount=-tot,
+            transaction_type="USE",
+            note=f"Gigi Gorilla x{n_images}",
+        ))
 
-    # --- Prompt variants se num_images > 1 ---
-    if payload.num_images > 1:
-        # genera N prompt diversi usando GPT
-        prompt_variants = await genera_varianti_prompt(payload.prompt, payload.num_images)
+    # --- varianti prompt ---
+    if n_images > 1:
+        prompt_variants = await genera_varianti_prompt(prompt, n_images)
     else:
-        prompt_variants = [payload.prompt]
+        prompt_variants = [prompt]
 
-    size = SIZE_MAP[payload.orientation]
-    storage_prefix = f"{user.id}/"
+    # --- risoluzione sorgenti (tutto opzionale) ---
+    subject_url = payload.get("subject_url")
+    background_url = payload.get("background_url")
+    logo_url = payload.get("logo_url")
 
-    # subject (img_1)
-    if payload.subject_url:
-        subject_url = payload.subject_url
-    elif payload.subject_base64:
-        subject_url = upload_base64_to_supabase(payload.subject_base64, user.id, "subject")
-    else:
-        subject_url = None
+    sb64 = payload.get("subject_base64")
+    bb64 = payload.get("background_base64")
+    lb64 = payload.get("logo_base64")
 
-    # background (img_2)
-    if payload.background_url:
-        background_url = payload.background_url
-    elif payload.background_base64:
-        background_url = upload_base64_to_supabase(payload.background_base64, user.id, "background")
-    else:
-        background_url = None
+    if not subject_url and sb64:
+        subject_url = upload_base64_to_supabase(sb64, str(user.id), "subject")
+    if not background_url and bb64:
+        background_url = upload_base64_to_supabase(bb64, str(user.id), "background")
+    if not logo_url and lb64:
+        logo_url = upload_base64_to_supabase(lb64, str(user.id), "logo")
 
-    # logo
-    if payload.logo_url:
-        logo_url = payload.logo_url
-    elif payload.logo_base64:
-        logo_url = upload_base64_to_supabase(payload.logo_base64, user.id, "logo")
-    else:
-        logo_url = None
-
-
-
+    # --- insert job(s) ---
     job_ids = []
-
-    for i, prompt_variant in enumerate(prompt_variants):
+    for pvar in prompt_variants:
         job_id = db.execute(
-            text(
-                """
+            text("""
                 insert into public.gigi_gorilla_jobs
                   (user_id, prompt, subject_url, background_url, logo_url,
                    logo_height, logo_offset_y, num_images, quality, orientation,
@@ -203,29 +208,26 @@ async def create_job(
                         else '9:16' end,
                    :size, 'queued', 'gigi-gorilla', :pref)
                 returning id
-                """
-            ),
+            """),
             {
                 "uid": user.id,
-                "p": prompt_variant,    # 👈 usa prompt variato
+                "p": pvar,
                 "s": subject_url,
                 "b": background_url,
                 "l": logo_url,
-                "lh": payload.logo_height,
-                "lo": payload.logo_offset_y,
-                "n": 1,                 # 👈 forza sempre 1 per Gemini
+                "lh": lh,
+                "lo": lo,
+                "n": 1,                       # 1 output per job
                 "q": q,
-                "o": payload.orientation,
-                "f": payload.output_format,
-                "size": SIZE_MAP[payload.orientation],
+                "o": o,
+                "f": fmt,
+                "size": SIZE_MAP[o],
                 "pref": f"{user.id}/",
             },
         ).scalar()
-
         job_ids.append(job_id)
 
     db.commit()
-
     return {"job_ids": job_ids, "status": "queued"}
 
 # --------- JOB STATUS ----------
