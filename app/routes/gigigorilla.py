@@ -83,47 +83,28 @@ def upload_base64_to_supabase(base64_data: str, user_id: str, label: str) -> str
 
 import re
 
+
 def normalize_key(s: str) -> str:
-    """Normalizza una stringa per il matching: lowercase, senza spazi doppi."""
     return re.sub(r"\s+", " ", s.strip().lower())
 
-
-def expand_aliases(prompt: str, characters: list[dict]) -> str:
+def expand_aliases(prompt: str, db=None, characters: list[dict] | None = None) -> str:
     """
     Sostituisce nel prompt gli alias definiti in ai_characters.
-    characters: lista di dict con {"name": ..., "description": ..., "aliases": [...]}
+    - Se viene passata `characters`, la usa (lista di dict con name, description, aliases).
+    - Altrimenti legge i dati dal DB.
     """
-    normalized_prompt = prompt
-    prompt_lower = normalize_key(prompt)
-
-    for char in characters:
-        targets = [char["name"]] + (char.get("aliases") or [])
-        targets = [normalize_key(t) for t in targets]
-
-        for alias in targets:
-            if alias in prompt_lower:
-                pattern = re.compile(re.escape(alias), re.IGNORECASE)
-                normalized_prompt = pattern.sub(char["description"], normalized_prompt)
-
-    return normalized_prompt
-
-
-
-def normalize_key(s: str) -> str:
-    return re.sub(r"\s+", " ", s.strip().lower())
-
-def expand_aliases(prompt: str, db) -> str:
-    """Sostituisce eventuali alias di personaggi definiti in ai_characters"""
-    rows = db.execute(
-        text("select name, description, aliases from public.ai_characters where is_active = true")
-    ).mappings().all()
+    if characters is None:
+        if db is None:
+            raise ValueError("Serve db o lista characters")
+        characters = db.execute(
+            text("select name, description, aliases from public.ai_characters where is_active = true")
+        ).mappings().all()
 
     expanded = prompt
     prompt_norm = normalize_key(prompt)
 
-    for r in rows:
-        # prepara lista di target: nome + eventuali alias
-        targets = [r["name"]] + (r["aliases"] or [])
+    for r in characters:
+        targets = [r["name"]] + (r.get("aliases") or [])
         targets = [normalize_key(t) for t in targets]
 
         for alias in targets:
@@ -162,7 +143,6 @@ async def genera_varianti_prompt(prompt_base: str, num_variants: int = 3) -> lis
     variants = [line.strip("-•*– ").strip() for line in raw.splitlines() if line.strip()]
     return variants[:num_variants] if variants else [prompt_base] * num_variants
 
-
 # --------- CREATE JOB ----------
 @router.post("/jobs", response_model=GigiJobCreated)
 async def create_job(
@@ -176,14 +156,15 @@ async def create_job(
     if not user:
         raise HTTPException(403, "Utente non trovato")
 
-    # --- defaults e validazioni leggere ---
-    prompt = (payload.get("prompt") or "").strip()
-    if len(prompt) < 3:
+    # --- prompt originale dell’utente ---
+    prompt_user = (payload.get("prompt") or "").strip()
+    if len(prompt_user) < 3:
         raise HTTPException(422, "prompt mancante o troppo corto")
 
-    prompt = expand_aliases(prompt, db)
+    # --- prompt espanso (solo per la generazione) ---
+    prompt_expanded = expand_aliases(prompt_user, db=db)
 
-
+    # --- quality/orientation/output_format ---
     q = str((payload.get("quality") or "medium")).lower()
     if q not in ALLOWED_Q:
         raise HTTPException(400, "quality non valida")
@@ -227,14 +208,10 @@ async def create_job(
 
     # --- varianti prompt ---
     if n_images > 1:
-    # chiedi a GPT (n_images - 1) varianti
-        gpt_variants = await genera_varianti_prompt(prompt, n_images - 1)
-        # metti sempre il prompt originale in prima posizione
-        prompt_variants = [prompt] + gpt_variants
+        gpt_variants = await genera_varianti_prompt(prompt_expanded, n_images - 1)
+        prompt_variants_expanded = [prompt_expanded] + gpt_variants
     else:
-        # singola immagine col prompt originale
-        prompt_variants = [prompt]
-
+        prompt_variants_expanded = [prompt_expanded]
 
     # --- risoluzione sorgenti (tutto opzionale) ---
     subject_url = payload.get("subject_url")
@@ -254,7 +231,7 @@ async def create_job(
 
     # --- insert job(s) ---
     job_ids = []
-    for pvar in prompt_variants:
+    for pvar in prompt_variants_expanded:
         job_id = db.execute(
             text("""
                 insert into public.gigi_gorilla_jobs
@@ -262,7 +239,7 @@ async def create_job(
                    logo_height, logo_offset_y, num_images, quality, orientation,
                    output_format, aspect_ratio, size, status, bucket, storage_prefix)
                 values
-                  (:uid, :p, :s, :b, :l, :lh, :lo, :n, :q, :o, :f,
+                  (:uid, :p_user, :s, :b, :l, :lh, :lo, :n, :q, :o, :f,
                    case when :o='square' then '1:1'
                         when :o='landscape' then '16:9'
                         else '9:16' end,
@@ -271,13 +248,13 @@ async def create_job(
             """),
             {
                 "uid": user.id,
-                "p": pvar,
+                "p_user": prompt_user,   # 👈 salva SEMPRE il prompt originale
                 "s": subject_url,
                 "b": background_url,
                 "l": logo_url,
                 "lh": lh,
                 "lo": lo,
-                "n": 1,                       # 1 output per job
+                "n": 1,
                 "q": q,
                 "o": o,
                 "f": fmt,
@@ -289,6 +266,8 @@ async def create_job(
 
     db.commit()
     return {"job_ids": job_ids, "status": "queued"}
+
+
 
 # --------- JOB STATUS ----------
 

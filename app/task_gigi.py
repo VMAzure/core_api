@@ -5,6 +5,7 @@ from PIL import Image
 from sqlalchemy.orm import Session
 from sqlalchemy import text  # ✅ fix SQLAlchemy
 from app.database import SessionLocal, supabase_client
+from app.routes.gigigorilla import expand_aliases  
 from app.routes.openai_config import (
     _gemini_generate_image_sync,
     _fetch_image_base64_from_url,
@@ -50,8 +51,15 @@ async def processa_gigi_gorilla_jobs():
 
             try:
                 _gemini_assert_api()
+
+                # 👇 espandi alias PRIMA della generazione, fallback al prompt originale in caso di errore
+                try:
+                    prompt_for_engine = expand_aliases(j.prompt or "", db=db)
+                except Exception:
+                    prompt_for_engine = j.prompt
+
                 imgs = await _gemini_generate_image_sync(
-                    j.prompt,
+                    prompt_for_engine,
                     subject_image_url=j.subject_url,
                     background_image_url=j.background_url,
                     num_images=j.num_images
@@ -111,3 +119,4 @@ async def processa_gigi_gorilla_jobs():
 
     finally:
         db.close()
+
