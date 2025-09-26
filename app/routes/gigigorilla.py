@@ -81,6 +81,58 @@ def upload_base64_to_supabase(base64_data: str, user_id: str, label: str) -> str
 
     return supabase_client.storage.from_("gigi-gorilla").get_public_url(filename)
 
+import re
+
+def normalize_key(s: str) -> str:
+    """Normalizza una stringa per il matching: lowercase, senza spazi doppi."""
+    return re.sub(r"\s+", " ", s.strip().lower())
+
+
+def expand_aliases(prompt: str, characters: list[dict]) -> str:
+    """
+    Sostituisce nel prompt gli alias definiti in ai_characters.
+    characters: lista di dict con {"name": ..., "description": ..., "aliases": [...]}
+    """
+    normalized_prompt = prompt
+    prompt_lower = normalize_key(prompt)
+
+    for char in characters:
+        targets = [char["name"]] + (char.get("aliases") or [])
+        targets = [normalize_key(t) for t in targets]
+
+        for alias in targets:
+            if alias in prompt_lower:
+                pattern = re.compile(re.escape(alias), re.IGNORECASE)
+                normalized_prompt = pattern.sub(char["description"], normalized_prompt)
+
+    return normalized_prompt
+
+
+
+def normalize_key(s: str) -> str:
+    return re.sub(r"\s+", " ", s.strip().lower())
+
+def expand_aliases(prompt: str, db) -> str:
+    """Sostituisce eventuali alias di personaggi definiti in ai_characters"""
+    rows = db.execute(
+        text("select name, description, aliases from public.ai_characters where is_active = true")
+    ).mappings().all()
+
+    expanded = prompt
+    prompt_norm = normalize_key(prompt)
+
+    for r in rows:
+        # prepara lista di target: nome + eventuali alias
+        targets = [r["name"]] + (r["aliases"] or [])
+        targets = [normalize_key(t) for t in targets]
+
+        for alias in targets:
+            if alias in prompt_norm:
+                pattern = re.compile(re.escape(alias), re.IGNORECASE)
+                expanded = pattern.sub(r["description"], expanded)
+
+    return expanded
+
 
 async def genera_varianti_prompt(prompt_base: str, num_variants: int = 3) -> list[str]:
     """
@@ -128,6 +180,9 @@ async def create_job(
     prompt = (payload.get("prompt") or "").strip()
     if len(prompt) < 3:
         raise HTTPException(422, "prompt mancante o troppo corto")
+
+    prompt = expand_aliases(prompt, db)
+
 
     q = str((payload.get("quality") or "medium")).lower()
     if q not in ALLOWED_Q:

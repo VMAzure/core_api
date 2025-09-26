@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, ForeignKey, func, SmallInteger, Boolean, Numeric, Date, TIMESTAMP, text
+from sqlalchemy import ARRAY, Column, Integer, String, Text, Float, DateTime, ForeignKey, func, SmallInteger, Boolean, Numeric, Date, TIMESTAMP, text
 from sqlalchemy import UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime, date, timedelta
@@ -9,8 +9,6 @@ from pydantic import BaseModel, EmailStr, Field, HttpUrl
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
-
-
 
 if TYPE_CHECKING:
     from app.models import AssignedServices
@@ -1616,3 +1614,19 @@ class AIChatLogAuto(Base):
     id_auto = Column(UUID(as_uuid=True), ForeignKey("public.azlease_usatoauto.id", ondelete="CASCADE"), primary_key=True)
 
     chat_log = relationship("AIChatLog", back_populates="autos")
+
+class AICharacter(Base):
+    __tablename__ = "ai_characters"
+    __table_args__ = {"schema": "public"}
+
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False, unique=True, index=True)
+    description = Column(Text, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    tags = Column(ARRAY(String), default=list)
+    aliases = Column(ARRAY(String), default=list)  # nuove varianti per lookup
+
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
