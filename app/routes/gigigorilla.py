@@ -172,9 +172,14 @@ async def create_job(
 
     # --- varianti prompt ---
     if n_images > 1:
-        prompt_variants = await genera_varianti_prompt(prompt, n_images)
+    # chiedi a GPT (n_images - 1) varianti
+        gpt_variants = await genera_varianti_prompt(prompt, n_images - 1)
+        # metti sempre il prompt originale in prima posizione
+        prompt_variants = [prompt] + gpt_variants
     else:
+        # singola immagine col prompt originale
         prompt_variants = [prompt]
+
 
     # --- risoluzione sorgenti (tutto opzionale) ---
     subject_url = payload.get("subject_url")
