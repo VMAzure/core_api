@@ -694,66 +694,51 @@ async def upload_servizio_image(
 async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
     settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
     if not settings or not settings.google_place_id:
-        raise HTTPException(status_code=404, detail="Dealer o place_id non trovato")
+        raise HTTPException(status_code=404, detail="Dealer non trovato o Place ID mancante")
 
     place_id = settings.google_place_id
+
     url = f"https://places.googleapis.com/v1/places/{place_id}"
+    params = {
+        "languageCode": "it",  # ✅ forziamo l'italiano
+        "fields": "rating,userRatingCount,reviews"
+    }
     headers = {
-        "X-Goog-Api-Key": GOOGLE_API_KEY,
-        "X-Goog-FieldMask": (
-            "rating,userRatingCount,"
-            "reviews.rating,"
-            "reviews.relativePublishTimeDescription,"
-            "reviews.authorAttribution.displayName,"
-            "reviews.authorAttribution.photoUri,"
-            "reviews.authorAttribution.uri,"
-            "reviews.text"
-        )
+        "X-Goog-Api-Key": GOOGLE_API_KEY
     }
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.get(url, headers=headers)
+            res = await client.get(url, params=params, headers=headers)
             res.raise_for_status()
             data = res.json()
-    except Exception as e:
+
+        reviews_data = data.get("reviews", [])
+        reviews = []
+
+        for r in reviews_data[:5]:  # massimo 5
+            text = r.get("originalText", {}).get("text") or r.get("text", {}).get("text", "")
+            if not text.strip():
+                continue
+
+            reviews.append({
+                "author": r.get("authorAttribution", {}).get("displayName", ""),
+                "photo": r.get("authorAttribution", {}).get("photoUri", ""),
+                "profile_url": r.get("authorAttribution", {}).get("uri", ""),
+                "rating": r.get("rating", None),
+                "text": text.strip(),
+                "published": r.get("relativePublishTimeDescription", "")
+            })
+
+        return {
+            "place_id": place_id,
+            "rating": data.get("rating", None),
+            "total_reviews": data.get("userRatingCount", 0),
+            "reviews": reviews,
+            "total_textual": len(reviews)
+        }
+
+    except httpx.HTTPError as e:
         logger.warning(f"⚠️ Google Reviews error: {e}")
-        raise HTTPException(status_code=502, detail="Errore nel recupero recensioni da Google")
-
-    # rating aggregato
-    avg = data.get("rating", 0)
-    tot = data.get("userRatingCount", 0)
-
-    # recensioni testuali
-    raw = (data.get("reviews") or [])[:5]
-    reviews = []
-    for r in raw:
-        t = r.get("text")
-        if isinstance(t, dict):
-            txt = (t.get("text") or "").strip()
-        elif isinstance(t, str):
-            txt = t.strip()
-        else:
-            txt = ""
-        if not txt:
-            continue
-
-        a = r.get("authorAttribution") or {}
-        reviews.append({
-            "author": a.get("displayName") or "Utente",
-            "photo": a.get("photoUri"),
-            "profile_url": a.get("uri"),
-            "rating": r.get("rating"),
-            "text": txt,
-            "published": r.get("relativePublishTimeDescription") or ""
-        })
-
-    return {
-        "place_id": place_id,
-        "rating": avg,
-        "total_reviews": tot,
-        "total_textual": len(reviews),
-        "reviews": reviews
-    }
-
+        raise HTTPException(status_code=502, detail="Errore comunicazione Google Places API")
 
