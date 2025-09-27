@@ -697,11 +697,10 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Dealer o place_id non trovato")
 
     place_id = settings.google_place_id
-
     url = f"https://places.googleapis.com/v1/places/{place_id}"
     headers = {
         "X-Goog-Api-Key": GOOGLE_API_KEY,
-        "X-Goog-FieldMask": "reviews"
+        "X-Goog-FieldMask": "reviews,rating,userRatingCount"
     }
 
     try:
@@ -714,23 +713,29 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail="Errore nel recupero recensioni da Google")
 
     reviews_raw = data.get("reviews", [])[:5]
+    average_rating = data.get("rating", 0)
+    total_reviews = data.get("userRatingCount", 0)
 
     reviews = []
     for r in reviews_raw:
-        a = r.get("authorAttribution", {})
         text = r.get("text")
+        if not isinstance(text, str) or not text.strip():
+            continue  # salta recensioni vuote
+
+        a = r.get("authorAttribution", {})
         reviews.append({
             "author": a.get("displayName", "Utente"),
             "photo": a.get("photoUri"),
             "profile_url": a.get("uri"),
             "rating": r.get("rating"),
-            "text": text.strip() if isinstance(text, str) else "",
+            "text": text.strip(),
             "published": r.get("relativePublishTimeDescription", "")
         })
 
-
     return {
         "place_id": place_id,
-        "total": len(reviews),
+        "rating": average_rating,
+        "total_reviews": total_reviews,
+        "total_textual": len(reviews),
         "reviews": reviews
     }
