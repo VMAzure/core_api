@@ -701,7 +701,6 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
     headers = {
         "X-Goog-Api-Key": GOOGLE_API_KEY,
         "X-Goog-FieldMask": (
-            "rating,userRatingCount,"
             "reviews.rating,"
             "reviews.relativePublishTimeDescription,"
             "reviews.authorAttribution.displayName,"
@@ -713,17 +712,14 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.get(url, headers=headers)  # ⛔ NO params!
+            res = await client.get(url, headers=headers)  # ⛔ NO PARAMS!
             res.raise_for_status()
             data = res.json()
     except Exception as e:
-        logger.warning(f"⚠️ Google Reviews error: {e}")
+        logger.warning(f"Google Reviews error: {e}")
         raise HTTPException(status_code=502, detail="Errore nel recupero recensioni da Google")
 
-    avg = data.get("rating", 0)
-    tot = data.get("userRatingCount", 0)
     raw = (data.get("reviews") or [])[:5]
-
     reviews = []
     for r in raw:
         text_raw = r.get("text")
@@ -733,7 +729,6 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
             txt = text_raw.strip()
         else:
             txt = ""
-
         if not txt:
             continue
 
@@ -749,9 +744,8 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
 
     return {
         "place_id": place_id,
-        "rating": avg,
-        "total_reviews": tot,
-        "total_textual": len(reviews),
+        "total": len(reviews),
         "reviews": reviews
     }
+
 
