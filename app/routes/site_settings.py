@@ -700,8 +700,9 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
 
     url = f"https://places.googleapis.com/v1/places/{place_id}"
     params = {
-        "languageCode": "it",  # ✅ forziamo l'italiano
-        "fields": "rating,userRatingCount,reviews"
+        "languageCode": "it",  
+        # aggiungiamo anche la location
+        "fields": "rating,userRatingCount,reviews,location"
     }
     headers = {
         "X-Goog-Api-Key": GOOGLE_API_KEY
@@ -716,7 +717,7 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
         reviews_data = data.get("reviews", [])
         reviews = []
 
-        for r in reviews_data[:5]:  # massimo 5
+        for r in reviews_data[:5]:  # massimo 5 recensioni
             text = r.get("originalText", {}).get("text") or r.get("text", {}).get("text", "")
             if not text.strip():
                 continue
@@ -725,20 +726,28 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
                 "author": r.get("authorAttribution", {}).get("displayName", ""),
                 "photo": r.get("authorAttribution", {}).get("photoUri", ""),
                 "profile_url": r.get("authorAttribution", {}).get("uri", ""),
-                "rating": r.get("rating", None),
+                "rating": r.get("rating"),
                 "text": text.strip(),
                 "published": r.get("relativePublishTimeDescription", "")
             })
 
+        # estrai lat/lng se disponibili
+        lat = None
+        lng = None
+        if "location" in data:
+            lat = data["location"].get("latitude")
+            lng = data["location"].get("longitude")
+
         return {
             "place_id": place_id,
-            "rating": data.get("rating", None),
+            "rating": data.get("rating"),
             "total_reviews": data.get("userRatingCount", 0),
             "reviews": reviews,
-            "total_textual": len(reviews)
+            "total_textual": len(reviews),
+            "lat": lat,
+            "lng": lng
         }
 
     except httpx.HTTPError as e:
         logger.warning(f"⚠️ Google Reviews error: {e}")
         raise HTTPException(status_code=502, detail="Errore comunicazione Google Places API")
-
