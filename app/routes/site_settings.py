@@ -718,14 +718,16 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
     reviews = []
     for r in reviews_raw:
         a = r.get("authorAttribution", {})
+        text = r.get("text")
         reviews.append({
             "author": a.get("displayName", "Utente"),
             "photo": a.get("photoUri"),
             "profile_url": a.get("uri"),
             "rating": r.get("rating"),
-            "text": r.get("text", "").strip(),
+            "text": text.strip() if isinstance(text, str) else "",
             "published": r.get("relativePublishTimeDescription", "")
         })
+
 
     return {
         "place_id": place_id,
