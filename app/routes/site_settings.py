@@ -701,6 +701,7 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
     headers = {
         "X-Goog-Api-Key": GOOGLE_API_KEY,
         "X-Goog-FieldMask": (
+            "rating,userRatingCount,"
             "reviews.rating,"
             "reviews.relativePublishTimeDescription,"
             "reviews.authorAttribution.displayName,"
@@ -712,21 +713,26 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.get(url, headers=headers)  # ⛔ NO PARAMS!
+            res = await client.get(url, headers=headers)
             res.raise_for_status()
             data = res.json()
     except Exception as e:
-        logger.warning(f"Google Reviews error: {e}")
+        logger.warning(f"⚠️ Google Reviews error: {e}")
         raise HTTPException(status_code=502, detail="Errore nel recupero recensioni da Google")
 
+    # rating aggregato
+    avg = data.get("rating", 0)
+    tot = data.get("userRatingCount", 0)
+
+    # recensioni testuali
     raw = (data.get("reviews") or [])[:5]
     reviews = []
     for r in raw:
-        text_raw = r.get("text")
-        if isinstance(text_raw, dict):
-            txt = (text_raw.get("text") or "").strip()
-        elif isinstance(text_raw, str):
-            txt = text_raw.strip()
+        t = r.get("text")
+        if isinstance(t, dict):
+            txt = (t.get("text") or "").strip()
+        elif isinstance(t, str):
+            txt = t.strip()
         else:
             txt = ""
         if not txt:
@@ -744,7 +750,9 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
 
     return {
         "place_id": place_id,
-        "total": len(reviews),
+        "rating": avg,
+        "total_reviews": tot,
+        "total_textual": len(reviews),
         "reviews": reviews
     }
 
