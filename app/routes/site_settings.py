@@ -704,11 +704,10 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
             "rating,userRatingCount,"
             "reviews.rating,"
             "reviews.relativePublishTimeDescription,"
-            "reviews.authorAttribution.displayName,"
-            "reviews.authorAttribution.photoUri,"
-            "reviews.authorAttribution.uri,"
+            "reviews.authorAttribution,"
             "reviews.text"
         )
+
     }
     params = {
         "languageCode": "it",
@@ -731,11 +730,11 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
     reviews = []
     for r in raw:
         # text può essere dict (v1) oppure stringa (fallback future-proof)
-        text_raw = r.get("text")
-        if isinstance(text_raw, dict):
-            txt = (text_raw.get("text") or "").strip()
-        elif isinstance(text_raw, str):
-            txt = text_raw.strip()
+        text_obj = r.get("text")
+        if isinstance(text_obj, dict):
+            txt = (text_obj.get("text") or "").strip()
+        elif isinstance(text_obj, str):
+            txt = text_obj.strip()
         else:
             txt = ""
 
