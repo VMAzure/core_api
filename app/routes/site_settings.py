@@ -700,42 +700,59 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
     url = f"https://places.googleapis.com/v1/places/{place_id}"
     headers = {
         "X-Goog-Api-Key": GOOGLE_API_KEY,
-        "X-Goog-FieldMask": "reviews,rating,userRatingCount"
+        # chiedi campi espliciti (v1 richiede field mask precisa)
+        "X-Goog-FieldMask": (
+            "rating,userRatingCount,"
+            "reviews.authorAttribution.displayName,reviews.authorAttribution.photoUri,"
+            "reviews.authorAttribution.uri,reviews.rating,"
+            "reviews.relativePublishTimeDescription,reviews.text"
+        ),
+    }
+    params = {
+        "languageCode": "it",          # lingua
+        "reviewsSort": "NEWEST",       # o MOST_RELEVANT
     }
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.get(url, headers=headers)
+            res = await client.get(url, headers=headers, params=params)
             res.raise_for_status()
             data = res.json()
     except Exception as e:
-        logger.warning(f"⚠️ Errore Google Reviews: {e}")
-        raise HTTPException(status_code=502, detail="Errore nel recupero recensioni da Google")
+        logger.warning(f"Google Reviews error: {e}")
+        raise HTTPException(status_code=502, detail="Errore Google")
 
-    reviews_raw = data.get("reviews", [])[:5]
-    average_rating = data.get("rating", 0)
-    total_reviews = data.get("userRatingCount", 0)
+    avg = data.get("rating", 0)
+    tot = data.get("userRatingCount", 0)
+    raw = (data.get("reviews") or [])[:5]
+
+    def get_text(r):
+        t = r.get("text")
+        if isinstance(t, dict):
+            return (t.get("text") or "").strip()
+        if isinstance(t, str):
+            return t.strip()
+        return ""
 
     reviews = []
-    for r in reviews_raw:
-        text = r.get("text")
-        if not isinstance(text, str) or not text.strip():
-            continue  # salta recensioni vuote
-
-        a = r.get("authorAttribution", {})
+    for r in raw:
+        txt = get_text(r)
+        if not txt:
+            continue
+        a = r.get("authorAttribution", {}) or {}
         reviews.append({
-            "author": a.get("displayName", "Utente"),
+            "author": a.get("displayName") or "Utente",
             "photo": a.get("photoUri"),
             "profile_url": a.get("uri"),
             "rating": r.get("rating"),
-            "text": text.strip(),
-            "published": r.get("relativePublishTimeDescription", "")
+            "text": txt,
+            "published": r.get("relativePublishTimeDescription") or ""
         })
 
     return {
         "place_id": place_id,
-        "rating": average_rating,
-        "total_reviews": total_reviews,
+        "rating": avg,
+        "total_reviews": tot,
         "total_textual": len(reviews),
         "reviews": reviews
     }
