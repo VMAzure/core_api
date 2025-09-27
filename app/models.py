@@ -335,6 +335,8 @@ class SiteAdminSettings(Base):
     servizi_dettaglio = Column(JSONB, nullable=True)
     claim_hero = Column(String, nullable=True)
     subclaim_hero = Column(String, nullable=True)
+    google_place_id = Column(String, nullable=True)
+
 
 
 from sqlalchemy import Column, BigInteger, Boolean, Text, String, DateTime, func

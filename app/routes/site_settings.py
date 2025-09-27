@@ -13,9 +13,40 @@ from dotenv import load_dotenv
 from datetime import datetime
 from fastapi_jwt_auth import AuthJWT
 
+import httpx
+import os
+
+GOOGLE_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+
+async def resolve_place_id(query: str) -> str | None:
+    if not GOOGLE_API_KEY or not query:
+        return None
+
+    url = "https://places.googleapis.com/v1/places:searchText"
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_API_KEY,
+        "X-Goog-FieldMask": "places.id"
+    }
+    payload = { "textQuery": query }
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.post(url, headers=headers, json=payload)
+            res.raise_for_status()
+            data = res.json()
+            places = data.get("places", [])
+            if places:
+                return places[0]["id"]  # ✅ il nuovo place_id
+    except Exception as e:
+        logger.warning(f"⚠️ Errore resolve_place_id (v1): {e}")
+
+    return None
 
 
 router = APIRouter()
+
+
 
 class SMTPSettingsSchema(BaseModel):
     smtp_host: str
@@ -202,6 +233,13 @@ async def create_or_update_site_settings(
     data = payload.dict(exclude_unset=True)
     if data.get("prov_vetrina") is None:
         data["prov_vetrina"] = 4
+
+        # Aggiungi/ricalcola Google Place ID solo se non presente
+    if not settings or not settings.google_place_id:
+        query = payload.ragione_sociale or payload.contact_address
+        place_id = await resolve_place_id(query)
+        if place_id:
+            data["google_place_id"] = place_id
 
     if settings:
         for key, value in data.items():
@@ -546,8 +584,9 @@ async def get_site_settings_public(slug: str, db: Session = Depends(get_db)):
         "servizi_dettaglio": settings.servizi_dettaglio or {},
         "claim_hero": settings.claim_hero or "",
         "subclaim_hero": settings.subclaim_hero or "",
-        "avatar_url": (visible_user.avatar_url if visible_user else "") or "",  # <-- AGGIUNTO
-        "agency_type": settings.prov_vetrina or 0  # ✅ aggiunto qui
+        "avatar_url": (visible_user.avatar_url if visible_user else "") or "", 
+        "google_place_id": settings.google_place_id or "",
+        "agency_type": settings.prov_vetrina or 0  
 
     }
 
@@ -651,3 +690,45 @@ async def upload_servizio_image(
         "image_url": image_url
     }
 
+@router.get("/site-settings-public/{slug}/recensioni")
+async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
+    settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.slug == slug).first()
+    if not settings or not settings.google_place_id:
+        raise HTTPException(status_code=404, detail="Dealer o place_id non trovato")
+
+    place_id = settings.google_place_id
+
+    url = f"https://places.googleapis.com/v1/places/{place_id}"
+    headers = {
+        "X-Goog-Api-Key": GOOGLE_API_KEY,
+        "X-Goog-FieldMask": "reviews"
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            res = await client.get(url, headers=headers)
+            res.raise_for_status()
+            data = res.json()
+    except Exception as e:
+        logger.warning(f"⚠️ Errore Google Reviews: {e}")
+        raise HTTPException(status_code=502, detail="Errore nel recupero recensioni da Google")
+
+    reviews_raw = data.get("reviews", [])[:5]
+
+    reviews = []
+    for r in reviews_raw:
+        a = r.get("authorAttribution", {})
+        reviews.append({
+            "author": a.get("displayName", "Utente"),
+            "photo": a.get("photoUri"),
+            "profile_url": a.get("uri"),
+            "rating": r.get("rating"),
+            "text": r.get("text", "").strip(),
+            "published": r.get("relativePublishTimeDescription", "")
+        })
+
+    return {
+        "place_id": place_id,
+        "total": len(reviews),
+        "reviews": reviews
+    }
