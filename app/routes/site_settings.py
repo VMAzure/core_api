@@ -700,17 +700,19 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
     url = f"https://places.googleapis.com/v1/places/{place_id}"
     headers = {
         "X-Goog-Api-Key": GOOGLE_API_KEY,
-        # chiedi campi espliciti (v1 richiede field mask precisa)
         "X-Goog-FieldMask": (
             "rating,userRatingCount,"
-            "reviews.authorAttribution.displayName,reviews.authorAttribution.photoUri,"
-            "reviews.authorAttribution.uri,reviews.rating,"
-            "reviews.relativePublishTimeDescription,reviews.text"
-        ),
+            "reviews.rating,"
+            "reviews.relativePublishTimeDescription,"
+            "reviews.authorAttribution.displayName,"
+            "reviews.authorAttribution.photoUri,"
+            "reviews.authorAttribution.uri,"
+            "reviews.text"
+        )
     }
     params = {
-        "languageCode": "it",          # lingua
-        "reviewsSort": "NEWEST",       # o MOST_RELEVANT
+        "languageCode": "it",
+        "reviewsSort": "NEWEST"
     }
 
     try:
@@ -719,31 +721,32 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
             res.raise_for_status()
             data = res.json()
     except Exception as e:
-        logger.warning(f"Google Reviews error: {e}")
-        raise HTTPException(status_code=502, detail="Errore Google")
+        logger.warning(f"⚠️ Google Reviews error: {e}")
+        raise HTTPException(status_code=502, detail="Errore nel recupero recensioni da Google")
 
     avg = data.get("rating", 0)
     tot = data.get("userRatingCount", 0)
     raw = (data.get("reviews") or [])[:5]
 
-    def get_text(r):
-        t = r.get("text")
-        if isinstance(t, dict):
-            return (t.get("text") or "").strip()
-        if isinstance(t, str):
-            return t.strip()
-        return ""
-
     reviews = []
     for r in raw:
-        txt = get_text(r)
+        # text può essere dict (v1) oppure stringa (fallback future-proof)
+        text_raw = r.get("text")
+        if isinstance(text_raw, dict):
+            txt = (text_raw.get("text") or "").strip()
+        elif isinstance(text_raw, str):
+            txt = text_raw.strip()
+        else:
+            txt = ""
+
         if not txt:
             continue
-        a = r.get("authorAttribution", {}) or {}
+
+        author = r.get("authorAttribution") or {}
         reviews.append({
-            "author": a.get("displayName") or "Utente",
-            "photo": a.get("photoUri"),
-            "profile_url": a.get("uri"),
+            "author": author.get("displayName") or "Utente",
+            "photo": author.get("photoUri"),
+            "profile_url": author.get("uri"),
             "rating": r.get("rating"),
             "text": txt,
             "published": r.get("relativePublishTimeDescription") or ""
