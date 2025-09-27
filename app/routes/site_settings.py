@@ -704,19 +704,16 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
             "rating,userRatingCount,"
             "reviews.rating,"
             "reviews.relativePublishTimeDescription,"
-            "reviews.authorAttribution,"
+            "reviews.authorAttribution.displayName,"
+            "reviews.authorAttribution.photoUri,"
+            "reviews.authorAttribution.uri,"
             "reviews.text"
         )
-
-    }
-    params = {
-        "languageCode": "it",
-        "reviewsSort": "NEWEST"
     }
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            res = await client.get(url, headers=headers, params=params)
+            res = await client.get(url, headers=headers)  # ⛔ NO params!
             res.raise_for_status()
             data = res.json()
     except Exception as e:
@@ -729,23 +726,22 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
 
     reviews = []
     for r in raw:
-        # text può essere dict (v1) oppure stringa (fallback future-proof)
-        text_obj = r.get("text")
-        if isinstance(text_obj, dict):
-            txt = (text_obj.get("text") or "").strip()
-        elif isinstance(text_obj, str):
-            txt = text_obj.strip()
+        text_raw = r.get("text")
+        if isinstance(text_raw, dict):
+            txt = (text_raw.get("text") or "").strip()
+        elif isinstance(text_raw, str):
+            txt = text_raw.strip()
         else:
             txt = ""
 
         if not txt:
             continue
 
-        author = r.get("authorAttribution") or {}
+        a = r.get("authorAttribution") or {}
         reviews.append({
-            "author": author.get("displayName") or "Utente",
-            "photo": author.get("photoUri"),
-            "profile_url": author.get("uri"),
+            "author": a.get("displayName") or "Utente",
+            "photo": a.get("photoUri"),
+            "profile_url": a.get("uri"),
             "rating": r.get("rating"),
             "text": txt,
             "published": r.get("relativePublishTimeDescription") or ""
@@ -758,3 +754,4 @@ async def get_google_reviews(slug: str, db: Session = Depends(get_db)):
         "total_textual": len(reviews),
         "reviews": reviews
     }
+
