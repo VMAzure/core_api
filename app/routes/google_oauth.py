@@ -51,13 +51,9 @@ def google_login():
 
 @router.get("/callback")
 def google_callback(code: str, Authorize: AuthJWT = Depends()):
-    """
-    Scambia il code → token, legge userinfo, crea/recupera utente role='utente',
-    genera JWT interno e lo restituisce.
-    """
     _require_env()
 
-    # 1) token
+    # 1. Scambio code → token Google
     token_res = requests.post(
         OAUTH_TOKEN_URL,
         data={
@@ -71,13 +67,12 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
     )
     if not token_res.ok:
         raise HTTPException(status_code=400, detail="Scambio code→token fallito")
-
     tokens = token_res.json()
     access_token = tokens.get("access_token")
     if not access_token:
         raise HTTPException(status_code=400, detail="Token Google mancante")
 
-    # 2) userinfo
+    # 2. Userinfo
     ui = requests.get(
         USERINFO_URL,
         headers={"Authorization": f"Bearer {access_token}"},
@@ -95,11 +90,10 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
     family = info.get("family_name", "") or ""
     picture = info.get("picture", "") or ""
 
-    db = _db()
+    db = SessionLocal()
     try:
         user = db.query(models.User).filter(models.User.email == email).first()
         if not user:
-            # campi NOT NULL esistenti nel tuo modello
             user = models.User(
                 email=email,
                 role="utente",
@@ -111,14 +105,16 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
                 citta="",
                 avatar_url=picture or None,
             )
-            # hashed_password è NOT NULL: setto una password random
             user.set_password(secrets.token_urlsafe(32))
             db.add(user)
             db.commit()
             db.refresh(user)
 
-        # 3) JWT interno
+        # 3. JWT interno
         jwt = Authorize.create_access_token(subject=str(user.id))
-        return {"access_token": jwt, "token_type": "bearer"}
+
+        # 4. Redirect al frontend con token in querystring
+        frontend_url = f"https://www.gigigorilla.io/auth?token={jwt}"
+        return RedirectResponse(url=frontend_url)
     finally:
         db.close()
