@@ -64,6 +64,7 @@ from app.routes import immagini_nuovo
 from app.routes import usato_vetrina
 from app.routes import assistente
 from app.routes.gigigorilla import router as gigi_router
+from app.routes.google_oauth import router as google_oauth_router
 
 
 
@@ -177,6 +178,8 @@ app.add_middleware(
         "https://scuderia76.it",
         "https://www.gamma-auto.it",
         "https://gamma-auto.it",
+        "https://www.gigigorilla.io",
+        "https://gigigorilla.io",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -231,6 +234,7 @@ app.include_router(immagini_nuovo.router)
 app.include_router(usato_vetrina.router)
 app.include_router(assistente.router)
 app.include_router(gigi_router, prefix="/ai/gigi-gorilla", tags=["Gigi Gorilla"])
+app.include_router(google_oauth_router) 
 
 
 @app.get("/")
