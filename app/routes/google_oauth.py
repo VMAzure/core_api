@@ -111,7 +111,7 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
             db.refresh(user)
 
         # 3. JWT interno
-        jwt = Authorize.create_access_token(subject=str(user.id))
+        jwt = Authorize.create_access_token(subject=user.email)
 
         # 4. Redirect al frontend con token in querystring
         frontend_url = f"https://www.gigigorilla.io/auth?token={jwt}"
