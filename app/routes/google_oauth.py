@@ -99,10 +99,10 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
                 role="utente",
                 nome=given,
                 cognome=family,
-                cellulare="",
-                indirizzo="",
-                cap="",
-                citta="",
+                cellulare="to-complete",   # placeholder
+                indirizzo="to-complete",   # placeholder
+                cap="00000",               # placeholder
+                citta="to-complete",       # placeholder
                 avatar_url=picture or None,
             )
             user.set_password(secrets.token_urlsafe(32))
