@@ -1,0 +1,69 @@
+PROMPT MILANO
+
+{
+  "codice_modello": "2939",
+  "start_image_url": "https://www.motornet.it/img/modelli/auto/BMW/X4%20M_1.jpg",
+  "prompt": "Partendo dalla foto caricata, genera una nuova immagine fotorealistica dell’auto. Mantieni forma, proporzioni, colore e loghi originali. Ambientala in una città metropolitana tipo milano elegante e fashion, con ristoranti, alberi e movida sullo sfondo. Inquadra con lente 85mm; l’auto deve essere in primo piano e occupare almeno il 75% della larghezza dell’immagine. Luce cinematografica al tramonto con riflessi realistici sulla carrozzeria. La targa deve essere bianca con la scritta AZURE con carattere stile logo; centrata e senza distorsioni. Nessun testo extra, watermark o caratteri non latini.",
+  "save": true
+}
+PROMPT MEDITERRANEO
+
+{
+  "codice_modello": "2939",
+  "start_image_url": "https://www.motornet.it/img/modelli/auto/BMW/X4%20M_1.jpg",
+  "prompt": "Partendo dalla foto caricata, genera una nuova immagine fotorealistica dell’auto. Mantieni forma, proporzioni, rispetta l'angolo di visuale che ha l'immagine caricata, colore e loghi originali. Ambientala in un borgo antico di un'isola mediterranea con vista sul porto al mare con barche e pescherecci, parcheggiata davanti a una trattoria antica con tovaglie a quadretti bianchi e rossi, lucine colorate e illuminazione calda e persone ben vestite sedute a fare aperitivi. Inquadra con lente 85mm; l’auto deve essere in primo piano grande senza nulla davanti e occupare almeno il 75% della larghezza dell’immagine. Luce cinematografica al tramonto con riflessi realistici sulla carrozzeria. La targa deve essere bianca con la scritta AZURE con carattere stile Sans; centrata e senza distorsioni. Nessun testo extra, watermark o caratteri non latini.",
+  "save": true
+}
+
+
+
+PROMPT INVERNALE
+
+{
+  "codice_modello": "2939",
+  "start_image_url": "https://www.motornet.it/img/modelli/auto/BMW/X4%20M_1.jpg",
+  "prompt": "Partendo dalla foto caricata, genera una nuova immagine fotorealistica dell’auto. Mantieni forma, proporzioni, rispetta l'angolo di visuale che ha l'immagine caricata, colore e loghi originali. Ambientala in una località sciistica modaiola fashion , in centro città con negozi e hotel tipici alpini. la molta neve amplifica l'illuminazione. Inquadra con lente 85mm; l’auto deve essere in primo piano grande senza nulla davanti e occupare almeno il 75% della larghezza dell’immagine. Luce cinematografica di sera con riflessi realistici sulla carrozzeria. La targa deve essere bianca con la scritta AZURE con carattere stile Sans; centrata e senza distorsioni. Nessun testo extra, watermark o caratteri non latini.",
+  "save": true
+}
+
+PROMPT INDOOR
+
+{
+  "codice_modello": "2939",
+  "start_image_url": "https://www.motornet.it/img/modelli/auto/BMW/X4%20M_1.jpg",
+  "prompt": "Fotografia cinematografica ultra realistica della stessa auto mostrata nell’immagine caricata. Mantieni fedelmente forma, proporzioni, colore e loghi originali. Scatto con lente 85mm, prospettiva naturale e profondità di campo realistica. Ambientata in un showroom auto premium reale, con pavimento riflettente e grandi vetrate che lasciano intravedere fuori si vede la città commerciale viva ed illuminata a giorno. Illuminazione cinematografica indoor con riflessi realistici sulla carrozzeria, luce HDR da esposizione. L’auto deve occupare almeno il 75% della larghezza dell’immagine, in primo piano senza ostacoli. La targa deve essere bianca con scritta AZURE in carattere Sans, centrata e senza distorsioni. Stile fotografico professionale, nessun effetto rendering, nessun watermark o testo extra.",
+  "save": true
+}
+
+
+PROMPT con immagine ambiente e soggetto
+
+Inserisci l'auto esattamente all'interno dell’ambiente mostrato, mantenendo luci, ombre, colori e prospettiva originali dello sfondo. L’auto deve essere integrata in modo realistico e coerente con il contesto indoor, senza modificare nulla dell’ambiente circostante. Non alterare il soggetto: conserva forma, proporzioni, loghi e dettagli. Copri la targa con una superficie neutra e pulita. Aggiungi riflessi realistici sul pavimento sotto l’auto, in linea con l'illuminazione esistente.
+
+
+
+prompt 1: genera un immagine fotografica della (marca modello colore) nera fotografata esattamente di fronte (front) da altezza strada, usa l'immagine della foto come ambiente e adatta luci e ombre
+
+prompt 2: genera un immagine fotografica della (marca modello colore)  fotografata da dietro (rear) posteriore da altezza strada, usa l'immagine della foto come ambiente e adatta luci e ombre
+
+prompt 3: genera un immagine fotografica della (marca modello colore) fotografata da destra lato destro (right) totale da altezza strada, usa l'immagine della foto come ambiente e adatta luci e ombre
+
+prompt 4: genera un immagine fotografica della (marca modello colore) fotografata da sinistra lato sinistro (left) totale da altezza strada, usa l'immagine della foto come ambiente e adatta luci e ombre
+
+prompt 5: genera un immagine fotografica della  (marca modello colore) fotografata davanti a 3/4 anteriore lato sinistro (left) da altezza strada, usa l'immagine della foto come ambiente e adatta luci e ombre 
+
+prompt 6 : genera un immagine fotografica della volkswagen tiguan nera fotografata davanti a 3/4 anteriore lato destro (right) da altezza strada, usa l'immagine della foto come ambiente e adatta luci e ombre
+
+
+{
+  "id_auto": "059afca1-bb9c-4553-851f-2c431ad2f4bd",
+  "prompt": "Inserisci l’auto presente nell’immagine di partenza in uno scenario in stile studio fotografico professionale moderno mantenendo l'angolo di vista dell'auto come nella foto originale caricata, in un openspace dalle proporzioni simmetriche e lineari. Il pavimento è scuro, lucido e riflettente e al centro si trova una pedana perfettamente rotonda con bordi in alluminio spazzolato che diventa il fulcro visivo della scena. La parete di fondo è piatta, verticale, rettangolare e lineare, si estende a tutta larghezza senza curvature ed è interamente grigio scuro omogeneo, elegante e regolare. L’illuminazione proviene da linee LED a fasce invisibili, che diffondono una luce morbida e uniforme generando riflessi controllati sul pavimento, sulla pedana e sull’automobile. Il soffitto è nascosto, completamente fuori dall’inquadratura. La camera è posizionata frontalmente rispetto alla parete, ad altezza strada, con un obiettivo da 85 mm su sensore full frame, inquadratura stretta e prospettiva naturale. L’automobile mantiene esattamente l’angolazione della foto originale, è la protagonista assoluta e occupa almeno l’ottanta per cento dell’immagine, mentre l’ambiente rimane percepibile solo come cornice minima di contesto. L’intera composizione restituisce un’atmosfera fotografica e cinematografica, pulita, coerente e ripetibile. l'auto è grande nell'immagine, le pareti laterali non si vedono e la pedana esce dall'inquadratura per poter ritrarre l'auto grande. le ruote dell'auto sono sui bordi di alluminio della pedana. copri la targa dell'auto con un riquadro pulito bianco senza scritte",
+  "img1_url": "https://vqfloobaovtdtcuflqeu.supabase.co/storage/v1/object/public/auto-usate/auto-usate/059afca1-bb9c-4553-851f-2c431ad2f4bd_20250923145437_Immagine_2025-09-23_165408.png",
+  "img2_url": "",
+  "quality": "high",
+  "orientation": "square",
+  "logo_url": "https://vqfloobaovtdtcuflqeu.supabase.co/storage/v1/object/public/auto-usate/auto-usate/059afca1-bb9c-4553-851f-2c431ad2f4bd_20250923142622_logo_copia.png",
+  "logo_height": 50,
+  "logo_offset_y": 200,
+  "num_images": 1
+}

@@ -425,11 +425,30 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
         response = {
             "role": user.role,
             "admin_info": None,
-            "dealer_info": None
+            "dealer_info": None,
+            "user_info": None
         }
 
+        # --- UTENTE BASE ---
+        if user.role == "utente":
+            response["user_info"] = {
+                "id": user.id,
+                "email": user.email,
+                "nome": user.nome,
+                "cognome": user.cognome,
+                "ragione_sociale": user.ragione_sociale,
+                "cellulare": user.cellulare,
+                "avatar_url": user.avatar_url,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+                "indirizzo": user.indirizzo,
+                "cap": user.cap,
+                "citta": user.citta,
+
+            }
+
         # --- DEALER e TEAM DEALER ---
-        if user.role in ["dealer", "dealer_team"]:
+        elif user.role in ["dealer", "dealer_team"]:
             dealer = user
             if user.role == "dealer_team" and user.parent_id:
                 dealer = db.query(User).filter(User.id == user.parent_id).first()
@@ -451,11 +470,9 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
                     "logo_url": dealer.logo_url,
                     "created_at": dealer.created_at.isoformat() if dealer.created_at else None,
                     "updated_at": dealer.updated_at.isoformat() if dealer.updated_at else None,
-                    "avatar_url": dealer.avatar_url,  # o admin.avatar_url
-
+                    "avatar_url": dealer.avatar_url,
                 }
 
-            # per compatibilità: includo anche admin_info = admin parent
             admin = db.query(User).filter(User.id == dealer.parent_id).first() if dealer and dealer.parent_id else None
             if admin:
                 response["admin_info"] = {
@@ -502,11 +519,6 @@ def get_my_profile(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)
                 }
 
         return response
-
-    except Exception as e:
-        print(f"❌ ERRORE DETTAGLIATO endpoint /me: {e}")
-        raise HTTPException(status_code=500, detail=f"Errore interno dettagliato: {str(e)}")
-
 
     except Exception as e:
         print(f"❌ ERRORE DETTAGLIATO endpoint /me: {e}")
