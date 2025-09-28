@@ -58,11 +58,11 @@ class User(Base):
     cognome = Column(String, nullable=False)
     ragione_sociale = Column(String, nullable=True)
     partita_iva = Column(String, unique=True, nullable=True)
-    indirizzo = Column(String, nullable=True)
-    cap = Column(String, nullable=True)
-    citta = Column(String, nullable=True)
+    indirizzo = Column(String, nullable=False)
+    cap = Column(String, nullable=False)
+    citta = Column(String, nullable=False)
     codice_sdi = Column(String, nullable=True)
-    cellulare = Column(String, nullable=True)
+    cellulare = Column(String, nullable=False)
     # 🔹 nuovi campi
     ruolo = Column(String, nullable=True)         # es. "Meccanico", "Consulente"
     avatar_url = Column(String, nullable=True)    # immagine personale
