@@ -7,4 +7,5 @@ config.env
 fastapi.log
 __pycache__/
 app/.env
+*.backup
 
