@@ -1942,3 +1942,149 @@ async def dalle_combine(
         usato_leonardo_id=rec.id,
         status="completed"
     )
+
+               # --- GEMINI AUTO + SCENARIO (2-step con credito + upload + storico) ---------
+IMG_COST = float(os.getenv("GEMINI_IMG_CREDIT_COST", "1.5"))
+
+class GeminiAutoScenarioRequest(BaseModel):
+    id_auto: UUID
+    img1_url: str   # foto auto
+    img2_url: str   # scenario scelto
+
+
+@router.post("/ai/gemini/auto-scenario")
+async def gemini_auto_scenario(
+    payload: GeminiAutoScenarioRequest,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+    Pipeline 2-step:
+    1. Pulisce la foto auto (sfondo + riflessi) → hidden
+    2. Inserisce l’auto nello scenario scelto → visibile
+    """
+    Authorize.jwt_required()
+    user_email = Authorize.get_jwt_subject()
+    user = db.query(User).filter(User.email == user_email).first()
+    if not user:
+        raise HTTPException(403, "Utente non trovato")
+
+    is_dealer = is_dealer_user(user)
+    if is_dealer and (user.credit is None or user.credit < IMG_COST):
+        raise HTTPException(402, "Credito insufficiente")
+
+    _gemini_assert_api()
+
+    # --- STEP A: pulizia auto ---
+    prompt_clean = (
+        "Nell’immagine allegata rimuovi completamente lo sfondo. "
+        "Mantieni solo l’auto. "
+        "Correggi luci e riflessi sulla carrozzeria e sui vetri per renderli neutri, "
+        "così che siano coerenti per futuri inserimenti in ambienti diversi."
+    )
+
+    rec_clean = UsatoLeonardo(
+        id_auto=payload.id_auto,
+        provider="gemini",
+        status="queued",
+        media_type="image",
+        mime_type="image/png",
+        prompt=prompt_clean,
+        model_id="gemini-2.5-flash-image-preview",
+        aspect_ratio="16:9",
+        credit_cost=0.0,
+        user_id=user.id,
+        subject_url=payload.img1_url,
+        is_deleted=True,   # nascosto, non mostrato al dealer
+    )
+    db.add(rec_clean)
+    db.commit()
+    db.refresh(rec_clean)
+
+    try:
+        img_bytes = await _gemini_generate_image_sync(prompt_clean, start_image_url=payload.img1_url)
+        path = f"{payload.id_auto}/{rec_clean.id}.png"
+        _, signed_url = _sb_upload_and_sign(path, img_bytes, "image/png")
+        rec_clean.public_url = signed_url
+        rec_clean.storage_path = path
+        rec_clean.status = "completed"
+        db.commit()
+    except Exception as e:
+        logging.error("Errore step A Gemini: %s", e)
+        rec_clean.status = "failed"
+        rec_clean.error_message = str(e)
+        db.commit()
+        raise HTTPException(500, "Errore generazione step A (pulizia)")
+
+    # --- STEP B: composizione auto + scenario ---
+    prompt_compose = (
+        "Compose a professional photorealistic image. "
+        "Take the car from attached photo and place it seamlessly into the scenario provided. "
+        "The car must stand firmly on the ground plane of the scene, with all four wheels resting naturally. "
+        "Keep unchanged the original framing, camera angle, and perspective of the provided car photo. "
+        "The car must look perfectly integrated, centered, and scaled naturally, as if it had been photographed in that location. "
+        "The result must be indistinguishable from a real high-resolution photograph."
+    )
+
+    rec_final = UsatoLeonardo(
+        id_auto=payload.id_auto,
+        provider="gemini",
+        status="queued",
+        media_type="image",
+        mime_type="image/png",
+        prompt=prompt_compose,
+        model_id="gemini-2.5-flash-image-preview",
+        aspect_ratio="16:9",
+        credit_cost=IMG_COST if is_dealer else 0.0,
+        user_id=user.id,
+        subject_url=rec_clean.public_url,  # immagine pulita step A
+        background_url=payload.img2_url,   # scenario
+        is_deleted=False,
+    )
+    db.add(rec_final)
+    db.commit()
+    db.refresh(rec_final)
+
+    try:
+        img_bytes = await _gemini_generate_image_sync(
+            prompt_compose,
+            subject_image_url=rec_clean.public_url,
+            background_image_url=payload.img2_url
+        )
+        path = f"{payload.id_auto}/{rec_final.id}.png"
+        _, signed_url = _sb_upload_and_sign(path, img_bytes, "image/png")
+        rec_final.public_url = signed_url
+        rec_final.storage_path = path
+        rec_final.status = "completed"
+        db.commit()
+    except Exception as e:
+        logging.error("Errore step B Gemini: %s", e)
+        rec_final.status = "failed"
+        rec_final.error_message = str(e)
+        db.commit()
+        raise HTTPException(500, "Errore generazione step B (composizione)")
+
+    # --- credito dealer ---
+    if is_dealer:
+        user.credit = float(user.credit or 0) - IMG_COST
+        db.add(CreditTransaction(
+            dealer_id=user.id,
+            amount=-IMG_COST,
+            transaction_type="USE",
+            note="Gemini auto+scenario"
+        ))
+        inserisci_notifica(
+            db=db,
+            utente_id=user.id,
+            tipo_codice="CREDITO_USATO",
+            messaggio=f"Hai utilizzato {IMG_COST:g} crediti per la generazione immagine AI (auto+scenario)."
+        )
+        db.commit()
+
+    return {
+        "success": True,
+        "id_auto": payload.id_auto,
+        "status": rec_final.status,
+        "public_url": rec_final.public_url,
+        "usato_leonardo_id": str(rec_final.id)
+    }

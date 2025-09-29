@@ -1259,7 +1259,7 @@ def elenco_media_ai(
         ]
     }
 
-@router.patch("/leonardo/{id}/delete")
+@router.patch("/leonardo/{id}/delete", tags=["AZLease Media"])
 def soft_delete_media_ai(
     id: UUID,
     Authorize: AuthJWT = Depends(),
