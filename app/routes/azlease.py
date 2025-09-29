@@ -468,6 +468,7 @@ async def crea_boost(
         db=db
     )
 
+
     # 7) Immagine AI sincrona → attiva → publish
     visibile = False
     image_url = None
@@ -487,8 +488,19 @@ async def crea_boost(
         )
 
         if img_id:
-            # 👉 attiva e mette in vetrina l’immagine
+            # 👉 attiva l’immagine
             usa_hero_media(img_id, Authorize=Authorize, db=db)
+
+            # 👉 metti anche in vetrina
+            db.execute(
+                text("""
+                    INSERT INTO usato_vetrina (id_auto, media_type, media_id, priority, created_at)
+                    VALUES (:id_auto, 'ai', :media_id, 1, now())
+                    ON CONFLICT DO NOTHING
+                """),
+                {"id_auto": str(id_auto), "media_id": str(img_id)},
+            )
+            db.commit()
 
     except Exception as e:
         logging.error(f"❌ Boost: generazione immagine fallita per auto {id_auto}: {e}")
@@ -516,8 +528,19 @@ async def crea_boost(
             or (vid_res.get("usato_leonardo_id") if isinstance(vid_res, dict) else None)
         )
         if video_id:
-            # 👉 attiva e mette in vetrina il video
+            # 👉 attiva il video
             usa_hero_media(video_id, Authorize=Authorize, db=db)
+
+            # 👉 metti anche in vetrina
+            db.execute(
+                text("""
+                    INSERT INTO usato_vetrina (id_auto, media_type, media_id, priority, created_at)
+                    VALUES (:id_auto, 'ai', :media_id, 2, now())
+                    ON CONFLICT DO NOTHING
+                """),
+                {"id_auto": str(id_auto), "media_id": str(video_id)},
+            )
+            db.commit()
 
         video_status = (
             "processing"
@@ -531,13 +554,6 @@ async def crea_boost(
         logging.error(f"❌ Boost: generazione video fallita per auto {id_auto}: {e}")
         video_status = "failed"
 
-    return BoostResponse(
-        id_auto=id_auto,
-        visibile=visibile,
-        prezzo_vendita=float(prezzo_vendita or 0.0),
-        image_url=image_url,
-        video_status=video_status,
-    )
 
 
 
