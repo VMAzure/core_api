@@ -1945,6 +1945,8 @@ async def dalle_combine(
 
 # --- GEMINI AUTO + SCENARIO (2-step con credito + upload + storico + LOG) ---
 import os, time, logging, urllib.parse
+from typing import Union, List
+
 
 
 IMG_COST = float(os.getenv("GEMINI_IMG_CREDIT_COST", "1.5"))
@@ -1960,8 +1962,8 @@ def _mask_url(u: str) -> str:
 
 class GeminiAutoScenarioRequest(BaseModel):
     id_auto: UUID
-    img1_url: str   # foto auto
-    img2_url: str   # scenario
+    img1_url: Union[str, List[str]]   # accetta stringa o lista
+    img2_url: Union[str, List[str]]
 
 @router.post("/ai/gemini/auto-scenario")
 async def gemini_auto_scenario(
@@ -1977,17 +1979,13 @@ async def gemini_auto_scenario(
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
-    # Normalizza input (evita liste al posto di stringhe)
-    img1 = payload.img1_url
-    if isinstance(img1, list):
-        img1 = img1[0]
-
-    img2 = payload.img2_url
-    if isinstance(img2, list):
-        img2 = img2[0]
+    # Normalizza input (accetta sia stringa che lista)
+    img1 = payload.img1_url[0] if isinstance(payload.img1_url, list) else payload.img1_url
+    img2 = payload.img2_url[0] if isinstance(payload.img2_url, list) else payload.img2_url
 
     if not isinstance(img1, str) or not isinstance(img2, str):
-        raise HTTPException(400, "img1_url e img2_url devono essere stringhe")
+        raise HTTPException(400, "img1_url e img2_url devono essere stringhe singole")
+
 
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
