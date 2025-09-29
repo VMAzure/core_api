@@ -683,6 +683,14 @@ async def _gemini_generate_image_sync(
     _gemini_assert_api()
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent"
 
+    # 🔹 Normalizza: accetta str o list e restituisce sempre str
+    if start_image_url:
+        start_image_url = _force_str(start_image_url)
+    if subject_image_url:
+        subject_image_url = _force_str(subject_image_url)
+    if background_image_url:
+        background_image_url = _force_str(background_image_url)
+
     MAX_RETRIES = 3
     images: list[bytes] = []
 
@@ -713,9 +721,8 @@ async def _gemini_generate_image_sync(
                 "contents": [{"parts": parts}],
                 "generationConfig": {"candidateCount": num_images},
             }
-            
             if size:
-                payload["generationConfig"]["size"] = size  # 👈 qui
+                payload["generationConfig"]["size"] = size
 
             async with httpx.AsyncClient(timeout=120) as client:
                 r = await client.post(
@@ -727,7 +734,6 @@ async def _gemini_generate_image_sync(
                 )
 
             if r.status_code >= 300:
-                # policy/safety → non retry
                 if r.status_code == 400 and "safety" in r.text.lower():
                     raise HTTPException(400, f"Gemini policy violation: {r.text}")
                 raise HTTPException(r.status_code, f"Errore Gemini image: {r.text}")
@@ -751,7 +757,6 @@ async def _gemini_generate_image_sync(
             if images:
                 return images  # ✅ successo
 
-            # se nessuna immagine ma solo testo → retry
             msg = (
                 candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
                 if candidates else ""
@@ -761,11 +766,9 @@ async def _gemini_generate_image_sync(
                 await asyncio.sleep(attempt * 2)
                 continue
 
-            # altrimenti errore serio
             raise HTTPException(502, f"Gemini image: nessuna immagine trovata. Resp: {data}")
 
         except HTTPException as e:
-            # policy/safety → stop subito
             if "policy" in str(e).lower() or "safety" in str(e).lower():
                 logging.error(f"[Gemini STOP] Violazione policy: {e}")
                 raise
@@ -777,8 +780,8 @@ async def _gemini_generate_image_sync(
             await asyncio.sleep(attempt * 2)
             continue
 
-    # se arriviamo qui → retry esauriti
     raise HTTPException(502, f"Gemini image fallita dopo {MAX_RETRIES} tentativi")
+
 
 
 
