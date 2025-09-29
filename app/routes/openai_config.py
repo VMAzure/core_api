@@ -1991,6 +1991,8 @@ class GeminiAutoScenarioRequest(BaseModel):
     img1_url: Union[str, List[str]]
     img2_url: Union[str, List[str]] = None
     scenario_prompt: str = None
+    num_variants: int = 1   # default 1, se >1 genera più varianti Step B
+
 
 @router.post("/ai/gemini/auto-scenario")
 async def gemini_auto_scenario(
@@ -2096,57 +2098,58 @@ async def gemini_auto_scenario(
         # Prompt testuale passato dal client
         prompt_compose = scenario_prompt
 
-    rec_final = UsatoLeonardo(
-        id_auto=payload.id_auto,
-        provider="gemini",
-        status="queued",
-        media_type="image",
-        mime_type="image/png",
-        prompt=prompt_compose,
-        model_id="gemini-2.5-flash-image-preview",
-        aspect_ratio="16:9",
-        credit_cost=IMG_COST if is_dealer else 0.0,
-        user_id=user.id,
-        subject_url=rec_clean.public_url,
-        background_url=img2 if img2 else None,
-        is_deleted=False
-    )
-    db.add(rec_final); db.commit(); db.refresh(rec_final)
-    _logger.info("STEP B queued rec_final_id=%s subj=%s back=%s",
-                 str(rec_final.id), _mask_url(rec_clean.public_url), _mask_url(img2) if img2 else None)
-
-    try:
-        tB = time.perf_counter()
-        if img2:
-            img_bytesB_list = await _gemini_generate_image_sync(
-                prompt_compose,
-                subject_image_url=_force_str(rec_clean.public_url),
-                background_image_url=_force_str(img2)
+    
+        variants = []
+        for i in range(max(1, payload.num_variants or 1)):
+            rec_final = UsatoLeonardo(
+                id_auto=payload.id_auto,
+                provider="gemini",
+                status="queued",
+                media_type="image",
+                mime_type="image/png",
+                prompt=prompt_compose,
+                model_id="gemini-2.5-flash-image-preview",
+                aspect_ratio="16:9",
+                credit_cost=IMG_COST if is_dealer else 0.0,
+                user_id=user.id,
+                subject_url=rec_clean.public_url,
+                background_url=img2 if img2 else None,
+                is_deleted=False
             )
-        else:
-            img_bytesB_list = await _gemini_generate_image_sync(
-                prompt_compose,
-                subject_image_url=_force_str(rec_clean.public_url)
-            )
+            db.add(rec_final); db.commit(); db.refresh(rec_final)
+            _logger.info("STEP B queued rec_final_id=%s", str(rec_final.id))
 
-        if not img_bytesB_list:
-            raise HTTPException(502, "Gemini non ha restituito immagini allo step B")
+            try:
+                if img2:
+                    img_bytesB_list = await _gemini_generate_image_sync(
+                        prompt_compose,
+                        subject_image_url=_force_str(rec_clean.public_url),
+                        background_image_url=_force_str(img2)
+                    )
+                else:
+                    img_bytesB_list = await _gemini_generate_image_sync(
+                        prompt_compose,
+                        subject_image_url=_force_str(rec_clean.public_url)
+                    )
 
-        img_bytesB = img_bytesB_list[0]
-        pathB = f"{str(rec_final.id_auto)}/{str(rec_final.id)}.png"
-        _, signed_urlB = _sb_upload_and_sign(pathB, img_bytesB, "image/png")
+                if not img_bytesB_list:
+                    raise HTTPException(502, "Gemini non ha restituito immagini allo step B")
 
-        rec_final.public_url = signed_urlB
-        rec_final.storage_path = pathB
-        rec_final.status = "completed"
-        db.commit()
-        _logger.info("STEP B uploaded path=%s url=%s", pathB, _mask_url(signed_urlB))
+                img_bytesB = img_bytesB_list[0]
+                pathB = f"{str(rec_final.id_auto)}/{str(rec_final.id)}.png"
+                _, signed_urlB = _sb_upload_and_sign(pathB, img_bytesB, "image/png")
 
-    except Exception as e:
-        rec_final.status = "failed"; rec_final.error_message = str(e)
-        db.commit()
-        _logger.exception("STEP B Exception")
-        raise HTTPException(500, f"Errore generazione step B (composizione): {e}")
+                rec_final.public_url = signed_urlB
+                rec_final.storage_path = pathB
+                rec_final.status = "completed"
+                db.commit()
+                variants.append({"id": str(rec_final.id), "public_url": signed_urlB})
+                _logger.info("STEP B uploaded path=%s url=%s", pathB, _mask_url(signed_urlB))
+
+            except Exception as e:
+                rec_final.status = "failed"; rec_final.error_message = str(e)
+                db.commit()
+                _logger.exception("STEP B Exception")
 
     # --- credito dealer ---
     if is_dealer:
