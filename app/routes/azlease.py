@@ -491,6 +491,7 @@ async def crea_boost(
             """), {"id": str(img_id)})
             db.commit()
 
+
         # non serve image_url qui, sarà popolata dal job
         image_url = None
 

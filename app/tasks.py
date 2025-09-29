@@ -378,6 +378,9 @@ async def processa_immagini_gemini():
                 # 2) assegna immagini ai record disponibili
                 for rec, img_bytes in zip(batch, responses):
                     try:
+                        # 👇 fix: normalizza se Gemini restituisce lista annidata
+                        if isinstance(img_bytes, list):
+                            img_bytes = img_bytes[0]
                         final = Image.open(BytesIO(img_bytes)).convert("RGBA")
 
                         # logo opzionale
