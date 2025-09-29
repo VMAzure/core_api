@@ -892,14 +892,14 @@ async def genera_image_hero_veo3(
     db.refresh(rec)
 
     try:
+        # --- normalizzazione input (stessa logica auto-scenario) ---
         kwargs = {}
-        if isinstance(payload.start_image_url, str) and payload.start_image_url.strip():
-            kwargs["start_image_url"] = payload.start_image_url.strip()
-        if isinstance(payload.subject_image_url, str) and payload.subject_image_url.strip():
-            kwargs["subject_image_url"] = payload.subject_image_url.strip()
-        if isinstance(payload.background_image_url, str) and payload.background_image_url.strip():
-            kwargs["background_image_url"] = payload.background_image_url.strip()
-
+        if payload.start_image_url:
+            kwargs["start_image_url"] = _force_str(payload.start_image_url)
+        if payload.subject_image_url:
+            kwargs["subject_image_url"] = _force_str(payload.subject_image_url)
+        if payload.background_image_url:
+            kwargs["background_image_url"] = _force_str(payload.background_image_url)
 
 
 
