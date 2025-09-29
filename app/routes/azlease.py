@@ -468,8 +468,7 @@ async def crea_boost(
         db=db
     )
 
-
-    # 7) Immagine AI sincrona → attiva → publish
+    # 7) Immagine AI → crea record queued con flag Boost
     visibile = False
     image_url = None
     try:
@@ -478,35 +477,28 @@ async def crea_boost(
             Authorize=Authorize,
             db=db
         )
-        image_url = (
-            getattr(img_res, "public_url", None)
-            or (img_res.get("public_url") if isinstance(img_res, dict) else None)
-        )
+
         img_id = (
             getattr(img_res, "usato_leonardo_id", None)
-            or (img_res.get("usato_leonardo_id") if isinstance(img_res, dict) else None)
+            or (isinstance(img_res, dict) and img_res.get("usato_leonardo_id"))
         )
 
         if img_id:
-            # 👉 attiva l’immagine
-            usa_hero_media(img_id, Authorize=Authorize, db=db)
-
-            # 👉 metti anche in vetrina
-            db.execute(
-                text("""
-                    INSERT INTO usato_vetrina (id_auto, media_type, media_id, priority, created_at)
-                    VALUES (:id_auto, 'ai', :media_id, 1, now())
-                    ON CONFLICT DO NOTHING
-                """),
-                {"id_auto": str(id_auto), "media_id": str(img_id)},
-            )
+            db.execute(text("""
+                UPDATE usato_leonardo
+                SET is_boost = TRUE, boost_vetrina_done = FALSE
+                WHERE id = :id
+            """), {"id": str(img_id)})
             db.commit()
+
+        # non serve image_url qui, sarà popolata dal job
+        image_url = None
 
     except Exception as e:
         logging.error(f"❌ Boost: generazione immagine fallita per auto {id_auto}: {e}")
         image_url = None
 
-    # 👉 pubblica comunque l’auto
+    # 👉 comunque pubblica l’auto
     await patch_auto_usata(
         id_auto=str(id_auto),
         body={"visibile": True},
@@ -515,7 +507,7 @@ async def crea_boost(
     )
     visibile = True
 
-    # 8) Video AI asincrono → attiva e in vetrina
+    # 8) Video AI → crea record processing con flag Boost
     try:
         vid_res = await genera_video_hero_veo3(
             payload=GeminiVideoHeroRequest(id_auto=id_auto, prompt_override=None),
@@ -525,35 +517,36 @@ async def crea_boost(
 
         video_id = (
             getattr(vid_res, "usato_leonardo_id", None)
-            or (vid_res.get("usato_leonardo_id") if isinstance(vid_res, dict) else None)
+            or (isinstance(vid_res, dict) and vid_res.get("usato_leonardo_id"))
         )
         if video_id:
-            # 👉 attiva il video
-            usa_hero_media(video_id, Authorize=Authorize, db=db)
-
-            # 👉 metti anche in vetrina
-            db.execute(
-                text("""
-                    INSERT INTO usato_vetrina (id_auto, media_type, media_id, priority, created_at)
-                    VALUES (:id_auto, 'ai', :media_id, 2, now())
-                    ON CONFLICT DO NOTHING
-                """),
-                {"id_auto": str(id_auto), "media_id": str(video_id)},
-            )
+            db.execute(text("""
+                UPDATE usato_leonardo
+                SET is_boost = TRUE, boost_vetrina_done = FALSE
+                WHERE id = :id
+            """), {"id": str(video_id)})
             db.commit()
 
         video_status = (
-            "processing"
+            "queued"
             if (
                 getattr(vid_res, "gemini_operation_id", None)
                 or (isinstance(vid_res, dict) and vid_res.get("gemini_operation_id"))
             )
-            else "completed"
+            else "failed"
         )
+
     except Exception as e:
         logging.error(f"❌ Boost: generazione video fallita per auto {id_auto}: {e}")
         video_status = "failed"
 
+    return BoostResponse(
+        id_auto=id_auto,
+        visibile=visibile,
+        prezzo_vendita=float(prezzo_vendita or 0.0),
+        image_url=image_url,         # sarà None finché il job non completa
+        video_status=video_status    # "queued" / "failed"
+    )
 
 
 

@@ -281,9 +281,13 @@ async def polla_video_gemini():
                 rec.storage_path = path
                 rec.is_active = (other_active == 0)
 
-                db.commit()
+                # 👉 se è Boost e non ancora messo in vetrina
+                if rec.is_boost and not rec.boost_vetrina_done:
+                    _put_in_vetrina(db, rec.id_auto, rec.id, priority=2)
+                    rec.boost_vetrina_done = True
 
-                logging.info(f"✅ Video Gemini COMPLETATO per {rec.id} (attivo: {rec.is_active})")
+                db.commit()
+                logging.info(f"✅ Video Gemini COMPLETATO per {rec.id} (boost_vetrina_done={rec.boost_vetrina_done}, attivo={rec.is_active})")
 
             except Exception as e:
                 db.rollback()
@@ -309,6 +313,16 @@ from collections import defaultdict
 from app.database import SessionLocal
 from app.models import UsatoLeonardo
 from app.routes.openai_config import _gemini_generate_image_sync, _sb_upload_and_sign
+
+
+def _put_in_vetrina(db, id_auto: str, media_id: str, priority: int):
+    db.execute(text("""
+        INSERT INTO usato_vetrina (id_auto, media_type, media_id, priority, created_at)
+        VALUES (:id_auto, 'ai', :media_id, :priority, now())
+        ON CONFLICT DO NOTHING
+    """), {"id_auto": str(id_auto), "media_id": str(media_id), "priority": priority})
+    db.commit()
+
 
 MAX_RETRY = 3
 
@@ -382,9 +396,15 @@ async def processa_immagini_gemini():
                         rec.storage_path = path
                         rec.status = "completed"
                         rec.retry_count = 0
-                        db.commit()
 
-                        logging.info(f"✅ Immagine completata per rec_id={rec.id}")
+                        # 👉 se è Boost e non ancora messa in vetrina
+                        if rec.is_boost and not rec.boost_vetrina_done:
+                            _put_in_vetrina(db, rec.id_auto, rec.id, priority=1)
+                            rec.boost_vetrina_done = True
+
+                        db.commit()
+                        logging.info(f"✅ Immagine completata per rec_id={rec.id} (boost_vetrina_done={rec.boost_vetrina_done})")
+
 
                     except Exception as e:
                         db.rollback()

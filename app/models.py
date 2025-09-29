@@ -1500,6 +1500,11 @@ class UsatoLeonardo(Base):
     # ✅ nuovo campo per soft-delete
     is_deleted = Column(Boolean, default=False, nullable=False)
 
+    # 👉 nuovi campi per gestire Boost
+    is_boost = Column(Boolean, nullable=False, default=False)              # media creato da boost
+    boost_vetrina_done = Column(Boolean, nullable=False, default=False)    # già inserito in vetrina almeno una volta
+
+
     # backref
     utente = relationship("User", backref="usato_media")
     auto = relationship("AZLeaseUsatoAuto", backref="usato_media")
