@@ -2019,7 +2019,7 @@ async def gemini_auto_scenario(
 
     # --- STEP A: pulizia auto ---
     prompt_clean = (
-        "Questa immagine mostra un’automobile fotografata in un contesto generico. Voglio ottenere una versione pulita dell’auto, isolata completamente dal suo sfondo. Lo sfondo deve sparire, lasciando l’auto su trasparenza. La carrozzeria e i vetri non devono riflettere ambienti circostanti: rendi la superficie neutra, uniforme e pronta a essere inserita in qualsiasi scenario. Non modificare i colori, le proporzioni o i dettagli dell’auto: deve rimanere fedele all’originale, solo più pulita e neutra.."
+        "Voglio ottenere una versione pulita dell’auto, isolata completamente dal suo sfondo. Lo sfondo deve sparire, lasciando l’auto su trasparenza. La carrozzeria e i vetri non devono riflettere ambienti circostanti: rendi la superficie neutra e pronta a essere inserita in qualsiasi contesto. I colori, le proporzioni e i dettagli dell’auto restano fedeli all’originale, solo più pulita da luci e ombre"
     )
 
     rec_clean = UsatoLeonardo(
@@ -2074,7 +2074,7 @@ async def gemini_auto_scenario(
 
     # --- STEP B: composizione auto + scenario ---
     prompt_compose = (
-        "voglio che l’automobile venga collocata all’interno dello scenario fornito come se fosse stata davvero fotografata lì. L’auto deve poggiare solidamente a terra: tutte le ruote devono aderire naturalmente al piano stradale. Lo sguardo deve percepirla integrata nella scena, con ombre morbide e realistiche sotto la vettura, coerenti con la direzione e l’intensità della luce dello scenario. La prospettiva e l’inquadratura originali della foto dell’auto vanno mantenute, ma i riflessi su carrozzeria e vetri vanno rigenerati in modo che corrispondano all’ambiente circostante. Il risultato deve sembrare una fotografia reale, dove l’auto e lo scenario fanno parte dello stesso scatto."
+        "voglio che l’automobile venga collocata all’interno dello scenario fornito come se fosse stata davvero fotografata in quello scenario. L’auto deve poggiare solidamente a terra: tutte le ruote devono aderire naturalmente al piano stradale. Lo sguardo deve percepirla integrata nella scena, con ombre morbide e realistiche sotto la vettura, coerenti con la direzione e l’intensità della luce dello scenario. La prospettiva e l’inquadratura originali della foto dell’auto vanno mantenute, genera i riflessi su carrozzeria e vetri in modo che corrispondano all’ambiente circostante. stile fotorealistico cinematografico, l’auto e lo scenario fanno parte dello stesso scatto."
     )
 
     rec_final = UsatoLeonardo(
