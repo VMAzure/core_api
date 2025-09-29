@@ -1960,6 +1960,17 @@ def _mask_url(u: str) -> str:
     except Exception:
         return str(u)[:200]
 
+def _force_str(val) -> str:
+    # accetta str, list, tuple; restituisce sempre la prima stringa trovata
+    if isinstance(val, str):
+        return val
+    if isinstance(val, (list, tuple)):
+        for v in val:
+            if isinstance(v, str):
+                return v
+    raise HTTPException(400, f"Valore non valido: {val!r}")
+
+
 class GeminiAutoScenarioRequest(BaseModel):
     id_auto: UUID
     img1_url: Union[str, List[str]]   # accetta stringa o lista
@@ -1979,14 +1990,10 @@ async def gemini_auto_scenario(
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
-    # Normalizza input (accetta sia stringa che lista)
-    def _first_str(val):
-        if isinstance(val, list):
-            return val[0] if val else ""
-        return val
+    # Normalizza input
+    img1 = _force_str(payload.img1_url)
+    img2 = _force_str(payload.img2_url)
 
-    img1 = _first_str(payload.img1_url)
-    img2 = _first_str(payload.img2_url)
 
     if not (isinstance(img1, str) and img1.strip()) or not (isinstance(img2, str) and img2.strip()):
         raise HTTPException(400, "img1_url e img2_url devono essere stringhe non vuote")
