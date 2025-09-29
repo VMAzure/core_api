@@ -905,11 +905,20 @@ async def genera_image_hero_veo3(
     try:
         kwargs = {}
         if payload.start_image_url:
-            kwargs["start_image_url"] = _force_str(payload.start_image_url)
+            s = _force_str(payload.start_image_url)
+            if s:
+                kwargs["start_image_url"] = s
+
         if payload.subject_image_url:
-            kwargs["subject_image_url"] = _force_str(payload.subject_image_url)
+            s = _force_str(payload.subject_image_url)
+            if s:
+                kwargs["subject_image_url"] = s
+
         if payload.background_image_url:
-            kwargs["background_image_url"] = _force_str(payload.background_image_url)
+            s = _force_str(payload.background_image_url)
+            if s:
+                kwargs["background_image_url"] = s
+
 
         img_bytes = await _gemini_generate_image_sync(prompt, **kwargs)
 
@@ -1969,14 +1978,17 @@ def _mask_url(u: str) -> str:
         return str(u)[:200]
 
 def _force_str(val) -> str:
-    # accetta str, list, tuple; restituisce sempre la prima stringa trovata
+    if not val:
+        return ""
     if isinstance(val, str):
-        return val
+        return val.strip()
     if isinstance(val, (list, tuple)):
         for v in val:
-            if isinstance(v, str):
-                return v
-    raise HTTPException(400, f"Valore non valido: {val!r}")
+            s = _force_str(v)
+            if s:
+                return s
+    raise HTTPException(400, f"Valore non valido per URL immagine: {val!r}")
+
 
 
 class GeminiAutoScenarioRequest(BaseModel):
