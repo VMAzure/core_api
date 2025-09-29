@@ -211,13 +211,17 @@ class GeminiVideoStatusRequest(BaseModel):
     operation_id: str
 
 
+
+from typing import Union, List, Optional
+
 class GeminiImageHeroRequest(BaseModel):
     id_auto: UUID
     scenario: Optional[str] = None
     prompt_override: Optional[str] = None
-    start_image_url: Optional[str] = None
-    subject_image_url: Optional[str] = None   # 👈 opzionale
-    background_image_url: Optional[str] = None # 👈 opzionale
+    start_image_url: Union[str, List[str], None] = None
+    subject_image_url: Union[str, List[str], None] = None
+    background_image_url: Union[str, List[str], None] = None
+
 
 
 # --- VIDEO VEO3 ---
@@ -684,12 +688,14 @@ async def _gemini_generate_image_sync(
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent"
 
     # 🔹 Normalizza: accetta str o list e restituisce sempre str
+    # normalizza input come stringa
     if start_image_url:
         start_image_url = _force_str(start_image_url)
     if subject_image_url:
         subject_image_url = _force_str(subject_image_url)
     if background_image_url:
         background_image_url = _force_str(background_image_url)
+
 
     MAX_RETRIES = 3
     images: list[bytes] = []
