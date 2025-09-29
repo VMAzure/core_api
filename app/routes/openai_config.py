@@ -1978,10 +1978,16 @@ async def gemini_auto_scenario(
     user_email = Authorize.get_jwt_subject()
 
     # Normalizza input (evita liste al posto di stringhe)
-    img1 = payload.img1_url[0] if isinstance(payload.img1_url, list) else payload.img1_url
-    img2 = payload.img2_url[0] if isinstance(payload.img2_url, list) else payload.img2_url
-    if not img1 or not img2:
-        raise HTTPException(400, "img1_url e img2_url sono obbligatori")
+    img1 = payload.img1_url
+    if isinstance(img1, list):
+        img1 = img1[0]
+
+    img2 = payload.img2_url
+    if isinstance(img2, list):
+        img2 = img2[0]
+
+    if not isinstance(img1, str) or not isinstance(img2, str):
+        raise HTTPException(400, "img1_url e img2_url devono essere stringhe")
 
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
