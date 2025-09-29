@@ -1497,6 +1497,9 @@ class UsatoLeonardo(Base):
     logo_offset_y = Column(Integer, nullable=True)
     retry_count = Column(Integer, nullable=False, default=0)
 
+    # ✅ nuovo campo per soft-delete
+    is_deleted = Column(Boolean, default=False, nullable=False)
+
     # backref
     utente = relationship("User", backref="usato_media")
     auto = relationship("AZLeaseUsatoAuto", backref="usato_media")

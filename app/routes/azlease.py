@@ -1236,6 +1236,8 @@ def elenco_media_ai(
     q = db.query(UsatoLeonardo).filter(
         UsatoLeonardo.id_auto == id_auto,
         UsatoLeonardo.status == "completed",
+        UsatoLeonardo.is_deleted.is_(False)   
+
     )
     if only_active:
         q = q.filter(UsatoLeonardo.is_active.is_(True))
@@ -1256,6 +1258,28 @@ def elenco_media_ai(
             for r in rows
         ]
     }
+
+@router.patch("/leonardo/{id}/delete")
+def soft_delete_media_ai(
+    id: UUID,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+    Segna un media AI come eliminato (soft-delete).
+    Non cancella il record né il file, ma imposta is_deleted = True.
+    """
+    Authorize.jwt_required()
+
+    rec = db.query(UsatoLeonardo).filter(UsatoLeonardo.id == id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Media AI non trovato")
+
+    rec.is_deleted = True
+    db.commit()
+    db.refresh(rec)
+
+    return {"success": True, "deleted_id": str(id)}
 
 class UsaMediaRequest(BaseModel):
     exclusive: bool = True  # se True, disattiva gli altri
@@ -1307,6 +1331,7 @@ def usa_media_leonardo(id: UUID, Authorize: AuthJWT = Depends(), db: Session = D
     db.commit()
 
     return {"success": True, "id": str(id), "media_type": media_type, "id_auto": str(id_auto)}
+
 @router.put("/foto-usato/{id_foto}/principale", tags=["AZLease"])
 def imposta_foto_principale(id_foto: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
