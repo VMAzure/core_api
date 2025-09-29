@@ -891,8 +891,9 @@ async def genera_image_hero_veo3(
     db.commit()
     db.refresh(rec)
 
-    try:
+    
         # --- normalizzazione input (stessa logica auto-scenario) ---
+    try:
         kwargs = {}
         if payload.start_image_url:
             kwargs["start_image_url"] = _force_str(payload.start_image_url)
@@ -901,11 +902,7 @@ async def genera_image_hero_veo3(
         if payload.background_image_url:
             kwargs["background_image_url"] = _force_str(payload.background_image_url)
 
-
-
         img_bytes = await _gemini_generate_image_sync(prompt, **kwargs)
-
-
 
 
         # Upload su Supabase
