@@ -495,10 +495,10 @@ scheduler.add_job(sync_foto_mnet_missing, 'cron', day_of_week='sat', hour=4, min
 scheduler.add_job(polla_video_gemini, IntervalTrigger(seconds=60))
 
 # Polling Gemini immagini ogni 30 secondi
-scheduler.add_job(processa_immagini_gemini, IntervalTrigger(seconds=30))
+scheduler.add_job(processa_immagini_gemini, IntervalTrigger(seconds=15))
 
 # Polling Gigi Gorilla immagini ogni 30 secondi
-scheduler.add_job(processa_gigi_gorilla_jobs, 'interval', seconds=25)
+scheduler.add_job(processa_gigi_gorilla_jobs, 'interval', seconds=15)
 
 
 
