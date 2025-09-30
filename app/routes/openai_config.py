@@ -896,10 +896,23 @@ async def genera_image_hero_veo3(
         credit_cost=IMG_COST,
         user_id=user.id
     )
+   
+
     db.add(rec)
     db.commit()
     db.refresh(rec)
 
+     # 👇 se async_mode=True (es. Boost), torna subito senza generare
+    if getattr(payload, "async_mode", False):
+        return GeminiImageHeroResponse(
+            success=True,
+            id_auto=payload.id_auto,
+            status="queued",
+            public_url=None,
+            error_message=None,
+            usato_leonardo_id=rec.id,
+            generation_id=None
+        )
     
         # --- normalizzazione input (stessa logica auto-scenario) ---
     try:

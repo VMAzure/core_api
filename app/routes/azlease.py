@@ -473,7 +473,11 @@ async def crea_boost(
     image_url = None
     try:
         img_res = await genera_image_hero_veo3(
-            payload=GeminiImageHeroRequest(id_auto=id_auto, prompt_override=None),
+            payload=GeminiImageHeroRequest(
+                id_auto=id_auto,
+                prompt_override=None,
+                async_mode=True        # 👈 nuovo flag: non generare subito
+            ),
             Authorize=Authorize,
             db=db
         )
@@ -486,18 +490,19 @@ async def crea_boost(
         if img_id:
             db.execute(text("""
                 UPDATE usato_leonardo
-                SET is_boost = TRUE, boost_vetrina_done = FALSE
+                SET is_boost = TRUE,
+                    boost_vetrina_done = FALSE
                 WHERE id = :id
             """), {"id": str(img_id)})
             db.commit()
-
 
         # non serve image_url qui, sarà popolata dal job
         image_url = None
 
     except Exception as e:
-        logging.error(f"❌ Boost: generazione immagine fallita per auto {id_auto}: {e}")
+        logging.error(f"❌ Boost: creazione record immagine fallita per auto {id_auto}: {e}")
         image_url = None
+
 
     # 👉 comunque pubblica l’auto
     await patch_auto_usata(
