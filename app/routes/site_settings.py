@@ -236,7 +236,11 @@ async def create_or_update_site_settings(
 
         # Aggiungi/ricalcola Google Place ID solo se non presente
     if not settings or not settings.google_place_id:
-        query = payload.ragione_sociale or payload.contact_address
+        query = None
+        if getattr(current_user, "ragione_sociale", None):
+            query = current_user.ragione_sociale
+        elif payload.contact_address:
+            query = payload.contact_address
         place_id = await resolve_place_id(query)
         if place_id:
             data["google_place_id"] = place_id
