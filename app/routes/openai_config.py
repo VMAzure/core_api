@@ -2110,12 +2110,54 @@ async def gemini_auto_scenario(
     if is_dealer and (user.credit is None or user.credit < IMG_COST):
         raise HTTPException(402, "Credito insufficiente")
 
-    _logger.info("AUTO-SCENARIO start user=%s id_auto=%s img1=%s img2=%s prompt=%s",
-                 user_email, str(payload.id_auto), _mask_url(img1),
-                 _mask_url(img2) if img2 else None,
-                 (scenario_prompt[:80] + "...") if scenario_prompt else None)
+    # --------- NUOVA GESTIONE: foto + scenario_prompt senza img2_url ----------
+    if img1 and scenario_prompt and not img2:
+        rec = UsatoLeonardo(
+            id_auto=payload.id_auto,
+            provider="gemini",
+            status="queued",
+            media_type="image",
+            mime_type="image/png",
+            prompt=scenario_prompt,   # prompt discorsivo già con refine incluso
+            model_id="gemini-2.5-flash-image-preview",
+            aspect_ratio="16:9",
+            credit_cost=IMG_COST if is_dealer else 0.0,
+            user_id=user.id,
+            subject_url=img1,
+            is_deleted=False
+        )
+        db.add(rec); db.commit(); db.refresh(rec)
 
-    _gemini_assert_api()
+        # debito crediti subito
+        if is_dealer:
+            try:
+                pre_credit = float(user.credit or 0)
+                user.credit = pre_credit - IMG_COST
+                db.add(CreditTransaction(
+                    dealer_id=user.id,
+                    amount=-IMG_COST,
+                    transaction_type="USE",
+                    note="Gemini auto+scenario (queued)"
+                ))
+                inserisci_notifica(
+                    db=db,
+                    utente_id=user.id,
+                    tipo_codice="CREDITO_USATO",
+                    messaggio=f"Hai utilizzato {IMG_COST:g} crediti per la generazione immagine AI (auto+scenario)."
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                _logger.exception("CREDIT debit failed (non bloccante)")
+
+        return {
+            "success": True,
+            "id_auto": str(payload.id_auto),
+            "status": "queued",
+            "public_url": None,
+            "usato_leonardo_id": str(rec.id),
+            "variants": []
+        }
 
     # --- STEP A: pulizia/scontorno ---
     prompt_clean = (
