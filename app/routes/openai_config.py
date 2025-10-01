@@ -2232,6 +2232,61 @@ async def gemini_auto_scenario(
             last_rec_final = rec_final
             _logger.info("STEP B uploaded path=%s url=%s", pathB, _mask_url(signed_urlB))
 
+            # --- STEP C: refine con Gemini (no secondo addebito) ---
+            prompt_refine = (
+                "Migliora la foto composita mantenendo posizione, scala e inquadratura invariati. "
+                "Uniforma luci e ombre con l’ambiente, aggiungi riflessi realistici su pavimento e carrozzeria, "
+                "ammorbidisci i bordi dello scontorno, bilancia il colore e rimuovi aloni. "
+                "Non spostare il soggetto, non deformare, non cambiare lente, non ritagliare."
+            )
+
+            rec_ref = UsatoLeonardo(
+                id_auto=payload.id_auto,
+                provider="gemini",
+                status="queued",
+                media_type="image",
+                mime_type="image/png",
+                prompt=prompt_refine,
+                model_id="gemini-2.5-flash-image-preview",
+                aspect_ratio="16:9",
+                credit_cost=0.0,          # nessun secondo addebito
+                user_id=user.id,
+                subject_url=signed_urlB,  # input = composito Step B
+                is_deleted=False
+            )
+            db.add(rec_ref); db.commit(); db.refresh(rec_ref)
+
+            try:
+                ref_list = await _gemini_generate_image_sync(
+                    prompt_refine,
+                    start_image_url=_force_str(signed_urlB)
+                )
+                if not ref_list:
+                    raise HTTPException(502, "Gemini non ha restituito immagini al refine")
+
+                ref_bytes = ref_list[0]
+                pathC = f"{str(rec_ref.id_auto)}/{str(rec_ref.id)}.png"
+                _, signed_urlC = _sb_upload_and_sign(pathC, ref_bytes, "image/png")
+
+                rec_ref.public_url = signed_urlC
+                rec_ref.storage_path = pathC
+                rec_ref.status = "completed"
+                db.commit()
+
+                # usa il refined come finale
+                variants.append({"id": str(rec_ref.id), "public_url": signed_urlC})
+                last_rec_final = rec_ref
+                _logger.info("STEP C uploaded path=%s url=%s", pathC, _mask_url(signed_urlC))
+
+            except Exception as e:
+                rec_ref.status = "failed"; rec_ref.error_message = str(e)
+                db.commit()
+                _logger.exception("STEP C Exception")
+                # fallback: resta valido rec_final (Step B)
+
+
+
+
         except Exception as e:
             rec_final.status = "failed"; rec_final.error_message = str(e)
             db.commit()
