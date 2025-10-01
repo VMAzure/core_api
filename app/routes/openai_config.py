@@ -2097,12 +2097,15 @@ async def gemini_auto_scenario(
     # --- STEP B: composizione auto + scenario ---
     if img2:
         prompt_compose = (
-            "Compose a professional photorealistic image. Take the car from the attached photo and place it "
-            "seamlessly into the other attached scenario image. The car must stand on the ground plane with all "
-            "four wheels resting naturally. Keep the original framing, camera angle, and perspective of the car "
-            "photo. Integrate lighting and reflections so the result is indistinguishable from a real high-resolution "
-            "photograph. Use an 85mm look and a near-camera viewpoint."
+            "Crea un’immagine professionale fotorealistica. Prendi l’auto dalla foto allegata e posizionala senza "
+            "soluzione di continuità esattamente al centro della pedana nello scenario nell’altra immagine allegata. "
+            "L’auto deve poggiare saldamente sul piano del terreno della scena, con tutte e quattro le ruote che toccano naturalmente. "
+            "Mantieni invariati l’inquadratura originale, l’angolo di ripresa e la prospettiva della foto dell’auto fornita. "
+            "L’auto deve apparire perfettamente integrata, centrata e scalata in modo naturale ed essere il soggetto in primo piano della scena. "
+            "Il risultato deve essere indistinguibile da una vera fotografia ad alta risoluzione. "
+            "Usa un look da obiettivo 200mm e una ripresa molto ravvicinata all’auto."
         )
+
     else:
         prompt_compose = scenario_prompt
 
