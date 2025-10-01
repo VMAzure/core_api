@@ -2004,7 +2004,12 @@ def _force_str(val) -> str:
                 return s
     raise HTTPException(400, f"Valore non valido per URL immagine: {val!r}")
 
+from rembg import remove
 from PIL import Image
+
+def remove_bg(img_bytes: bytes) -> Image.Image:
+    result = remove(img_bytes)
+    return Image.open(io.BytesIO(result)).convert("RGBA")
 
 def _download_image(url: str) -> Image.Image:
     resp = requests.get(url, timeout=20)
@@ -2031,6 +2036,23 @@ def _compose_with_pedana(car_url: str, bg_url: str, scale: float = 0.8) -> bytes
     buf = io.BytesIO()
     composed.save(buf, format="PNG")
     return buf.getvalue()
+
+def ensure_transparency(img_bytes: bytes) -> bytes:
+    """
+    Verifica se l'immagine ha canale alpha reale.
+    Se non lo ha, usa rembg per rimuovere lo sfondo.
+    Restituisce sempre bytes PNG RGBA.
+    """
+    im = Image.open(io.BytesIO(img_bytes))
+    if im.mode == "RGBA":
+        mn, mx = im.getchannel("A").getextrema()
+        if mn < 255:
+            # ha già trasparenza
+            return img_bytes
+    # forza trasparenza con rembg
+    result = remove(img_bytes)
+    return result
+
 
 
 class GeminiAutoScenarioRequest(BaseModel):
@@ -2108,6 +2130,8 @@ async def gemini_auto_scenario(
             raise HTTPException(502, "Gemini non ha restituito immagini allo step A")
 
         img_bytes = img_bytes_list[0]
+        img_bytes = ensure_transparency(img_bytes)
+
         pathA = f"{str(rec_clean.id_auto)}/{str(rec_clean.id)}.png"
         _, signed_urlA = _sb_upload_and_sign(pathA, img_bytes, "image/png")
 
