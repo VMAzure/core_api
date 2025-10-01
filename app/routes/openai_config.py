@@ -2016,24 +2016,22 @@ def _download_image(url: str) -> Image.Image:
     resp.raise_for_status()
     return Image.open(io.BytesIO(resp.content)).convert("RGBA")
 
-def _compose_with_pedana_images(car: Image.Image, bg: Image.Image, scale_rel: float = 0.9) -> bytes:
+def _compose_with_pedana_images(car: Image.Image, bg: Image.Image,
+                                scale_rel: float = 2.2,
+                                y_offset_rel: float = 0.15) -> bytes:
     """
-    Composizione auto centrata sulla pedana.
-    Assume pedana come cerchio centrale ~60% della larghezza sfondo.
-    scale_rel = 0.9 → auto larga il 90% del diametro pedana.
+    scale_rel = grandezza auto rispetto al diametro pedana
+    y_offset_rel = quanto spostare l'auto in basso rispetto al centro (in % altezza sfondo)
     """
-    # calcolo diametro pedana (60% della larghezza sfondo)
     pedana_diam = int(bg.width * 0.6)
 
-    # ridimensiona auto
     new_w = int(pedana_diam * scale_rel)
     ratio = new_w / car.width
     new_h = int(car.height * ratio)
     car = car.resize((new_w, new_h), Image.LANCZOS)
 
-    # centro pedana = centro immagine, con offset verticale
     x = (bg.width - car.width) // 2
-    y = (bg.height - car.height) // 2 + int(bg.height * 0.05)
+    y = (bg.height - car.height) // 2 + int(bg.height * y_offset_rel)
 
     composed = bg.copy()
     composed.alpha_composite(car, (x, y))
