@@ -1974,17 +1974,32 @@ async def dalle_combine(
     )
 
 
-# --- GEMINI AUTO + SCENARIO (2-step con credito + upload + storico + LOG) ---
-import os, time, logging, urllib.parse
+# =========================
+#  /ai/gemini/auto-scenario
+# =========================
+import os, io, time, logging, urllib.parse, requests
 from typing import Union, List
 from uuid import UUID
-from fastapi import Depends, HTTPException
+
+from fastapi import Depends, APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from PIL import Image
+from rembg import remove
+from fastapi_jwt_auth import AuthJWT
 
-IMG_COST = float(os.getenv("GEMINI_IMG_CREDIT_COST", "1.5"))
+# importa dal tuo progetto
+# from app.db import get_db
+# from app.models import User, UsatoLeonardo, CreditTransaction
+# from app.security import is_dealer_user
+# from app.routes.openai_config import _gemini_generate_image_sync, _sb_upload_and_sign, _gemini_assert_api
+# from app.notifications import inserisci_notifica
+
+router = APIRouter()
 _logger = logging.getLogger("gemini.auto_scenario")
+IMG_COST = float(os.getenv("GEMINI_IMG_CREDIT_COST", "1.5"))
 
+# ---------- Utils ----------
 def _mask_url(u: str) -> str:
     try:
         p = urllib.parse.urlparse(u)
@@ -2004,17 +2019,18 @@ def _force_str(val) -> str:
                 return s
     raise HTTPException(400, f"Valore non valido per URL immagine: {val!r}")
 
-from rembg import remove
-from PIL import Image
-
-def remove_bg(img_bytes: bytes) -> Image.Image:
-    result = remove(img_bytes)
-    return Image.open(io.BytesIO(result)).convert("RGBA")
+def ensure_transparency(img_bytes: bytes) -> bytes:
+    """Applica rembg e garantisce PNG RGBA con alpha."""
+    out = remove(img_bytes)
+    im = Image.open(io.BytesIO(out)).convert("RGBA")
+    buf = io.BytesIO()
+    im.save(buf, "PNG")
+    return buf.getvalue()
 
 def _download_image(url: str) -> Image.Image:
-    resp = requests.get(url, timeout=20)
-    resp.raise_for_status()
-    return Image.open(io.BytesIO(resp.content)).convert("RGBA")
+    r = requests.get(url, timeout=20)
+    r.raise_for_status()
+    return Image.open(io.BytesIO(r.content)).convert("RGBA")
 
 def _trim_alpha(im: Image.Image) -> Image.Image:
     if im.mode != "RGBA":
@@ -2022,59 +2038,53 @@ def _trim_alpha(im: Image.Image) -> Image.Image:
     bbox = im.getchannel("A").getbbox()
     return im.crop(bbox) if bbox else im
 
-def _compose_with_pedana_images(car: Image.Image, bg: Image.Image,
-                                scale_rel: float = 2.2,
-                                y_offset_rel: float = 0.12) -> bytes:
-    # rimuovi padding trasparente
+def _compose_with_pedana_images(
+    car: Image.Image,
+    bg: Image.Image,
+    *,
+    scale_rel: float = 1.25,
+    y_offset_rel: float = 0.12,
+    x_offset_rel: float = 0.0,
+    pedana_rel: float = 0.60
+) -> bytes:
+    """Scala/centra l'auto sulla pedana (cerchio centrale) e applica offset."""
     car = _trim_alpha(car)
-    orig_size = car.size
 
-    pedana_diam = int(bg.width * 0.6)
+    pedana_diam = max(1, int(bg.width * pedana_rel))
     new_w = max(1, int(pedana_diam * scale_rel))
-    ratio = new_w / car.width
+    ratio = new_w / max(1, car.width)
     new_h = max(1, int(car.height * ratio))
     car = car.resize((new_w, new_h), Image.LANCZOS)
 
-    x = (bg.width - car.width) // 2
-    y = (bg.height - car.height) // 2 + int(bg.height * y_offset_rel)
+    cx = (bg.width - car.width) // 2
+    cy = (bg.height - car.height) // 2
+    x = int(cx + bg.width * x_offset_rel)
+    y = int(cy + bg.height * y_offset_rel)
 
-    _logger.info("PEDANA diam=%d scale=%.2f car_before=%s car_after=%s pos=(%d,%d)",
-                 pedana_diam, scale_rel, orig_size, car.size, x, y)
+    _logger.info("PEDANA diam=%d scale=%.3f pos=(%d,%d) car=%s",
+                 pedana_diam, scale_rel, x, y, car.size)
 
     composed = bg.copy()
     composed.alpha_composite(car, (x, y))
-    buf = io.BytesIO(); composed.save(buf, "PNG")
+    buf = io.BytesIO()
+    composed.save(buf, "PNG")
     return buf.getvalue()
 
-
-
-
-def ensure_transparency(img_bytes: bytes) -> bytes:
-    """
-    Verifica se l'immagine ha canale alpha reale.
-    Se non lo ha, usa rembg per rimuovere lo sfondo.
-    Restituisce sempre bytes PNG RGBA.
-    """
-    im = Image.open(io.BytesIO(img_bytes))
-    if im.mode == "RGBA":
-        mn, mx = im.getchannel("A").getextrema()
-        if mn < 255:
-            # ha già trasparenza
-            return img_bytes
-    # forza trasparenza con rembg
-    result = remove(img_bytes)
-    return result
-
-
-
+# ---------- Request model ----------
 class GeminiAutoScenarioRequest(BaseModel):
     id_auto: UUID
     img1_url: Union[str, List[str]]
     img2_url: Union[str, List[str]] | None = None
     scenario_prompt: str | None = None
     num_variants: int = 1
+    # parametri dinamici per compositing
+    scale_rel: float | None = None
+    y_offset_rel: float | None = None
+    x_offset_rel: float | None = None
+    pedana_rel: float | None = None
 
-@router.post("/ai/gemini/auto-scenario")
+# ---------- Route ----------
+@router.post("/ai/gemini/auto-scenario", tags=["Gemini"])
 async def gemini_auto_scenario(
     payload: GeminiAutoScenarioRequest,
     Authorize: AuthJWT = Depends(),
@@ -2084,7 +2094,6 @@ async def gemini_auto_scenario(
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
-    # Normalizza input
     img1 = _force_str(payload.img1_url)
     img2 = _force_str(payload.img2_url) if payload.img2_url else None
     scenario_prompt = (payload.scenario_prompt or "").strip() if payload.scenario_prompt else None
@@ -2102,20 +2111,17 @@ async def gemini_auto_scenario(
     if is_dealer and (user.credit is None or user.credit < IMG_COST):
         raise HTTPException(402, "Credito insufficiente")
 
-    _logger.info(
-        "AUTO-SCENARIO start user=%s id_auto=%s img1=%s img2=%s prompt=%s",
-        user_email, str(payload.id_auto), _mask_url(img1),
-        _mask_url(img2) if img2 else None,
-        (scenario_prompt[:80] + "...") if scenario_prompt else None
-    )
+    _logger.info("AUTO-SCENARIO start user=%s id_auto=%s img1=%s img2=%s prompt=%s",
+                 user_email, str(payload.id_auto), _mask_url(img1),
+                 _mask_url(img2) if img2 else None,
+                 (scenario_prompt[:80] + "...") if scenario_prompt else None)
 
     _gemini_assert_api()
 
-    # --- STEP A: pulizia auto ---
+    # --- STEP A: pulizia/scontorno ---
     prompt_clean = (
         "Nell’immagine allegata rimuovi completamente lo sfondo e sistema luce e riflessi presenti sul soggetto."
     )
-
     rec_clean = UsatoLeonardo(
         id_auto=payload.id_auto,
         provider="gemini",
@@ -2131,18 +2137,15 @@ async def gemini_auto_scenario(
         is_deleted=True
     )
     db.add(rec_clean); db.commit(); db.refresh(rec_clean)
-    _logger.info("STEP A queued rec_clean_id=%s", str(rec_clean.id))
 
     try:
-        img_bytes_list = await _gemini_generate_image_sync(
-            prompt_clean,
-            start_image_url=img1
-        )
+        img_bytes_list = await _gemini_generate_image_sync(prompt_clean, start_image_url=img1)
         if not img_bytes_list:
             raise HTTPException(502, "Gemini non ha restituito immagini allo step A")
 
         img_bytes = img_bytes_list[0]
-        img_bytes = ensure_transparency(img_bytes)
+        img_bytes = ensure_transparency(img_bytes)     # forza PNG RGBA
+        car_bytes_ready = img_bytes                    # usa questi bytes nello step B
 
         pathA = f"{str(rec_clean.id_auto)}/{str(rec_clean.id)}.png"
         _, signed_urlA = _sb_upload_and_sign(pathA, img_bytes, "image/png")
@@ -2159,7 +2162,7 @@ async def gemini_auto_scenario(
         _logger.exception("STEP A Exception")
         raise HTTPException(500, f"Errore generazione step A (pulizia): {e}")
 
-        # --- STEP B: composizione auto + scenario ---
+    # --- STEP B: composizione/generazione finale ---
     if img2:
         prompt_compose = (
             "Crea un’immagine professionale fotorealistica. Prendi l’auto dalla foto allegata e posizionala senza "
@@ -2173,19 +2176,18 @@ async def gemini_auto_scenario(
     else:
         prompt_compose = scenario_prompt
 
-    variants = []
-    last_rec_final = None
+    variants, last_rec_final = [], None
     num = max(1, payload.num_variants or 1)
 
     for _ in range(num):
         rec_final = UsatoLeonardo(
             id_auto=payload.id_auto,
-            provider="gemini" if not img2 else "pillow",
+            provider="pillow" if img2 else "gemini",
             status="queued",
             media_type="image",
             mime_type="image/png",
             prompt=prompt_compose,
-            model_id="gemini-2.5-flash-image-preview" if not img2 else "pillow-compose",
+            model_id="pillow-compose" if img2 else "gemini-2.5-flash-image-preview",
             aspect_ratio="16:9",
             credit_cost=IMG_COST if is_dealer else 0.0,
             user_id=user.id,
@@ -2197,13 +2199,21 @@ async def gemini_auto_scenario(
 
         try:
             if img2:
-                # --- composizione con Pillow direttamente dai bytes Step A ---
-                bg_img  = _download_image(img2)
-                car_img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")  # img_bytes = output Step A
-                img_bytesB = _compose_with_pedana_images(car_img, bg_img, scale_rel=1.3, y_offset_rel=0.12)
+                scale_rel    = payload.scale_rel    if payload.scale_rel    is not None else 1.30
+                y_offset_rel = payload.y_offset_rel if payload.y_offset_rel is not None else 0.12
+                x_offset_rel = payload.x_offset_rel if payload.x_offset_rel is not None else 0.00
+                pedana_rel   = payload.pedana_rel   if payload.pedana_rel   is not None else 0.60
 
+                bg_img  = _download_image(img2)
+                car_img = Image.open(io.BytesIO(car_bytes_ready)).convert("RGBA")
+                img_bytesB = _compose_with_pedana_images(
+                    car_img, bg_img,
+                    scale_rel=scale_rel,
+                    y_offset_rel=y_offset_rel,
+                    x_offset_rel=x_offset_rel,
+                    pedana_rel=pedana_rel
+                )
             else:
-                # --- generazione AI classica ---
                 img_bytesB_list = await _gemini_generate_image_sync(
                     prompt_compose,
                     subject_image_url=_force_str(rec_clean.public_url)
@@ -2212,7 +2222,6 @@ async def gemini_auto_scenario(
                     raise HTTPException(502, "Gemini non ha restituito immagini allo step B")
                 img_bytesB = img_bytesB_list[0]
 
-            # upload
             pathB = f"{str(rec_final.id_auto)}/{str(rec_final.id)}.png"
             _, signed_urlB = _sb_upload_and_sign(pathB, img_bytesB, "image/png")
 
@@ -2228,7 +2237,6 @@ async def gemini_auto_scenario(
             rec_final.status = "failed"; rec_final.error_message = str(e)
             db.commit()
             _logger.exception("STEP B Exception")
-
 
     if not last_rec_final:
         raise HTTPException(502, "Tutte le varianti step B sono fallite")
@@ -2257,10 +2265,8 @@ async def gemini_auto_scenario(
             db.rollback()
             _logger.exception("CREDIT debit failed (non bloccante)")
 
-    _logger.info(
-        "AUTO-SCENARIO done id_auto=%s final_id=%s total_time=%.2fs",
-        str(payload.id_auto), str(last_rec_final.id), time.perf_counter() - t0
-    )
+    _logger.info("AUTO-SCENARIO done id_auto=%s final_id=%s total_time=%.2fs",
+                 str(payload.id_auto), str(last_rec_final.id), time.perf_counter() - t0)
 
     return {
         "success": True,
