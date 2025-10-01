@@ -2016,15 +2016,12 @@ def _download_image(url: str) -> Image.Image:
     resp.raise_for_status()
     return Image.open(io.BytesIO(resp.content)).convert("RGBA")
 
-def _compose_with_pedana(car_url: str, bg_url: str, scale_rel: float = 0.9) -> bytes:
+def _compose_with_pedana_images(car: Image.Image, bg: Image.Image, scale_rel: float = 0.9) -> bytes:
     """
     Composizione auto centrata sulla pedana.
     Assume pedana come cerchio centrale ~60% della larghezza sfondo.
     scale_rel = 0.9 → auto larga il 90% del diametro pedana.
     """
-    bg = _download_image(bg_url)
-    car = _download_image(car_url)
-
     # calcolo diametro pedana (60% della larghezza sfondo)
     pedana_diam = int(bg.width * 0.6)
 
@@ -2034,9 +2031,8 @@ def _compose_with_pedana(car_url: str, bg_url: str, scale_rel: float = 0.9) -> b
     new_h = int(car.height * ratio)
     car = car.resize((new_w, new_h), Image.LANCZOS)
 
-    # centro pedana = centro immagine
+    # centro pedana = centro immagine, con offset verticale
     x = (bg.width - car.width) // 2
-    # offset verticale: abbassa leggermente l’auto perché la pedana è in basso
     y = (bg.height - car.height) // 2 + int(bg.height * 0.05)
 
     composed = bg.copy()
@@ -2045,6 +2041,7 @@ def _compose_with_pedana(car_url: str, bg_url: str, scale_rel: float = 0.9) -> b
     buf = io.BytesIO()
     composed.save(buf, "PNG")
     return buf.getvalue()
+
 
 
 def ensure_transparency(img_bytes: bytes) -> bytes:
@@ -2157,7 +2154,7 @@ async def gemini_auto_scenario(
         _logger.exception("STEP A Exception")
         raise HTTPException(500, f"Errore generazione step A (pulizia): {e}")
 
-    # --- STEP B: composizione auto + scenario ---
+        # --- STEP B: composizione auto + scenario ---
     if img2:
         prompt_compose = (
             "Crea un’immagine professionale fotorealistica. Prendi l’auto dalla foto allegata e posizionala senza "
@@ -2168,7 +2165,6 @@ async def gemini_auto_scenario(
             "Il risultato deve essere indistinguibile da una vera fotografia ad alta risoluzione. "
             "Usa un look da obiettivo 200mm e una ripresa molto ravvicinata all’auto."
         )
-
     else:
         prompt_compose = scenario_prompt
 
@@ -2179,7 +2175,7 @@ async def gemini_auto_scenario(
     for _ in range(num):
         rec_final = UsatoLeonardo(
             id_auto=payload.id_auto,
-            provider="gemini" if not img2 else "pillow",   # 👈 provider diverso se composizione manuale
+            provider="gemini" if not img2 else "pillow",
             status="queued",
             media_type="image",
             mime_type="image/png",
@@ -2196,8 +2192,10 @@ async def gemini_auto_scenario(
 
         try:
             if img2:
-                # --- composizione con Pillow ---
-                img_bytesB = _compose_with_pedana(rec_clean.public_url, img2, scale=0.75)
+                # --- composizione con Pillow direttamente dai bytes Step A ---
+                bg_img = _download_image(img2)
+                car_img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")  # img_bytes = output Step A già trasparente
+                img_bytesB = _compose_with_pedana_images(car_img, bg_img, scale_rel=0.9)
             else:
                 # --- generazione AI classica ---
                 img_bytesB_list = await _gemini_generate_image_sync(
