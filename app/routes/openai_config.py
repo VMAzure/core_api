@@ -1995,7 +1995,6 @@ from fastapi_jwt_auth import AuthJWT
 # from app.routes.openai_config import _gemini_generate_image_sync, _sb_upload_and_sign, _gemini_assert_api
 # from app.notifications import inserisci_notifica
 
-router = APIRouter()
 _logger = logging.getLogger("gemini.auto_scenario")
 IMG_COST = float(os.getenv("GEMINI_IMG_CREDIT_COST", "1.5"))
 
