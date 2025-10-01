@@ -2072,7 +2072,7 @@ def _compose_with_pedana_images(
 # ---------- Request model ----------
 class GeminiAutoScenarioRequest(BaseModel):
     id_auto: UUID
-    img1_url: Union[str, List[str]]
+    img1_url: Optional[str] = None      # 👈 deve diventare opzionale
     img2_url: Union[str, List[str]] | None = None
     scenario_prompt: str | None = None
     num_variants: int = 1
