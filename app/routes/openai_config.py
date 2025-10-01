@@ -2200,7 +2200,7 @@ async def gemini_auto_scenario(
                 # --- composizione con Pillow direttamente dai bytes Step A ---
                 bg_img  = _download_image(img2)
                 car_img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")  # img_bytes = output Step A
-                img_bytesB = _compose_with_pedana_images(car_img, bg_img, scale_rel=2.2, y_offset_rel=0.12)
+                img_bytesB = _compose_with_pedana_images(car_img, bg_img, scale_rel=1.0, y_offset_rel=0.12)
 
             else:
                 # --- generazione AI classica ---
