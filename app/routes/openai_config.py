@@ -211,30 +211,11 @@ class GeminiVideoStatusRequest(BaseModel):
     operation_id: str
 
 
-from typing import Optional, Union, List
-from uuid import UUID
-from pydantic import BaseModel, validator
-
 class GeminiImageHeroRequest(BaseModel):
     id_auto: UUID
     scenario: Optional[str] = None
     prompt_override: Optional[str] = None
-    start_image_url: Optional[Union[str, List[str]]] = None
-    subject_image_url: Optional[Union[str, List[str]]] = None
-    background_image_url: Optional[Union[str, List[str]]] = None
-
-    @validator("start_image_url", "subject_image_url", "background_image_url", pre=True)
-    def normalize_urls(cls, v):
-        if v in (None, "", []):
-            return None
-        if isinstance(v, list):
-            for item in v:
-                if isinstance(item, str) and item.strip():
-                    return item.strip()
-            return None
-        if isinstance(v, str):
-            return v.strip()
-        return None
+    async_mode: Optional[bool] = False
 
 
 
