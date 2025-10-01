@@ -2227,6 +2227,8 @@ async def gemini_auto_scenario(
             rec_final.public_url = signed_urlB
             rec_final.storage_path = pathB
             rec_final.status = "completed"
+            rec_final.is_deleted = True            # 👈 NASCONDI Step B
+
             db.commit()
             variants.append({"id": str(rec_final.id), "public_url": signed_urlB})
             last_rec_final = rec_final
