@@ -2004,6 +2004,35 @@ def _force_str(val) -> str:
                 return s
     raise HTTPException(400, f"Valore non valido per URL immagine: {val!r}")
 
+from PIL import Image
+
+def _download_image(url: str) -> Image.Image:
+    resp = requests.get(url, timeout=20)
+    resp.raise_for_status()
+    return Image.open(io.BytesIO(resp.content)).convert("RGBA")
+
+def _compose_with_pedana(car_url: str, bg_url: str, scale: float = 0.8) -> bytes:
+    bg = _download_image(bg_url)
+    car = _download_image(car_url)
+
+    # ridimensiona auto
+    new_w = int(bg.width * scale)
+    ratio = new_w / car.width
+    new_h = int(car.height * ratio)
+    car = car.resize((new_w, new_h), Image.LANCZOS)
+
+    # centra
+    x = (bg.width - car.width) // 2
+    y = (bg.height - car.height) // 2
+
+    composed = bg.copy()
+    composed.alpha_composite(car, (x, y))
+
+    buf = io.BytesIO()
+    composed.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 class GeminiAutoScenarioRequest(BaseModel):
     id_auto: UUID
     img1_url: Union[str, List[str]]
@@ -2116,12 +2145,12 @@ async def gemini_auto_scenario(
     for _ in range(num):
         rec_final = UsatoLeonardo(
             id_auto=payload.id_auto,
-            provider="gemini",
+            provider="gemini" if not img2 else "pillow",   # 👈 provider diverso se composizione manuale
             status="queued",
             media_type="image",
             mime_type="image/png",
             prompt=prompt_compose,
-            model_id="gemini-2.5-flash-image-preview",
+            model_id="gemini-2.5-flash-image-preview" if not img2 else "pillow-compose",
             aspect_ratio="16:9",
             credit_cost=IMG_COST if is_dealer else 0.0,
             user_id=user.id,
@@ -2130,25 +2159,22 @@ async def gemini_auto_scenario(
             is_deleted=False
         )
         db.add(rec_final); db.commit(); db.refresh(rec_final)
-        _logger.info("STEP B queued rec_final_id=%s", str(rec_final.id))
 
         try:
             if img2:
-                img_bytesB_list = await _gemini_generate_image_sync(
-                    prompt_compose,
-                    subject_image_url=_force_str(rec_clean.public_url),
-                    background_image_url=_force_str(img2)
-                )
+                # --- composizione con Pillow ---
+                img_bytesB = _compose_with_pedana(rec_clean.public_url, img2, scale=0.75)
             else:
+                # --- generazione AI classica ---
                 img_bytesB_list = await _gemini_generate_image_sync(
                     prompt_compose,
                     subject_image_url=_force_str(rec_clean.public_url)
                 )
+                if not img_bytesB_list:
+                    raise HTTPException(502, "Gemini non ha restituito immagini allo step B")
+                img_bytesB = img_bytesB_list[0]
 
-            if not img_bytesB_list:
-                raise HTTPException(502, "Gemini non ha restituito immagini allo step B")
-
-            img_bytesB = img_bytesB_list[0]
+            # upload
             pathB = f"{str(rec_final.id_auto)}/{str(rec_final.id)}.png"
             _, signed_urlB = _sb_upload_and_sign(pathB, img_bytesB, "image/png")
 
@@ -2164,7 +2190,7 @@ async def gemini_auto_scenario(
             rec_final.status = "failed"; rec_final.error_message = str(e)
             db.commit()
             _logger.exception("STEP B Exception")
-            # continua per eventuali altre varianti
+
 
     if not last_rec_final:
         raise HTTPException(502, "Tutte le varianti step B sono fallite")
