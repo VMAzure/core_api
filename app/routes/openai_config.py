@@ -2016,29 +2016,36 @@ def _download_image(url: str) -> Image.Image:
     resp.raise_for_status()
     return Image.open(io.BytesIO(resp.content)).convert("RGBA")
 
+def _trim_alpha(im: Image.Image) -> Image.Image:
+    if im.mode != "RGBA":
+        im = im.convert("RGBA")
+    bbox = im.getchannel("A").getbbox()
+    return im.crop(bbox) if bbox else im
+
 def _compose_with_pedana_images(car: Image.Image, bg: Image.Image,
                                 scale_rel: float = 2.2,
-                                y_offset_rel: float = 0.15) -> bytes:
-    """
-    scale_rel = grandezza auto rispetto al diametro pedana
-    y_offset_rel = quanto spostare l'auto in basso rispetto al centro (in % altezza sfondo)
-    """
-    pedana_diam = int(bg.width * 0.6)
+                                y_offset_rel: float = 0.12) -> bytes:
+    # rimuovi padding trasparente
+    car = _trim_alpha(car)
+    orig_size = car.size
 
-    new_w = int(pedana_diam * scale_rel)
+    pedana_diam = int(bg.width * 0.6)
+    new_w = max(1, int(pedana_diam * scale_rel))
     ratio = new_w / car.width
-    new_h = int(car.height * ratio)
+    new_h = max(1, int(car.height * ratio))
     car = car.resize((new_w, new_h), Image.LANCZOS)
 
     x = (bg.width - car.width) // 2
     y = (bg.height - car.height) // 2 + int(bg.height * y_offset_rel)
 
+    _logger.info("PEDANA diam=%d scale=%.2f car_before=%s car_after=%s pos=(%d,%d)",
+                 pedana_diam, scale_rel, orig_size, car.size, x, y)
+
     composed = bg.copy()
     composed.alpha_composite(car, (x, y))
-
-    buf = io.BytesIO()
-    composed.save(buf, "PNG")
+    buf = io.BytesIO(); composed.save(buf, "PNG")
     return buf.getvalue()
+
 
 
 
@@ -2191,9 +2198,10 @@ async def gemini_auto_scenario(
         try:
             if img2:
                 # --- composizione con Pillow direttamente dai bytes Step A ---
-                bg_img = _download_image(img2)
-                car_img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")  # img_bytes = output Step A già trasparente
-                img_bytesB = _compose_with_pedana_images(car_img, bg_img, scale_rel=0.9)
+                bg_img  = _download_image(img2)
+                car_img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")  # img_bytes = output Step A
+                img_bytesB = _compose_with_pedana_images(car_img, bg_img, scale_rel=2.2, y_offset_rel=0.12)
+
             else:
                 # --- generazione AI classica ---
                 img_bytesB_list = await _gemini_generate_image_sync(
