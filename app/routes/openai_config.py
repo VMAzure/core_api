@@ -211,12 +211,9 @@ class GeminiVideoStatusRequest(BaseModel):
     operation_id: str
 
 
-
-from typing import Union, List, Optional
-
-from pydantic import BaseModel, validator
 from typing import Optional, Union, List
 from uuid import UUID
+from pydantic import BaseModel, validator
 
 class GeminiImageHeroRequest(BaseModel):
     id_auto: UUID
