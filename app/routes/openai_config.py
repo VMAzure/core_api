@@ -2076,6 +2076,7 @@ class GeminiAutoScenarioRequest(BaseModel):
     img2_url: Union[str, List[str]] | None = None
     scenario_prompt: str | None = None
     num_variants: int = 1
+    img_urls: Optional[List[str]] = []   # 👈 nuovo campo
     # parametri dinamici per compositing
     scale_rel: float | None = None
     y_offset_rel: float | None = None
@@ -2109,6 +2110,70 @@ async def gemini_auto_scenario(
     is_dealer = is_dealer_user(user)
     if is_dealer and (user.credit is None or user.credit < IMG_COST):
         raise HTTPException(402, "Credito insufficiente")
+
+        # --------- NUOVA GESTIONE: foto + scenario_prompt senza img2_url ----------
+    if scenario_prompt and not img2:
+        # Se ci sono più URL (nuovo caso multiplo)
+        urls = payload.img_urls or ([img1] if img1 else [])
+        if not urls:
+            raise HTTPException(400, "Devi passare almeno un'immagine in img1_url o img_urls")
+
+        num = max(1, payload.num_variants or 1)
+        created_records = []
+
+        for url in urls:
+            for _ in range(num):
+                rec = UsatoLeonardo(
+                    id_auto=payload.id_auto,
+                    provider="gemini",
+                    status="queued",
+                    media_type="image",
+                    mime_type="image/png",
+                    prompt=scenario_prompt,
+                    model_id="gemini-2.5-flash-image-preview",
+                    aspect_ratio="16:9",
+                    credit_cost=IMG_COST if is_dealer else 0.0,
+                    user_id=user.id,
+                    subject_url=_force_str(url),
+                    is_deleted=False
+                )
+                db.add(rec)
+                db.commit()
+                db.refresh(rec)
+                created_records.append(rec)
+
+        # debito crediti subito (N × M)
+        if is_dealer:
+            try:
+                total_cost = IMG_COST * len(urls) * num
+                pre_credit = float(user.credit or 0)
+                user.credit = pre_credit - total_cost
+                db.add(CreditTransaction(
+                    dealer_id=user.id,
+                    amount=-total_cost,
+                    transaction_type="USE",
+                    note=f"Gemini auto+scenario (queued {len(urls)} foto × {num} varianti)"
+                ))
+                inserisci_notifica(
+                    db=db,
+                    utente_id=user.id,
+                    tipo_codice="CREDITO_USATO",
+                    messaggio=f"Hai utilizzato {total_cost:g} crediti per {len(urls)} foto × {num} varianti (auto+scenario)."
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                _logger.exception("CREDIT debit failed (non bloccante)")
+
+        return {
+            "success": True,
+            "id_auto": str(payload.id_auto),
+            "status": "queued",
+            "public_url": None,
+            "usato_leonardo_ids": [str(r.id) for r in created_records],
+            "count": len(created_records)
+        }
+
 
     # --------- NUOVA GESTIONE: foto + scenario_prompt senza img2_url ----------
     if img1 and scenario_prompt and not img2:
