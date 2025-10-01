@@ -1976,6 +1976,11 @@ async def dalle_combine(
 
 # --- GEMINI AUTO + SCENARIO (2-step con credito + upload + storico + LOG) ---
 import os, time, logging, urllib.parse
+from typing import Union, List
+from uuid import UUID
+from fastapi import Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 IMG_COST = float(os.getenv("GEMINI_IMG_CREDIT_COST", "1.5"))
 _logger = logging.getLogger("gemini.auto_scenario")
@@ -2002,10 +2007,9 @@ def _force_str(val) -> str:
 class GeminiAutoScenarioRequest(BaseModel):
     id_auto: UUID
     img1_url: Union[str, List[str]]
-    img2_url: Union[str, List[str]] = None
-    scenario_prompt: str = None
-    num_variants: int = 1   # default 1, se >1 genera più varianti Step B
-
+    img2_url: Union[str, List[str]] | None = None
+    scenario_prompt: str | None = None
+    num_variants: int = 1
 
 @router.post("/ai/gemini/auto-scenario")
 async def gemini_auto_scenario(
@@ -2013,12 +2017,6 @@ async def gemini_auto_scenario(
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
-    """
-    Step A: pulizia foto auto (hidden via is_deleted=True)
-    Step B: composizione auto + scenario (visibile)
-    - Con img2_url → scenario come immagine (prompt hardcoded)
-    - Con scenario_prompt → scenario testuale passato dal client
-    """
     t0 = time.perf_counter()
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
@@ -2041,17 +2039,18 @@ async def gemini_auto_scenario(
     if is_dealer and (user.credit is None or user.credit < IMG_COST):
         raise HTTPException(402, "Credito insufficiente")
 
-    _logger.info("AUTO-SCENARIO start user=%s id_auto=%s img1=%s img2=%s prompt=%s",
-                 user_email, str(payload.id_auto), _mask_url(img1),
-                 _mask_url(img2) if img2 else None,
-                 (scenario_prompt[:80] + "...") if scenario_prompt else None)
+    _logger.info(
+        "AUTO-SCENARIO start user=%s id_auto=%s img1=%s img2=%s prompt=%s",
+        user_email, str(payload.id_auto), _mask_url(img1),
+        _mask_url(img2) if img2 else None,
+        (scenario_prompt[:80] + "...") if scenario_prompt else None
+    )
 
     _gemini_assert_api()
 
     # --- STEP A: pulizia auto ---
     prompt_clean = (
-        "Nell’immagine allegata rimuovi completamente lo sfondo e sistema luce e riflessi "
-        "presenti sul soggetto."
+        "Nell’immagine allegata rimuovi completamente lo sfondo e sistema luce e riflessi presenti sul soggetto."
     )
 
     rec_clean = UsatoLeonardo(
@@ -2072,7 +2071,6 @@ async def gemini_auto_scenario(
     _logger.info("STEP A queued rec_clean_id=%s", str(rec_clean.id))
 
     try:
-        tA = time.perf_counter()
         img_bytes_list = await _gemini_generate_image_sync(
             prompt_clean,
             start_image_url=img1
@@ -2098,71 +2096,75 @@ async def gemini_auto_scenario(
 
     # --- STEP B: composizione auto + scenario ---
     if img2:
-        # Prompt hardcoded
         prompt_compose = (
-            "Compose a professional photorealistic image. Take the car from attached photo and place it seamlessly "
-            "into the scenario: in other image attached. The car must stand firmly on the ground plane of the scene, "
-            "with all four wheels resting naturally. Keep unchanged the original framing, camera angle, and perspective "
-            "of the provided car photo. The car must look perfectly integrated, centered, and scaled naturally and is "
-            "the first camera scene. The result must be indistinguishable from a real high-resolution photograph."
-            "use 85mm camera and th photographer is very nearly to the car"
+            "Compose a professional photorealistic image. Take the car from the attached photo and place it "
+            "seamlessly into the other attached scenario image. The car must stand on the ground plane with all "
+            "four wheels resting naturally. Keep the original framing, camera angle, and perspective of the car "
+            "photo. Integrate lighting and reflections so the result is indistinguishable from a real high-resolution "
+            "photograph. Use an 85mm look and a near-camera viewpoint."
         )
     else:
-        # Prompt testuale passato dal client
         prompt_compose = scenario_prompt
 
-    
-        variants = []
-        for i in range(max(1, payload.num_variants or 1)):
-            rec_final = UsatoLeonardo(
-                id_auto=payload.id_auto,
-                provider="gemini",
-                status="queued",
-                media_type="image",
-                mime_type="image/png",
-                prompt=prompt_compose,
-                model_id="gemini-2.5-flash-image-preview",
-                aspect_ratio="16:9",
-                credit_cost=IMG_COST if is_dealer else 0.0,
-                user_id=user.id,
-                subject_url=rec_clean.public_url,
-                background_url=img2 if img2 else None,
-                is_deleted=False
-            )
-            db.add(rec_final); db.commit(); db.refresh(rec_final)
-            _logger.info("STEP B queued rec_final_id=%s", str(rec_final.id))
+    variants = []
+    last_rec_final = None
+    num = max(1, payload.num_variants or 1)
 
-            try:
-                if img2:
-                    img_bytesB_list = await _gemini_generate_image_sync(
-                        prompt_compose,
-                        subject_image_url=_force_str(rec_clean.public_url),
-                        background_image_url=_force_str(img2)
-                    )
-                else:
-                    img_bytesB_list = await _gemini_generate_image_sync(
-                        prompt_compose,
-                        subject_image_url=_force_str(rec_clean.public_url)
-                    )
+    for _ in range(num):
+        rec_final = UsatoLeonardo(
+            id_auto=payload.id_auto,
+            provider="gemini",
+            status="queued",
+            media_type="image",
+            mime_type="image/png",
+            prompt=prompt_compose,
+            model_id="gemini-2.5-flash-image-preview",
+            aspect_ratio="16:9",
+            credit_cost=IMG_COST if is_dealer else 0.0,
+            user_id=user.id,
+            subject_url=rec_clean.public_url,
+            background_url=img2 if img2 else None,
+            is_deleted=False
+        )
+        db.add(rec_final); db.commit(); db.refresh(rec_final)
+        _logger.info("STEP B queued rec_final_id=%s", str(rec_final.id))
 
-                if not img_bytesB_list:
-                    raise HTTPException(502, "Gemini non ha restituito immagini allo step B")
+        try:
+            if img2:
+                img_bytesB_list = await _gemini_generate_image_sync(
+                    prompt_compose,
+                    subject_image_url=_force_str(rec_clean.public_url),
+                    background_image_url=_force_str(img2)
+                )
+            else:
+                img_bytesB_list = await _gemini_generate_image_sync(
+                    prompt_compose,
+                    subject_image_url=_force_str(rec_clean.public_url)
+                )
 
-                img_bytesB = img_bytesB_list[0]
-                pathB = f"{str(rec_final.id_auto)}/{str(rec_final.id)}.png"
-                _, signed_urlB = _sb_upload_and_sign(pathB, img_bytesB, "image/png")
+            if not img_bytesB_list:
+                raise HTTPException(502, "Gemini non ha restituito immagini allo step B")
 
-                rec_final.public_url = signed_urlB
-                rec_final.storage_path = pathB
-                rec_final.status = "completed"
-                db.commit()
-                variants.append({"id": str(rec_final.id), "public_url": signed_urlB})
-                _logger.info("STEP B uploaded path=%s url=%s", pathB, _mask_url(signed_urlB))
+            img_bytesB = img_bytesB_list[0]
+            pathB = f"{str(rec_final.id_auto)}/{str(rec_final.id)}.png"
+            _, signed_urlB = _sb_upload_and_sign(pathB, img_bytesB, "image/png")
 
-            except Exception as e:
-                rec_final.status = "failed"; rec_final.error_message = str(e)
-                db.commit()
-                _logger.exception("STEP B Exception")
+            rec_final.public_url = signed_urlB
+            rec_final.storage_path = pathB
+            rec_final.status = "completed"
+            db.commit()
+            variants.append({"id": str(rec_final.id), "public_url": signed_urlB})
+            last_rec_final = rec_final
+            _logger.info("STEP B uploaded path=%s url=%s", pathB, _mask_url(signed_urlB))
+
+        except Exception as e:
+            rec_final.status = "failed"; rec_final.error_message = str(e)
+            db.commit()
+            _logger.exception("STEP B Exception")
+            # continua per eventuali altre varianti
+
+    if not last_rec_final:
+        raise HTTPException(502, "Tutte le varianti step B sono fallite")
 
     # --- credito dealer ---
     if is_dealer:
@@ -2184,17 +2186,20 @@ async def gemini_auto_scenario(
             db.commit()
             _logger.info("CREDIT debited dealer_id=%s from=%.3f to=%.3f",
                          user.id, pre_credit, float(user.credit or 0))
-        except Exception as e:
+        except Exception:
             db.rollback()
             _logger.exception("CREDIT debit failed (non bloccante)")
 
-    _logger.info("AUTO-SCENARIO done id_auto=%s final_id=%s total_time=%.2fs",
-                 str(payload.id_auto), str(rec_final.id), time.perf_counter() - t0)
+    _logger.info(
+        "AUTO-SCENARIO done id_auto=%s final_id=%s total_time=%.2fs",
+        str(payload.id_auto), str(last_rec_final.id), time.perf_counter() - t0
+    )
 
     return {
         "success": True,
         "id_auto": str(payload.id_auto),
-        "status": rec_final.status,
-        "public_url": rec_final.public_url,
-        "usato_leonardo_id": str(rec_final.id)
+        "status": last_rec_final.status,
+        "public_url": last_rec_final.public_url,
+        "usato_leonardo_id": str(last_rec_final.id),
+        "variants": variants
     }
