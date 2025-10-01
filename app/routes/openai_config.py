@@ -2094,14 +2094,17 @@ async def gemini_auto_scenario(
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
 
-    img1 = _force_str(payload.img1_url)
+    img1 = _force_str(payload.img1_url) if payload.img1_url else None
     img2 = _force_str(payload.img2_url) if payload.img2_url else None
     scenario_prompt = (payload.scenario_prompt or "").strip() if payload.scenario_prompt else None
 
-    if not img1:
-        raise HTTPException(400, "img1_url obbligatorio")
+    # almeno una immagine deve esserci
+    if not (img1 or payload.img_urls):
+        raise HTTPException(400, "Devi passare almeno img1_url o img_urls")
+
     if not (img2 or scenario_prompt):
         raise HTTPException(400, "Devi passare img2_url oppure scenario_prompt")
+
 
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
