@@ -1236,15 +1236,35 @@ async def upload_perizia_usato(
 
 
 @router.get("/foto-usato/{auto_id}", tags=["AZLease"])
-def get_foto_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
+def get_foto_usato(
+    auto_id: str,
+    offset: int = 0,
+    limit: int = 20,
+    Authorize: AuthJWT = Depends(),
+    db: Session = Depends(get_db)
+):
     Authorize.jwt_required()
 
-    immagini = db.execute(text("""
-        SELECT id, foto, principale FROM azlease_usatoimg WHERE auto_id = :auto_id
-    """), {"auto_id": auto_id}).fetchall()
+    q = text("""
+        SELECT id, foto, principale
+        FROM azlease_usatoimg
+        WHERE auto_id = :auto_id
+        ORDER BY id DESC
+        OFFSET :offset LIMIT :limit
+    """)
+
+    immagini = db.execute(q, {"auto_id": auto_id, "offset": offset, "limit": limit}).fetchall()
+
+    total = db.execute(
+        text("SELECT COUNT(*) FROM azlease_usatoimg WHERE auto_id = :auto_id"),
+        {"auto_id": auto_id}
+    ).scalar()
 
     return {
         "auto_id": auto_id,
+        "offset": offset,
+        "limit": limit,
+        "total": total,
         "immagini": [
             {
                 "id": img.id,
@@ -1253,6 +1273,7 @@ def get_foto_usato(auto_id: str, Authorize: AuthJWT = Depends(), db: Session = D
             } for img in immagini
         ]
     }
+
 
 from fastapi import Depends
 from fastapi_jwt_auth import AuthJWT
