@@ -665,16 +665,22 @@ def _gemini_build_image_prompt(
     )
 
 def _gemini_build_prompt_with_override(
-    auto,
-    override: str
+    auto,             # può essere AZLeaseUsatoAuto o un dict
+    override: str,
+    det: Optional[MnetDettaglioUsato] = None  # 👈 aggiunto
 ) -> str:
     """Costruisce un prompt fotorealistico combinando i dati dell'auto con l'override dell'utente."""
 
-    marca = (getattr(auto, "marca_nome", None) or "").strip()
-    modello = (getattr(auto, "modello", None) or "").strip()
-    allest = (getattr(auto, "allestimento", None) or "").strip()
-    anno = getattr(auto, "anno_immatricolazione", None) or ""
-    colore = (getattr(auto, "colore", None) or "").strip()
+    # Recupera i dati da det se disponibile, altrimenti da auto
+    marca = (getattr(det, "marca_nome", None) or getattr(auto, "marca_nome", None) or "").strip()
+    modello = (getattr(det, "modello", None) or getattr(auto, "modello", None) or "").strip()
+    allest = (getattr(det, "allestimento", None) or getattr(auto, "allestimento", None) or "").strip()
+    anno = (
+        getattr(auto, "anno_immatricolazione", None)
+        or getattr(det, "anno", None)
+        or ""
+    )
+    colore = (getattr(auto, "colore", None) or getattr(det, "colore", None) or "").strip()
     prec = (getattr(auto, "precisazioni", None) or "").strip()
 
     # base descrittiva dell'auto
@@ -688,17 +694,14 @@ def _gemini_build_prompt_with_override(
     if prec:
         base += f" {prec}"
 
-    # parte introduttiva solida
     intro = (
         f"Realizza un’immagine fotorealistica professionale di una {base}. "
         "Assicurati che proporzioni, dettagli di carrozzeria, loghi e finiture "
         "siano corretti e fedeli al modello reale. "
     )
 
-    # override utente (angolo, ambiente, ecc.)
     user = override.strip()
 
-    # chiusura tecnica standard
     closing = (
         " Restituisci un’immagine 1024x1024 in altissima risoluzione, "
         "con resa cinematografica, profondità realistica, "
@@ -707,6 +710,7 @@ def _gemini_build_prompt_with_override(
     )
 
     return f"{intro}{user} {closing}"
+
 
 
 
@@ -916,11 +920,12 @@ async def genera_image_hero_veo3(
 
     # Prompt di fallback
     if payload.prompt_override:
-        prompt = _gemini_build_prompt_with_override(auto, payload.prompt_override)
+        prompt = _gemini_build_prompt_with_override(auto, payload.prompt_override, det)
     else:
         prompt = _gemini_build_image_prompt(
             marca, modello, anno, colore, allestimento, auto.precisazioni
         )
+
 
 
     _gemini_assert_api()
