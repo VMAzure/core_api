@@ -1267,18 +1267,26 @@ from fastapi import APIRouter
 def elenco_media_ai(
     id_auto: UUID,
     only_active: bool = False,
+    offset: int = 0,
+    limit: int = 20,
     db: Session = Depends(get_db)
 ):
     q = db.query(UsatoLeonardo).filter(
         UsatoLeonardo.id_auto == id_auto,
         UsatoLeonardo.status == "completed",
-        UsatoLeonardo.is_deleted.is_(False)   
-
+        UsatoLeonardo.is_deleted.is_(False)
     )
     if only_active:
         q = q.filter(UsatoLeonardo.is_active.is_(True))
 
-    rows = q.order_by(UsatoLeonardo.created_at.desc()).all()
+    total = q.count()  # opzionale se vuoi restituire anche il totale
+
+    rows = (
+        q.order_by(UsatoLeonardo.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
     return {
         "media": [
@@ -1292,8 +1300,12 @@ def elenco_media_ai(
                 "model": r.model_id
             }
             for r in rows
-        ]
+        ],
+        "offset": offset,
+        "limit": limit,
+        "total": total
     }
+
 
 @router.patch("/leonardo/{id}/delete", tags=["AZLease Media"])
 def soft_delete_media_ai(
