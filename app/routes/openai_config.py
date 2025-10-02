@@ -216,6 +216,8 @@ class GeminiImageHeroRequest(BaseModel):
     scenario: Optional[str] = None
     prompt_override: Optional[str] = None
     async_mode: Optional[bool] = False
+    background_image_url: Optional[str] = None   # 👈 nuovo
+
 
 
 
