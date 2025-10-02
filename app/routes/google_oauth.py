@@ -114,7 +114,7 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
         jwt = Authorize.create_access_token(subject=user.email)
 
         # 4. Redirect al frontend con token in querystring
-        frontend_url = f"https://www.gigigorilla.io/html/auth.html?token={jwt}"
+        frontend_url = f"https://www.gigigorilla.io/auth?token={jwt}"
         return RedirectResponse(url=frontend_url)
     finally:
         db.close()
