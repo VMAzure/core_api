@@ -1,7 +1,7 @@
 ﻿from fastapi import APIRouter, HTTPException, Depends, status, Security
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
-from app.models import User, PurchasedServices, Services, SiteAdminSettings
+from app.models import User, PurchasedServices, Services, SiteAdminSettings, RefreshToken
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -23,6 +23,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 300
+REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 
 # OAuth2 per gestione token
@@ -69,7 +70,6 @@ def get_current_user(token: str = Security(oauth2_scheme), db: Session = Depends
 
     return {"user": user, "role": user.role, "credit": user.credit}
 
-# Endpoint di login
 @router.post("/login")
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -77,18 +77,13 @@ def login(
     Authorize: AuthJWT = Depends()
 ):
     user = db.query(User).filter(User.email == form_data.username).first()
-
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenziali non valide")
 
-    # SUPERADMIN
+    # --- SUPERADMIN ---
     if user.role == "superadmin":
         active_services = db.query(Services).filter(Services.page_url.isnot(None)).all()
-
-        active_service_infos = [
-            {"name": service.name, "page_url": service.page_url or "#"}
-            for service in active_services
-        ]
+        active_service_infos = [{"name": s.name, "page_url": s.page_url or "#"} for s in active_services]
 
         access_token = Authorize.create_access_token(
             subject=user.email,
@@ -109,17 +104,28 @@ def login(
             },
             expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         )
-        return {"access_token": access_token, "token_type": "bearer"}
 
-    # ADMIN
+        # --- Refresh token (rotazione singola) ---
+        db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
+        refresh_token = secrets.token_urlsafe(64)
+        expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        db.add(RefreshToken(user_id=user.id, token=refresh_token, expires_at=expires_at))
+        db.commit()
+
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer"
+        }
+
+    # --- ADMIN / TEAM / DEALER / DEALER_TEAM ---
     if user.role == "admin":
         admin_user = user
         admin_id = user.id
         dealer = None
         dealer_id = None
-        active_services = db.query(Services).all()  # ✅ override completo
+        active_services = db.query(Services).all()
 
-    # ADMIN_TEAM
     elif user.role == "admin_team" and user.parent_id:
         admin_user = db.query(User).filter(User.id == user.parent_id).first()
         if not admin_user or admin_user.role != "admin":
@@ -127,10 +133,8 @@ def login(
         admin_id = admin_user.id
         dealer = None
         dealer_id = None
-        active_services = db.query(Services).all()  # ✅ override completo
+        active_services = db.query(Services).all()
 
-
-    # DEALER
     elif user.role == "dealer":
         dealer = user
         dealer_id = user.id
@@ -139,7 +143,6 @@ def login(
             raise HTTPException(status_code=400, detail="Admin non valido")
         admin_id = admin_user.id
 
-    # DEALER_TEAM
     elif user.role == "dealer_team" and user.parent_id:
         dealer = db.query(User).filter(User.id == user.parent_id).first()
         if not dealer or dealer.role != "dealer":
@@ -153,12 +156,10 @@ def login(
     else:
         raise HTTPException(status_code=400, detail="Ruolo utente non valido o relazioni mancanti")
 
-    # Recupera servizi attivi per admin o dealer
-    # Se admin o admin_team → tutti i servizi
+    # --- Servizi attivi ---
     if user.role in ["admin", "admin_team"]:
         active_services = db.query(Services).all()
     else:
-        # Altrimenti solo quelli assegnati
         active_services = db.query(Services).join(
             PurchasedServices, PurchasedServices.service_id == Services.id
         ).filter(
@@ -166,34 +167,23 @@ def login(
             (PurchasedServices.admin_id == admin_id) | (PurchasedServices.dealer_id == dealer_id)
         ).all()
 
+    active_service_infos = [{"name": s.name, "page_url": s.page_url or "#"} for s in active_services]
 
-
-    active_service_infos = [
-        {"name": service.name, "page_url": service.page_url or "#"}
-        for service in active_services
-    ]
-
-        # --- Recupero logo dealer da SiteAdminSettings ---
+    # --- Logo / slug ---
     slug = None
     dealer_logo_url = None
-
     if dealer_id:
-        settings = db.query(SiteAdminSettings).filter(
-            SiteAdminSettings.dealer_id == dealer_id
-        ).first()
+        settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer_id).first()
     elif admin_id:
         settings = db.query(SiteAdminSettings).filter(
             SiteAdminSettings.admin_id == admin_id,
-            SiteAdminSettings.dealer_id.is_(None)  # ✅ seleziona solo lo slug dell'admin principale
+            SiteAdminSettings.dealer_id.is_(None)
         ).first()
-
     if settings:
         dealer_logo_url = settings.logo_web
         slug = settings.slug
 
-
-
-    # Creazione access token
+    # --- Access token con claims completi ---
     access_token = Authorize.create_access_token(
         subject=user.email,
         user_claims={
@@ -220,64 +210,68 @@ def login(
         expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    # --- Refresh token (rotazione singola) ---
+    db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
+    refresh_token = secrets.token_urlsafe(64)
+    expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    db.add(RefreshToken(user_id=user.id, token=refresh_token, expires_at=expires_at))
+    db.commit()
 
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
+@router.post("/refresh")
+def refresh(req: RefreshRequest, db: Session = Depends(get_db), Authorize: AuthJWT = Depends()):
+    # --- 1. Cerca il refresh token nel DB ---
+    rt = db.query(RefreshToken).filter(RefreshToken.token == req.refresh_token).first()
+    if not rt or rt.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Refresh token non valido o scaduto")
 
-
-
-@router.post('/refresh-token')
-def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
-    Authorize.jwt_required()
-
-    current_user_email = Authorize.get_jwt_subject()
-    user = db.query(User).filter(User.email == current_user_email).first()
+    # --- 2. Recupera l’utente associato ---
+    user = db.query(User).filter(User.id == rt.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utente non trovato")
 
-    admin_user = None
-    dealer = None
-    admin_id = None
-    dealer_id = None
+    # --- 3. Elimina il vecchio refresh token (rotazione singola) ---
+    db.delete(rt)
 
+    # --- 4. Ricrea claims come in /login ---
     if user.role == "superadmin":
         admin_user = user
         admin_id = None
         dealer_id = None
+        dealer = None
         active_services = db.query(Services).filter(Services.page_url.isnot(None)).all()
 
     elif user.role == "admin":
         admin_user = user
         admin_id = user.id
-        active_services = db.query(Services).all()  # ✅ override
-
+        dealer_id = None
+        dealer = None
+        active_services = db.query(Services).all()
 
     elif user.role == "admin_team" and user.parent_id:
         admin_user = db.query(User).filter(User.id == user.parent_id).first()
-        admin_id = admin_user.id if admin_user else None
-        active_services = db.query(Services).all()  # ✅ override completo
-
+        if not admin_user or admin_user.role != "admin":
+            raise HTTPException(status_code=400, detail="Admin principale non valido")
+        admin_id = admin_user.id
+        dealer_id = None
+        dealer = None
+        active_services = db.query(Services).all()
 
     elif user.role == "dealer":
         dealer = user
         dealer_id = user.id
         admin_user = db.query(User).filter(User.id == user.parent_id).first()
-        admin_id = admin_user.id if admin_user else None
-
-    elif user.role == "dealer_team" and user.parent_id:
-        dealer = db.query(User).filter(User.id == user.parent_id).first()
-        dealer_id = dealer.id if dealer else None
-        admin_user = db.query(User).filter(User.id == dealer.parent_id).first() if dealer else None
-        admin_id = admin_user.id if admin_user else None
-
-    else:
-        raise HTTPException(status_code=400, detail="Ruolo utente non valido o relazioni mancanti")
-
-    # Recupero servizi attivi
-    if user.role in ["admin", "admin_team"]:
-        active_services = db.query(Services).all()
-    elif user.role != "superadmin":
+        if not admin_user or admin_user.role != "admin":
+            raise HTTPException(status_code=400, detail="Admin non valido")
+        admin_id = admin_user.id
         active_services = db.query(Services).join(
             PurchasedServices, PurchasedServices.service_id == Services.id
         ).filter(
@@ -285,35 +279,44 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
             (PurchasedServices.admin_id == admin_id) | (PurchasedServices.dealer_id == dealer_id)
         ).all()
 
+    elif user.role == "dealer_team" and user.parent_id:
+        dealer = db.query(User).filter(User.id == user.parent_id).first()
+        if not dealer or dealer.role != "dealer":
+            raise HTTPException(status_code=400, detail="Dealer principale non valido")
+        dealer_id = dealer.id
+        admin_user = db.query(User).filter(User.id == dealer.parent_id).first()
+        if not admin_user or admin_user.role != "admin":
+            raise HTTPException(status_code=400, detail="Admin non valido")
+        admin_id = admin_user.id
+        active_services = db.query(Services).join(
+            PurchasedServices, PurchasedServices.service_id == Services.id
+        ).filter(
+            PurchasedServices.status == "attivo",
+            (PurchasedServices.admin_id == admin_id) | (PurchasedServices.dealer_id == dealer_id)
+        ).all()
 
-    active_service_infos = [
-        {"name": service.name, "page_url": service.page_url or "#"}
-        for service in active_services
-    ]
+    else:
+        raise HTTPException(status_code=400, detail="Ruolo utente non valido o relazioni mancanti")
 
-        # --- Recupero logo dealer da SiteAdminSettings ---
+    active_service_infos = [{"name": s.name, "page_url": s.page_url or "#"} for s in active_services]
+
+    # --- 5. Recupero slug e logo ---
     slug = None
     dealer_logo_url = None
-
     if dealer_id:
-        settings = db.query(SiteAdminSettings).filter(
-            SiteAdminSettings.dealer_id == dealer_id
-        ).first()
+        settings = db.query(SiteAdminSettings).filter(SiteAdminSettings.dealer_id == dealer_id).first()
     elif admin_id:
         settings = db.query(SiteAdminSettings).filter(
             SiteAdminSettings.admin_id == admin_id,
-            SiteAdminSettings.dealer_id.is_(None)  # ✅ seleziona solo lo slug dell'admin principale
+            SiteAdminSettings.dealer_id.is_(None)
         ).first()
-
     if settings:
         dealer_logo_url = settings.logo_web
         slug = settings.slug
 
-
-
-    # Creazione nuovo token
-    new_token = Authorize.create_access_token(
-        subject=current_user_email,
+    # --- 6. Genera nuovo access token ---
+    new_access_token = Authorize.create_access_token(
+        subject=user.email,
         user_claims={
             "id": user.id,
             "role": user.role,
@@ -321,15 +324,15 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
             "credit": user.credit,
             "admin_id": admin_id,
             "dealer_id": dealer_id,
+            "slug": slug,
             "active_services": active_service_infos,
             "admin_info": {
                 "email": admin_user.email if admin_user else None,
-                "logo_url": admin_user.logo_url if admin_user and admin_user.logo_url else "",
+                "logo_url": admin_user.logo_url if admin_user else "",
                 "ragione_sociale": admin_user.ragione_sociale if admin_user else None
             },
             "dealer_info": {
                 "id": dealer.id if dealer else None,
-                "slug": slug,
                 "email": dealer.email if dealer else None,
                 "logo_url": dealer_logo_url or "",
                 "ragione_sociale": dealer.ragione_sociale if dealer else None
@@ -338,7 +341,19 @@ def refresh_token(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db))
         expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
-    return {"access_token": new_token}
+    # --- 7. Genera nuovo refresh token ---
+    new_refresh = secrets.token_urlsafe(64)
+    new_expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    db.add(RefreshToken(user_id=user.id, token=new_refresh, expires_at=new_expires_at))
+
+    db.commit()
+
+    return {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh,
+        "token_type": "bearer"
+    }
+
 
 
 from pydantic import BaseModel

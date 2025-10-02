@@ -90,6 +90,19 @@ class User(Base):
         """Verifica la password"""
         return pwd_context.verify(password, self.hashed_password)
 
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("public.utenti.id", ondelete="CASCADE"), nullable=False)
+    token = Column(String, unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    # Relazione con utenti
+    user = relationship("User", backref="refresh_tokens")
         
 class TeamMemberUpdateRequest(BaseModel):
     email: EmailStr
