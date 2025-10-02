@@ -1,7 +1,7 @@
-﻿# app/routes/google_oauth.py
-import os
+﻿import os
 import secrets
 import requests
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi_jwt_auth import AuthJWT
@@ -20,21 +20,17 @@ OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "300"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
+
 
 def _require_env():
     if not (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI):
         raise HTTPException(status_code=500, detail="Google OAuth env vars mancanti")
 
 
-def _db() -> Session:
-    return SessionLocal()
-
-
 @router.get("/login")
 def google_login():
-    """
-    Redirect immediato a Google. Usa direttamente un <a href="/auth/google/login">.
-    """
     _require_env()
     url = (
         f"{OAUTH_AUTHORIZE_URL}"
@@ -68,14 +64,14 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
     if not token_res.ok:
         raise HTTPException(status_code=400, detail="Scambio code→token fallito")
     tokens = token_res.json()
-    access_token = tokens.get("access_token")
-    if not access_token:
+    google_access = tokens.get("access_token")
+    if not google_access:
         raise HTTPException(status_code=400, detail="Token Google mancante")
 
     # 2. Userinfo
     ui = requests.get(
         USERINFO_URL,
-        headers={"Authorization": f"Bearer {access_token}"},
+        headers={"Authorization": f"Bearer {google_access}"},
         timeout=30,
     )
     if not ui.ok:
@@ -110,11 +106,32 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
             db.commit()
             db.refresh(user)
 
-        # 3. JWT interno
-        jwt = Authorize.create_access_token(subject=user.email)
+        # 3. JWT access interno (5h o come da config)
+        access_token = Authorize.create_access_token(
+            subject=user.email,
+            expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+            user_claims={
+                "id": user.id,
+                "role": user.role,
+                "nome": user.nome,
+                "cognome": user.cognome,
+            }
+        )
 
-        # 4. Redirect al frontend con token in querystring
-        frontend_url = f"https://www.gigigorilla.io/auth?token={jwt}"
+        # 4. Refresh token persistito in DB
+        db.query(models.RefreshToken).filter(models.RefreshToken.user_id == user.id).delete()
+        refresh_token = secrets.token_urlsafe(64)
+        expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        db.add(models.RefreshToken(user_id=user.id, token=refresh_token, expires_at=expires_at))
+        db.commit()
+
+        # 5. Redirect a frontend con entrambi i token
+        frontend_url = (
+            f"https://www.gigigorilla.io/auth"
+            f"?token={access_token}"
+            f"&refresh={refresh_token}"
+        )
         return RedirectResponse(url=frontend_url)
+
     finally:
         db.close()
