@@ -11,9 +11,6 @@ from dotenv import load_dotenv
 from fastapi_jwt_auth import AuthJWT
 from pydantic import BaseModel
 
-
-
-# Carica le variabili dal file .env
 load_dotenv()
 
 router = APIRouter()
