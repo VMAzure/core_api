@@ -666,26 +666,17 @@ def _gemini_build_image_prompt(
         "No text, no watermarks, no non-Latin characters."
     )
 
-def _gemini_build_prompt_with_override(
-    auto,             # può essere AZLeaseUsatoAuto o un dict
-    override: str,
-    det: Optional[MnetDettaglioUsato] = None  # 👈 aggiunto
-) -> str:
+def _gemini_build_prompt_with_override(auto, override: str, det: Optional[MnetDettaglioUsato] = None,
+                                       background: Optional[str] = None) -> str:
     """Costruisce un prompt fotorealistico combinando i dati dell'auto con l'override dell'utente."""
 
-    # Recupera i dati da det se disponibile, altrimenti da auto
     marca = (getattr(det, "marca_nome", None) or getattr(auto, "marca_nome", None) or "").strip()
     modello = (getattr(det, "modello", None) or getattr(auto, "modello", None) or "").strip()
     allest = (getattr(det, "allestimento", None) or getattr(auto, "allestimento", None) or "").strip()
-    anno = (
-        getattr(auto, "anno_immatricolazione", None)
-        or getattr(det, "anno", None)
-        or ""
-    )
+    anno = getattr(auto, "anno_immatricolazione", None) or getattr(det, "anno", None) or ""
     colore = (getattr(auto, "colore", None) or getattr(det, "colore", None) or "").strip()
     prec = (getattr(auto, "precisazioni", None) or "").strip()
 
-    # base descrittiva dell'auto
     base = f"{marca} {modello}"
     if allest:
         base += f" {allest}"
@@ -696,11 +687,20 @@ def _gemini_build_prompt_with_override(
     if prec:
         base += f" {prec}"
 
-    intro = (
-        f"Realizza un’immagine fotorealistica professionale di una {base}. "
-        "Assicurati che proporzioni, dettagli di carrozzeria, loghi e finiture "
-        "siano corretti e fedeli al modello reale. "
-    )
+    # 👇 intro dinamico
+    if background:
+        intro = (
+            f"Realizza un’immagine fotorealistica professionale di una {base}. "
+            "Assicurati che proporzioni, dettagli di carrozzeria, loghi e finiture "
+            "siano corretti e fedeli al modello reale. "
+            "Usa l'immagine allegata come sfondo e posiziona l'auto al suo interno in modo fotorealistico. "
+        )
+    else:
+        intro = (
+            f"Realizza un’immagine fotorealistica professionale di una {base}. "
+            "Assicurati che proporzioni, dettagli di carrozzeria, loghi e finiture "
+            "siano corretti e fedeli al modello reale. "
+        )
 
     user = override.strip()
 
@@ -712,6 +712,7 @@ def _gemini_build_prompt_with_override(
     )
 
     return f"{intro}{user} {closing}"
+
 
 
 
@@ -922,11 +923,16 @@ async def genera_image_hero_veo3(
 
     # Prompt di fallback
     if payload.prompt_override:
-        prompt = _gemini_build_prompt_with_override(auto, payload.prompt_override, det)
+        prompt = _gemini_build_prompt_with_override(
+            auto, payload.prompt_override, det, background=payload.background_image_url
+        )
     else:
         prompt = _gemini_build_image_prompt(
             marca, modello, anno, colore, allestimento, auto.precisazioni
         )
+        # 👇 aggiungi append se scenario reale ma nessun override
+        if payload.background_image_url:
+            prompt += " Usa l'immagine allegata come sfondo e posiziona l'auto al suo interno in modo fotorealistico."
 
 
 
