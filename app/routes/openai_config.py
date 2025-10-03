@@ -201,10 +201,13 @@ GEMINI_VEO3_CREDIT_COST = float(os.getenv("GEMINI_VEO3_CREDIT_COST", "5.0"))
 # NB: riusa _sb_upload_and_sign(path, blob, content_type) già definita nel file.
 
 class GeminiVideoHeroRequest(BaseModel):
-    id_auto: _UUID
+    id_auto: str
     scenario: Optional[str] = None
     prompt_override: Optional[str] = None
-    start_image_url: Optional[str] = None  
+    start_image_url: Optional[str] = None
+    aspect_ratio: Optional[str] = None   # 👈 aggiunto
+
+
 
 
 class GeminiVideoStatusRequest(BaseModel):
@@ -265,27 +268,25 @@ async def _fetch_image_base64_from_url(url: str) -> tuple[str, str]:
         return "image/png", b64
 
 
-async def _gemini_start_video(prompt: str, start_image_url: Optional[str] = None) -> str:
+async def _gemini_start_video(
+    prompt: str,
+    start_image_url: Optional[str] = None,
+    aspect_ratio: str = "16:9"
+) -> str:
     if not GEMINI_API_KEY:
         raise HTTPException(500, "GEMINI_API_KEY non configurata")
 
     url = "https://generativelanguage.googleapis.com/v1beta/models/veo-3.0-generate-preview:predictLongRunning"
 
-    # build instance
     instance = {"prompt": prompt}
 
     if start_image_url:
         mime, b64 = await _fetch_image_base64_from_url(start_image_url)
-        instance["image"] = {
-            "mimeType": mime,
-            "bytesBase64Encoded": b64
-        }
+        instance["image"] = {"mimeType": mime, "bytesBase64Encoded": b64}
 
     payload = {
         "instances": [instance],
-        "parameters": {
-            "aspectRatio": "16:9"
-        }
+        "parameters": {"aspectRatio": aspect_ratio or "16:9"}
     }
 
     async with httpx.AsyncClient(timeout=60) as client:
@@ -507,13 +508,20 @@ async def genera_video_hero_veo3(
     )
     rec.media_type = "video"
     rec.mime_type = "video/mp4"
+    rec.aspect_ratio = payload.aspect_ratio or "16:9"
+
 
     db.add(rec)
     db.commit()
     db.refresh(rec)
 
     try:
-        operation_id = await _gemini_start_video(prompt, payload.start_image_url)
+        operation_id = await _gemini_start_video(
+            prompt,
+            start_image_url=payload.start_image_url,
+            aspect_ratio=payload.aspect_ratio or "16:9"
+        )
+
     except Exception as e:
         rec.status = "failed"
         rec.error_message = str(e)
