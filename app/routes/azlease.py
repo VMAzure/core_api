@@ -1112,8 +1112,15 @@ async def get_descrizione_pubblica(id_auto: str, db: Session = Depends(get_db)):
 
 
 
+from PIL import Image
+from io import BytesIO
+import re, uuid
+from datetime import datetime
+from pathlib import Path
+
+
 MAX_FILE_SIZE_MB = 15
-ALLOWED_TYPES = {"image/png", "image/jpeg", "image/jpg"}
+ALLOWED_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
 
 @router.post("/foto-usato", tags=["AZLease"])
 async def upload_foto_usato(
@@ -1140,7 +1147,6 @@ async def upload_foto_usato(
     if not inserimento:
         raise HTTPException(404, "Inserimento non trovato")
 
-    # check ownership
     if not (
         user.id == inserimento.admin_id
         or user.id == inserimento.dealer_id
@@ -1155,19 +1161,32 @@ async def upload_foto_usato(
             if file.content_type not in ALLOWED_TYPES:
                 raise HTTPException(400, f"Formato non supportato: {file.filename}")
 
-            # limit size
             content = await file.read()
             if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
                 raise HTTPException(400, f"File troppo grande: {file.filename}")
 
+            # Conversione se webp → png
+            ext = Path(file.filename).suffix.lower()
+            content_type = file.content_type
+            if file.content_type == "image/webp":
+                try:
+                    img = Image.open(BytesIO(content)).convert("RGB")
+                    buf = BytesIO()
+                    img.save(buf, format="PNG")
+                    content = buf.getvalue()
+                    ext = ".png"
+                    content_type = "image/png"
+                except Exception as e:
+                    raise HTTPException(400, f"Errore conversione WEBP: {e}")
+
             # filename pulito
             timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
-            clean_name = re.sub(r"[^\w\-\.]", "_", file.filename)
-            path = f"auto-usate/{auto_id}_{timestamp}_{clean_name}"
+            clean_name = re.sub(r"[^\w\-\.]", "_", Path(file.filename).stem)
+            path = f"auto-usate/{auto_id}_{timestamp}_{clean_name}{ext}"
 
             # upload su Supabase
             supabase_client.storage.from_("auto-usate").upload(
-                path, content, {"content-type": file.content_type}
+                path, content, {"content-type": content_type}
             )
 
             image_url = f"{SUPABASE_URL}/storage/v1/object/public/auto-usate/{path}"
