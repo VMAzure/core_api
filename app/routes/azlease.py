@@ -1111,62 +1111,82 @@ async def get_descrizione_pubblica(id_auto: str, db: Session = Depends(get_db)):
 
 
 
+
+MAX_FILE_SIZE_MB = 15
+ALLOWED_TYPES = {"image/png", "image/jpeg", "image/jpg"}
+
 @router.post("/foto-usato", tags=["AZLease"])
 async def upload_foto_usato(
     auto_id: str,
-    file: UploadFile = File(...),
+    files: List[UploadFile] = File(...),
     Authorize: AuthJWT = Depends(),
     db: Session = Depends(get_db)
 ):
     Authorize.jwt_required()
     user_email = Authorize.get_jwt_subject()
     user = db.query(User).filter(User.email == user_email).first()
-
     if not user:
-        raise HTTPException(status_code=401, detail="Utente non trovato")
+        raise HTTPException(401, "Utente non trovato")
 
     auto = db.execute(text("""
         SELECT id_usatoin FROM azlease_usatoauto WHERE id = :auto_id
     """), {"auto_id": auto_id}).fetchone()
+    if not auto:
+        raise HTTPException(404, "Auto non trovata")
 
     inserimento = db.execute(text("""
         SELECT admin_id, dealer_id FROM azlease_usatoin WHERE id = :id_usatoin
     """), {"id_usatoin": auto.id_usatoin}).fetchone()
+    if not inserimento:
+        raise HTTPException(404, "Inserimento non trovato")
 
-    user_is_owner = (
+    # check ownership
+    if not (
         user.id == inserimento.admin_id
         or user.id == inserimento.dealer_id
         or get_admin_id(user) == inserimento.admin_id
         or get_dealer_id(user) == inserimento.dealer_id
-    )
+    ):
+        raise HTTPException(403, "Non puoi aggiungere immagini a quest'auto")
 
-    if not user_is_owner:
-        raise HTTPException(403, detail="Non puoi aggiungere immagini a un'auto che non hai inserito")
-
-    if file.content_type not in ["image/png", "image/jpeg", "image/jpg"]:
-        raise HTTPException(status_code=400, detail="Formato immagine non supportato")
-
-    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-    clean_filename = re.sub(r"[^\w\-\.]", "_", file.filename)
-    file_name = f"auto-usate/{auto_id}_{timestamp}_{clean_filename}"
-
+    results = []
     try:
-        content = await file.read()
-        supabase_client.storage.from_("auto-usate").upload(
-            file_name, content, {"content-type": file.content_type}
-        )
-        image_url = f"{SUPABASE_URL}/storage/v1/object/public/auto-usate/{file_name}"
-        img_id = str(uuid.uuid4())
-        db.execute(text("""
-            INSERT INTO azlease_usatoimg (id, auto_id, foto)
-            VALUES (:id, :auto_id, :foto)
-        """), {"id": img_id, "auto_id": auto_id, "foto": image_url})
+        for file in files:
+            if file.content_type not in ALLOWED_TYPES:
+                raise HTTPException(400, f"Formato non supportato: {file.filename}")
+
+            # limit size
+            content = await file.read()
+            if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
+                raise HTTPException(400, f"File troppo grande: {file.filename}")
+
+            # filename pulito
+            timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+            clean_name = re.sub(r"[^\w\-\.]", "_", file.filename)
+            path = f"auto-usate/{auto_id}_{timestamp}_{clean_name}"
+
+            # upload su Supabase
+            supabase_client.storage.from_("auto-usate").upload(
+                path, content, {"content-type": file.content_type}
+            )
+
+            image_url = f"{SUPABASE_URL}/storage/v1/object/public/auto-usate/{path}"
+            img_id = str(uuid.uuid4())
+
+            db.execute(text("""
+                INSERT INTO azlease_usatoimg (id, auto_id, foto)
+                VALUES (:id, :auto_id, :foto)
+            """), {"id": img_id, "auto_id": auto_id, "foto": image_url})
+
+            results.append({"id": img_id, "image_url": image_url})
+
         db.commit()
-        return {"message": "Immagine caricata con successo", "image_url": image_url}
+        return {"success": True, "images": results}
 
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Errore interno: {str(e)}")
+        raise HTTPException(500, f"Errore upload: {str(e)}")
+
 
 
 @router.post("/perizie-usato", tags=["AZLease"])
