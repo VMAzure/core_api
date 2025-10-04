@@ -723,8 +723,6 @@ def _gemini_build_prompt_with_override(auto, override: str, det: Optional[MnetDe
 
 
 
-
-
 async def _gemini_generate_image_sync(
     prompt: str,
     start_image_url: Optional[str] = None,
@@ -815,7 +813,19 @@ async def _gemini_generate_image_sync(
                         images.append(base64.b64decode(inline["data"]))
 
             if images:
-                return images  # ✅ successo
+                images_webp = []
+                for raw in images:
+                    try:
+                        im = Image.open(io.BytesIO(raw)).convert("RGB")
+                        buf = io.BytesIO()
+                        im.save(buf, format="WEBP", quality=85, method=6)
+                        buf.seek(0)
+                        images_webp.append(buf.getvalue())
+                    except Exception as e:
+                        logging.warning(f"errore conversione webp: {e}")
+                        images_webp.append(raw)
+                return images_webp  # ✅ successo
+
 
             msg = (
                 candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")

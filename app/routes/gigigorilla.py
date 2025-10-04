@@ -34,6 +34,8 @@ SIZE_MAP = {
     "portrait": "1024x1792",
 }
 
+
+
 # --------- MODELS ----------
 class GigiJobCreate(BaseModel):
     prompt: str = Field(min_length=3)
@@ -196,7 +198,7 @@ async def create_job(
     if o not in ALLOWED_ORIENT:
         raise HTTPException(400, "orientation non valida")
 
-    fmt = payload.get("output_format") or "png"
+    fmt = (payload.get("output_format") or "webp").lower()
 
     try:
         n_images = int(payload.get("num_images") or 1)
