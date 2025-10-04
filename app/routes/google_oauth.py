@@ -125,13 +125,14 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
         db.add(models.RefreshToken(user_id=user.id, token=refresh_token, expires_at=expires_at))
         db.commit()
 
-        # 5. Redirect a frontend con entrambi i token
+        # 5. Redirect al frontend con entrambi i token
         frontend_url = (
-            f"https://www.gigigorilla.io/auth"
-            f"?token={access_token}"
-            f"&refresh={refresh_token}"
+            f"https://www.gigigorilla.io/auth.html"
+            f"?access_token={access_token}"
+            f"&refresh_token={refresh_token}"
         )
         return RedirectResponse(url=frontend_url)
+
 
     finally:
         db.close()
