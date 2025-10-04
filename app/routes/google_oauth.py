@@ -127,7 +127,7 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
 
         # 5. Redirect al frontend con entrambi i token
         frontend_url = (
-            f"https://www.gigigorilla.io/auth.html"
+            f"https://www.gigigorilla.io/auth"
             f"?access_token={access_token}"
             f"&refresh_token={refresh_token}"
         )
