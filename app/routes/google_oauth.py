@@ -45,11 +45,17 @@ def google_login():
     return RedirectResponse(url)
 
 
+from urllib.parse import urlencode
+from fastapi import Request
+from fastapi.responses import RedirectResponse
+from datetime import datetime, timedelta
+import secrets
+
 @router.get("/callback")
-def google_callback(code: str, Authorize: AuthJWT = Depends()):
+def google_callback(code: str, request: Request, Authorize: AuthJWT = Depends()):
     _require_env()
 
-    # 1. Scambio code → token Google
+    # --- 1. Scambio code → token Google ---
     token_res = requests.post(
         OAUTH_TOKEN_URL,
         data={
@@ -68,7 +74,7 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
     if not google_access:
         raise HTTPException(status_code=400, detail="Token Google mancante")
 
-    # 2. Userinfo
+    # --- 2. Userinfo ---
     ui = requests.get(
         USERINFO_URL,
         headers={"Authorization": f"Bearer {google_access}"},
@@ -86,6 +92,7 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
     family = info.get("family_name", "") or ""
     picture = info.get("picture", "") or ""
 
+    # --- 3. DB lookup / creazione utente ---
     db = SessionLocal()
     try:
         user = db.query(models.User).filter(models.User.email == email).first()
@@ -95,10 +102,10 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
                 role="utente",
                 nome=given,
                 cognome=family,
-                cellulare="to-complete",   # placeholder
-                indirizzo="to-complete",   # placeholder
-                cap="00000",               # placeholder
-                citta="to-complete",       # placeholder
+                cellulare="to-complete",
+                indirizzo="to-complete",
+                cap="00000",
+                citta="to-complete",
                 avatar_url=picture or None,
             )
             user.set_password(secrets.token_urlsafe(32))
@@ -106,7 +113,7 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
             db.commit()
             db.refresh(user)
 
-        # 3. JWT access interno (5h o come da config)
+        # --- 4. Crea JWT access interno ---
         access_token = Authorize.create_access_token(
             subject=user.email,
             expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
@@ -115,24 +122,31 @@ def google_callback(code: str, Authorize: AuthJWT = Depends()):
                 "role": user.role,
                 "nome": user.nome,
                 "cognome": user.cognome,
-            }
+            },
         )
 
-        # 4. Refresh token persistito in DB
+        # --- 5. Refresh token persistito in DB ---
         db.query(models.RefreshToken).filter(models.RefreshToken.user_id == user.id).delete()
         refresh_token = secrets.token_urlsafe(64)
         expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
         db.add(models.RefreshToken(user_id=user.id, token=refresh_token, expires_at=expires_at))
         db.commit()
 
-        # 5. Redirect al frontend con entrambi i token
-        frontend_url = (
-            f"https://www.gigigorilla.io/auth"
-            f"?access_token={access_token}"
-            f"&refresh_token={refresh_token}"
-        )
-        return RedirectResponse(url=frontend_url)
+        # --- 6. Costruisci redirect dinamico (localhost o prod) ---
+        origin = request.headers.get("origin", "")
+        if "localhost" in origin or "127.0.0.1" in origin:
+            frontend_base = "http://localhost:7026"
+        else:
+            frontend_base = "https://www.gigigorilla.io"
 
+        params = urlencode({
+            "access_token": access_token,
+            "refresh_token": refresh_token
+        })
+
+        frontend_url = f"{frontend_base}/auth?{params}"
+        return RedirectResponse(url=frontend_url)
 
     finally:
         db.close()
+
