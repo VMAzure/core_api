@@ -1109,9 +1109,6 @@ async def get_descrizione_pubblica(id_auto: str, db: Session = Depends(get_db)):
         "descrizione": result.descrizione or ""
     }
 
-
-
-
 from PIL import Image
 from io import BytesIO
 import re, uuid

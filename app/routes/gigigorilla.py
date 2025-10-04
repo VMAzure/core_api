@@ -6,6 +6,9 @@ from app.database import get_db, supabase_client
 from app.models import User
 from uuid import UUID as _UUID
 
+from PIL import Image
+import io
+
 import os
 import base64
 import uuid
@@ -65,21 +68,40 @@ class GigiJobStatus(BaseModel):
     outputs: list[str] = []
     error_message: str | None = None
 
+
 def upload_base64_to_supabase(base64_data: str, user_id: str, label: str) -> str:
+    """
+    Converte un'immagine base64 in WEBP e la carica su Supabase storage pubblico.
+    Restituisce la URL pubblica del file caricato.
+    """
     if "," in base64_data:
         base64_data = base64_data.split(",")[1]
 
     binary = base64.b64decode(base64_data)
-    filename = f"{user_id}/{label}-{uuid.uuid4().hex}.png"
+    filename = f"{user_id}/{label}-{uuid.uuid4().hex}.webp"  # 👈 salva come WEBP
 
-    # ✅ RIMUOVI upsert=True, non è supportato in supabase-py
-    supabase_client.storage.from_("gigi-gorilla").upload(
-        path=filename,
-        file=binary,
-        file_options={"content-type": "image/png"}
-    )
+    try:
+        # --- conversione in WebP ---
+        im = Image.open(io.BytesIO(binary)).convert("RGB")
+        buffer = io.BytesIO()
+        im.save(buffer, format="WEBP", quality=85, method=6)
+        buffer.seek(0)
 
-    return supabase_client.storage.from_("gigi-gorilla").get_public_url(filename)
+        # --- upload su Supabase ---
+        supabase_client.storage.from_("gigi-gorilla").upload(
+            path=filename,
+            file=buffer.getvalue(),
+            file_options={"content-type": "image/webp"}
+        )
+
+        # --- URL pubblico ---
+        public_url = supabase_client.storage.from_("gigi-gorilla").get_public_url(filename)
+        return public_url
+
+    except Exception as e:
+        print("❌ Errore conversione o upload WEBP:", e)
+        raise HTTPException(500, "Errore upload immagine")
+
 
 import re
 
