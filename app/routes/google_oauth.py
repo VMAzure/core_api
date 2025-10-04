@@ -38,9 +38,10 @@ def google_login():
         f"&redirect_uri={GOOGLE_REDIRECT_URI}"
         f"&response_type=code"
         f"&scope=openid%20email%20profile"
-        f"&access_type=online"
+        f"&access_type=offline"
         f"&include_granted_scopes=true"
-        f"&prompt=select_account"
+        f"&prompt=consent"
+
     )
     return RedirectResponse(url)
 
@@ -132,7 +133,7 @@ def google_callback(code: str, request: Request, Authorize: AuthJWT = Depends())
         db.add(models.RefreshToken(user_id=user.id, token=refresh_token, expires_at=expires_at))
         db.commit()
 
-        # --- 6. Costruisci redirect dinamico (localhost o prod) ---
+        # --- 6. Redirect dinamico corretto (localhost o prod) ---
         origin = request.headers.get("origin", "")
         if "localhost" in origin or "127.0.0.1" in origin:
             frontend_base = "http://localhost:7026"
@@ -144,8 +145,10 @@ def google_callback(code: str, request: Request, Authorize: AuthJWT = Depends())
             "refresh_token": refresh_token
         })
 
-        frontend_url = f"{frontend_base}/auth?{params}"
+        # 🔁 Fix: redirigi alla ROOT, non a /auth
+        frontend_url = f"{frontend_base}/?{params}"
         return RedirectResponse(url=frontend_url)
+
 
     finally:
         db.close()
